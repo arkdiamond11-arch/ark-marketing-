@@ -248,3 +248,64 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .combo-list button:last-child { border-bottom: 0; }
 .combo-list button:active { background: var(--maroon-soft); }
 .combo-none { padding: 11px 14px; font-size: 12.5px; color: var(--muted); }
+
+/* ---------- orders add-on ---------- */
+.chip-otype { background: var(--gold-soft); color: #8a6420; }
+.chip-st-new { background: #e6ecf7; color: #2b4f8c; }
+.chip-st-in_production { background: #fcefd2; color: #92600a; }
+.chip-st-ready { background: #e3f2e7; color: #16663c; }
+.chip-st-delivered { background: #dcefe3; color: #0f4d2c; }
+.chip-st-cancelled { background: #eee; color: #888; }
+.client-head .chip-otype { background: var(--gold-soft); color: #8a6420; }
+.client-head .chip-st-new { background: #e6ecf7; color: #2b4f8c; }
+.client-head .chip-st-in_production { background: #fcefd2; color: #92600a; }
+.client-head .chip-st-ready { background: #e3f2e7; color: #16663c; }
+.client-head .chip-st-delivered { background: #dcefe3; color: #0f4d2c; }
+.client-head .chip-st-cancelled { background: #eee; color: #777; }
+.o-pay-row .fu-x { background: none; border: 0; color: var(--muted); font-size: 18px; padding: 4px 8px; cursor: pointer; }
+.o-headlink { cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.o-steps { margin-top: 12px; font-size: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; opacity: .95; }
+.o-steps span { padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,.1); color: rgba(255,255,255,.7); }
+.o-steps span.done { background: rgba(232,190,90,.28); color: #fff; }
+.o-steps span.cur { background: #e8be5a; color: #3b2a07; font-weight: 700; }
+.o-steps i { font-style: normal; opacity: .5; }
+.o-late { color: var(--red); font-weight: 700; }
+.o-red { color: var(--red) !important; }
+.st-num.o-num-sm { font-size: 18px; padding-top: 5px; }
+.req-dot { color: var(--red); }
+
+.o-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.o-2col .field { min-width: 0; }
+.oi-row select, .oi-row input[type=text] { width: 100%; border: 1.5px solid var(--line); border-radius: 9px; padding: 9px 11px; font-size: 15px; background: #fff; }
+.oi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.oi-grid > div { min-width: 0; }
+.oi-grid .full { grid-column: 1 / -1; }
+.oi-l { font-size: 11.5px; font-weight: 650; color: #5d5765; margin: 0 2px 3px; }
+.oi-photo { margin-top: 10px; }
+.oi-thumb { width: 110px; height: 110px; object-fit: cover; border-radius: 10px; border: 1.5px solid var(--line); display: block; }
+
+.o-totals { background: #fbf7ef; border: 1.5px solid var(--gold-soft); }
+.o-lrow { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; font-size: 14px; }
+.o-lrow span { color: #5d5765; }
+.o-lrow b { font-weight: 700; text-align: right; }
+.o-lrow.o-total { border-top: 1.5px solid var(--line); margin-top: 4px; padding-top: 9px; font-size: 16.5px; }
+.o-lrow.o-total b { color: var(--maroon); }
+.o-lrow.o-due b { color: var(--red); }
+.o-lrow.o-paid b { color: var(--green); }
+.o-ledger { margin-top: 10px; background: #fcfbfa; border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.o-lnote { font-size: 13.5px; margin-top: 6px; padding: 8px 10px; border-radius: 9px; background: #e3f2e7; color: #16663c; }
+.o-lnote.neg { background: #fbe1df; color: #a12b24; }
+
+.o-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px; }
+.o-item-img { width: 84px; height: 84px; object-fit: cover; border-radius: 10px; border: 1.5px solid var(--line); display: block; }
+.o-item-body { flex: 1; min-width: 0; }
+.o-item-title { font-weight: 700; font-size: 15px; }
+.o-tag { font-size: 12px; font-weight: 700; color: #8a6420; background: var(--gold-soft); border-radius: 6px; padding: 1px 6px; margin-left: 4px; }
+.o-item-desc { font-size: 14px; margin-top: 2px; }
+.o-item-meta { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.o-pay-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.o-pay-row:last-child { border-bottom: 0; }
+.modal select { width: 100%; border: 1.5px solid var(--line); border-radius: 11px; padding: 12px 13px; background: #fff; font-size: 16px; }
+.modal .field input[type=text], .modal .field input[type=date] { width: 100%; }
+#tabbar button span { white-space: nowrap; }
+.action-row .btn { white-space: nowrap; padding-left: 10px; padding-right: 10px; }

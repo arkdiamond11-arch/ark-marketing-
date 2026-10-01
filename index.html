@@ -54,9 +54,15 @@
              'Check the connection and refresh the page.');
         return;
       }
-      var s = document.createElement('script');
-      s.src = 'app.js';
-      document.body.appendChild(s);
+      // orders.js (Orders add-on) first, then the main app
+      var o = document.createElement('script');
+      o.src = 'orders.js';
+      o.onload = o.onerror = function () {
+        var s = document.createElement('script');
+        s.src = 'app.js';
+        document.body.appendChild(s);
+      };
+      document.body.appendChild(o);
     })();
   </script>
 </body>

@@ -237,6 +237,7 @@ function renderShell() {
     '<button data-action="tab" data-tab="today">' + IC.today + '<span>Today</span></button>' +
     '<button data-action="tab" data-tab="new">' + IC.plus + '<span>New</span></button>' +
     '<button data-action="tab" data-tab="find">' + IC.find + '<span>Find</span></button>' +
+    (typeof renderOrders === 'function' ? '<button data-action="tab" data-tab="orders">' + ORD_ICON + '<span>Orders</span></button>' : '') +
     (S.me && S.me.role === 'owner' ? '<button data-action="tab" data-tab="report">' + IC.chart + '<span>Report</span></button>' : '') +
     '<button data-action="tab" data-tab="more">' + IC.more + '<span>More</span></button>' +
     '</nav>';
@@ -255,6 +256,7 @@ function switchTab(tab) {
   if (tab === 'today') renderToday();
   else if (tab === 'new') renderNewChoice();
   else if (tab === 'find') renderFind();
+  else if (tab === 'orders') renderOrders();
   else if (tab === 'report') renderReport();
   else renderMore();
   window.scrollTo(0, 0);
@@ -299,6 +301,7 @@ function bindDelegates() {
       const idx = +fu.dataset.idx;
       if (S.fu[idx]) S.fu[idx][fu.dataset.fuf] = fu.value;
     }
+    if (typeof onOrderInput === 'function') onOrderInput(e);
   });
 }
 
@@ -306,6 +309,7 @@ async function onDelegatedClick(e) {
   const el = e.target.closest('[data-action]');
   if (!el) return;
   const a = el.dataset.action;
+  if (a.indexOf('o-') === 0 && typeof onOrderAction === 'function') { onOrderAction(a, el); return; }
 
   if (a === 'tab') switchTab(el.dataset.tab);
   else if (a === 'back') { if (S.sub.length) { S.suppressPop = true; try { history.back(); } catch (_) {} goBack(); } }
@@ -316,6 +320,7 @@ async function onDelegatedClick(e) {
     el.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('on', !same && b === el));
     if (group === 'desig') { const w = $('#desig-other-wrap'); if (w) w.style.display = S.formState.desig === 'Other' ? 'block' : 'none'; }
     if (group === 'int_outcome') { const w = $('#outcome-other-wrap'); if (w) w.style.display = S.formState.int_outcome === 'Other' ? 'block' : 'none'; }
+    if (typeof onSegChange === 'function') onSegChange(group);
   }
   else if (a === 'open-client') openClient(el.dataset.id);
   else if (a === 'scan-start') { S.photos = { front: null, back: null }; S.editingClient = null; showSub('Scan Card', renderScanCapture); }
@@ -420,7 +425,8 @@ async function renderToday() {
   if (!overdue.length && !today.length && !upcoming.length && !later.length) {
     html += '<div class="empty"><div class="big">🌤️</div>No pending reminders.<br>Log an interaction and add follow-ups — they will appear here.</div>';
   }
-  c.innerHTML = html;
+  c.innerHTML = '<div id="today-orders"></div>' + html;
+  if (typeof loadTodayOrders === 'function') loadTodayOrders();
 }
 
 /* ============================================================
@@ -887,8 +893,12 @@ async function openClient(id, replace) {
   S.currentClientId = id;
   const cl = await fetchClient(id);
   if (!cl) return;
-  showSub(cl.trade_name, () => renderClientPage(cl), replace);
-  loadClientHistory(cl);
+  // history + orders reload every time the page is shown (also after pressing Back)
+  showSub(cl.trade_name, () => {
+    renderClientPage(cl);
+    loadClientHistory(cl);
+    if (typeof loadClientOrders === 'function') loadClientOrders(cl);
+  }, replace);
 }
 
 function renderClientPage(cl) {
@@ -913,13 +923,15 @@ function renderClientPage(cl) {
     (cl.order_type ? '<span class="chip">' + esc(cl.order_type) + '</span>' : '') + '</div></div>' +
 
     '<div class="action-row">' +
-    '<button class="btn btn-primary" data-action="new-interaction" data-id="' + cl.id + '">＋ Record meeting</button>' +
+    '<button class="btn btn-primary" data-action="new-interaction" data-id="' + cl.id + '">＋ Meeting</button>' +
+    (typeof renderOrders === 'function' ? '<button class="btn btn-primary" data-action="o-new" data-id="' + cl.id + '">＋ Order</button>' : '') +
     '<button class="btn btn-secondary" data-action="edit-client" data-id="' + cl.id + '">Edit</button>' +
     '</div>' +
 
     '<div class="card">' + (rows.join('') || '<div class="empty" style="padding:6px">No details yet</div>') + '</div>' +
     '<div id="client-card-photo"></div>' +
     '<div id="client-followups"></div>' +
+    '<div id="client-orders"></div>' +
     '<div id="client-history"><div class="empty">Loading history…</div></div>';
 
   const sides = [['Front', cl.card_image_path], ['Back', cl.card_image_back_path]].filter((s) => s[1]);
@@ -1069,7 +1081,19 @@ async function saveInteraction() {
   }
 
   toast('Meeting recorded ✓', 'ok');
-  openClient(cl.id, true);
+  await openClient(cl.id, true);
+
+  // An order was taken in this meeting → offer to record it straight away.
+  const orderType = outcomeVal === 'Job work order' ? 'job_work' : outcomeVal === 'Outright order' ? 'ready_stock' : null;
+  if (orderType && typeof startNewOrder === 'function') {
+    const ov = openModal(
+      '<h3>Record the order now?</h3><p>You marked this meeting as “' + esc(outcomeVal) + '”. Add the items, weights and advance so the order is tracked.</p>' +
+      '<div class="modal-actions">' +
+      '<button class="btn btn-secondary" data-m="later">Later</button>' +
+      '<button class="btn btn-primary" data-m="now">Create order</button></div>');
+    ov.querySelector('[data-m=later]').onclick = closeModal;
+    ov.querySelector('[data-m=now]').onclick = () => { closeModal(); startNewOrder(cl, orderType); };
+  }
 }
 
 /* ============================================================
@@ -1183,8 +1207,10 @@ async function renderReport() {
           '<div class="ex-name">' + esc(x[0]) + '</div><div class="ex-nums">' + x[1] + ' client' + (x[1] === 1 ? '' : 's') + '</div><div style="color:var(--muted)">›</div></div>';
       }).join('') + '</div>' : '') +
 
+    '<div id="report-orders"></div>' +
     ((clients.length >= 1000 || meets.length >= 1000) ? '<div class="notice">Showing the most recent 1000 records of this period.</div>' : '') +
     '<div style="height:6px"></div>';
+  if (typeof loadReportOrders === 'function') loadReportOrders(S.report.period);
 }
 
 async function reportExecView(execId, execName) {
@@ -1325,7 +1351,12 @@ async function exportAllData() {
       ['Client', 'Type', 'Details', 'Due date', 'Status', 'Assigned to', 'Created by', 'Created on', 'Done on'],
       followups.map((f) => [cName.get(f.client_id) || '', f.type, f.content, f.due_date || '', f.status, pName.get(f.assigned_to) || '', pName.get(f.created_by) || '', fmtExp(f.created_at), fmtExp(f.done_at)])));
 
-    toast('3 files downloaded — clients, meetings, follow-ups ✓', 'ok');
+    let nFiles = 3;
+    if (typeof exportOrdersData === 'function') {
+      try { await exportOrdersData(pName, cName, today); nFiles = 6; }
+      catch (e) { toast('Clients, meetings and follow-ups downloaded — orders export failed.', 'err'); if (btn) { btn.disabled = false; btn.textContent = '⬇ Export all data'; } return; }
+    }
+    toast(nFiles === 6 ? '6 files downloaded — clients, meetings, follow-ups, orders, order items, payments ✓' : '3 files downloaded — clients, meetings, follow-ups ✓', 'ok');
   } catch (e) {
     toast('Export failed — please try again.', 'err');
   }
