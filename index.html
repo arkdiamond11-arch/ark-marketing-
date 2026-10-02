@@ -54,15 +54,21 @@
              'Check the connection and refresh the page.');
         return;
       }
-      // orders.js (Orders add-on) first, then the main app
-      var o = document.createElement('script');
-      o.src = 'orders.js';
-      o.onload = o.onerror = function () {
+      // Add-on screens first (in this order), then the main app.
+      // async=false keeps the order while the files download in parallel;
+      // if one add-on fails to load, the rest of the app still works.
+      window.ACTIONS = window.ACTIONS || {};          // data-action name → handler
+      window.SEG_HOOKS = window.SEG_HOOKS || [];      // called after a choice button is tapped
+      window.INPUT_HOOKS = window.INPUT_HOOKS || [];  // called on every typed input
+      window.LOGIN_HOOKS = window.LOGIN_HOOKS || [];  // called once after sign-in
+      var v = '3';
+      ['i18n.js', 'orders.js', 'util.js', 'rates.js', 'docs.js', 'ledger.js', 'catalogue.js',
+       'karigars.js', 'visits.js', 'targets.js', 'summary.js', 'app.js'].forEach(function (f) {
         var s = document.createElement('script');
-        s.src = 'app.js';
+        s.src = f + '?v=' + v;
+        s.async = false;
         document.body.appendChild(s);
-      };
-      document.body.appendChild(o);
+      });
     })();
   </script>
 </body>

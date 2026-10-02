@@ -235,9 +235,9 @@ function renderShell() {
     '<main id="content"></main>' +
     '<nav id="tabbar">' +
     '<button data-action="tab" data-tab="today">' + IC.today + '<span>Today</span></button>' +
-    '<button data-action="tab" data-tab="new">' + IC.plus + '<span>New</span></button>' +
-    '<button data-action="tab" data-tab="find">' + IC.find + '<span>Find</span></button>' +
+    '<button data-action="tab" data-tab="find">' + IC.find + '<span>Clients</span></button>' +
     (typeof renderOrders === 'function' ? '<button data-action="tab" data-tab="orders">' + ORD_ICON + '<span>Orders</span></button>' : '') +
+    (typeof renderCatalogue === 'function' ? '<button data-action="tab" data-tab="catalogue">' + CAT_ICON + '<span>Catalogue</span></button>' : '') +
     (S.me && S.me.role === 'owner' ? '<button data-action="tab" data-tab="report">' + IC.chart + '<span>Report</span></button>' : '') +
     '<button data-action="tab" data-tab="more">' + IC.more + '<span>More</span></button>' +
     '</nav>';
@@ -257,6 +257,7 @@ function switchTab(tab) {
   else if (tab === 'new') renderNewChoice();
   else if (tab === 'find') renderFind();
   else if (tab === 'orders') renderOrders();
+  else if (tab === 'catalogue') renderCatalogue();
   else if (tab === 'report') renderReport();
   else renderMore();
   window.scrollTo(0, 0);
@@ -301,7 +302,7 @@ function bindDelegates() {
       const idx = +fu.dataset.idx;
       if (S.fu[idx]) S.fu[idx][fu.dataset.fuf] = fu.value;
     }
-    if (typeof onOrderInput === 'function') onOrderInput(e);
+    (window.INPUT_HOOKS || []).forEach((h) => { try { h(e); } catch (err) { console.error(err); } });
   });
 }
 
@@ -309,6 +310,8 @@ async function onDelegatedClick(e) {
   const el = e.target.closest('[data-action]');
   if (!el) return;
   const a = el.dataset.action;
+  if (el.tagName === 'A' && el.getAttribute('href') === '#') e.preventDefault();
+  if (window.ACTIONS && window.ACTIONS[a]) { window.ACTIONS[a](el, e); return; }
   if (a.indexOf('o-') === 0 && typeof onOrderAction === 'function') { onOrderAction(a, el); return; }
 
   if (a === 'tab') switchTab(el.dataset.tab);
@@ -320,7 +323,7 @@ async function onDelegatedClick(e) {
     el.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('on', !same && b === el));
     if (group === 'desig') { const w = $('#desig-other-wrap'); if (w) w.style.display = S.formState.desig === 'Other' ? 'block' : 'none'; }
     if (group === 'int_outcome') { const w = $('#outcome-other-wrap'); if (w) w.style.display = S.formState.int_outcome === 'Other' ? 'block' : 'none'; }
-    if (typeof onSegChange === 'function') onSegChange(group);
+    (window.SEG_HOOKS || []).forEach((h) => { try { h(group); } catch (err) { console.error(err); } });
   }
   else if (a === 'open-client') openClient(el.dataset.id);
   else if (a === 'scan-start') { S.photos = { front: null, back: null }; S.editingClient = null; showSub('Scan Card', renderScanCapture); }
@@ -425,7 +428,10 @@ async function renderToday() {
   if (!overdue.length && !today.length && !upcoming.length && !later.length) {
     html += '<div class="empty"><div class="big">🌤️</div>No pending reminders.<br>Log an interaction and add follow-ups — they will appear here.</div>';
   }
-  c.innerHTML = '<div id="today-orders"></div>' + html;
+  c.innerHTML = '<div id="today-summary"></div><div id="today-rate"></div><div id="today-targets"></div><div id="today-orders"></div>' + html;
+  if (typeof renderTodaySummary === 'function') renderTodaySummary($('#today-summary'));
+  if (typeof renderTodayRate === 'function') renderTodayRate($('#today-rate'));
+  if (typeof renderMyTargets === 'function') renderMyTargets($('#today-targets'));
   if (typeof loadTodayOrders === 'function') loadTodayOrders();
 }
 
@@ -482,7 +488,7 @@ function renderScanCapture() {
   $('#content').innerHTML =
     '<div class="section-label">Card photos</div>' +
     '<div class="card" id="photo-wrap">' + photosSectionHTML(null) + '</div>' +
-    '<div class="notice">Add the <b>front</b> photo, and the <b>back</b> too if the card has details there — the scanner reads both sides together.</div>' +
+    '<div class="notice">Add the front photo, and the back too if the card has details there — the scanner reads both sides together.</div>' +
     '<button class="btn btn-primary" data-action="scan-run" id="scan-run-btn">Scan & fill details</button>' +
     '<div style="height:8px"></div>' +
     '<button class="btn btn-secondary" data-action="scan-type-instead">Type the details instead</button>' +
@@ -698,6 +704,7 @@ function renderClientForm(existing, pre, source) {
     '<div class="field"><label>Other mobile numbers</label><input type="text" id="f-phone2" autocomplete="off" inputmode="tel" value="' + v('phone_other') + '" placeholder="Extra mobile numbers, if any"></div>' +
     '<div class="field"><label>Email</label><input type="email" id="f-email" autocomplete="off" inputmode="email" value="' + v('email') + '" placeholder="name@gmail.com"></div>' +
     '<div class="field"><label>Owner\'s name</label><input type="text" id="f-owner" value="' + v('owner_name') + '"></div>' +
+    '<div class="field"><label>GSTIN</label><input type="text" id="f-gstin" autocapitalize="characters" autocomplete="off" value="' + v('gstin') + '" placeholder="15-character GST number (optional)"></div>' +
     '</div>' +
 
     '<div class="section-label">Business profile</div>' +
@@ -778,6 +785,7 @@ async function saveClient(editId) {
     phone_other: $('#f-phone2').value.trim() || null,
     email: $('#f-email').value.trim() || null,
     owner_name: $('#f-owner').value.trim() || null,
+    gstin: $('#f-gstin') ? ($('#f-gstin').value.trim().toUpperCase() || null) : (S.editingClient ? S.editingClient.gstin || null : null),
     address: vals.address,
     is_polki_buyer: S.formState.polki === 'Yes' ? true : S.formState.polki === 'No' ? false : null,
     category: S.formState.category || 'Undefined',
@@ -842,8 +850,12 @@ async function saveClient(editId) {
    FIND / SEARCH
    ============================================================ */
 function renderFind() {
-  setHeader('Find Client', false);
+  setHeader('Clients', false);
   $('#content').innerHTML =
+    '<div class="action-row" style="margin-bottom:10px">' +
+    '<button class="btn btn-primary" data-action="scan-start">' + IC.camera + ' Scan card</button>' +
+    '<button class="btn btn-secondary" data-action="manual-start">' + IC.pen + ' Type details</button>' +
+    '</div>' +
     '<div class="search-box"><input type="text" id="search-input" placeholder="Search name, shop, mobile, city…" autocomplete="off"></div>' +
     '<div id="search-results"><div class="empty">Loading recent clients…</div></div>';
   const inp = $('#search-input');
@@ -868,7 +880,7 @@ async function runSearch(qRaw) {
   const { data, error } = await query;
   if (error) { box.innerHTML = '<div class="empty">Search failed — try again.</div>'; return; }
   if (!data || !data.length) {
-    box.innerHTML = '<div class="empty"><div class="big">🔎</div>' + (q ? 'No client matches "' + esc(q) + '".<br>Check the spelling, or add them as a new client.' : 'No clients yet — add your first from the New Client tab.') + '</div>';
+    box.innerHTML = '<div class="empty"><div class="big">🔎</div>' + (q ? 'No client matches "' + esc(q) + '".<br>Check the spelling, or add them as a new client.' : 'No clients yet — tap “Scan card” or “Type details” above to add your first.') + '</div>';
     return;
   }
   box.innerHTML = (q ? '' : '<div class="section-label">Recently added</div>') + data.map((cl) =>
@@ -911,6 +923,7 @@ function renderClientPage(cl) {
   if (cl.email) add('Email', '<a href="mailto:' + esc(cl.email) + '">' + esc(cl.email) + '</a>');
   add('Owner', esc(cl.owner_name));
   add('Location', esc([cl.area, cl.city, cl.state].filter(Boolean).join(', ')));
+  add('GSTIN', esc(cl.gstin));
   add('Address', esc(cl.address));
   add('Polki jewellery', cl.is_polki_buyer === true ? 'Yes' : cl.is_polki_buyer === false ? 'No' : '');
   add('Order type', esc(cl.order_type));
@@ -928,7 +941,8 @@ function renderClientPage(cl) {
     '<button class="btn btn-secondary" data-action="edit-client" data-id="' + cl.id + '">Edit</button>' +
     '</div>' +
 
-    '<div class="card">' + (rows.join('') || '<div class="empty" style="padding:6px">No details yet</div>') + '</div>' +
+    '<div class="card">' + (rows.join('') || '<div class="empty" style="padding:6px">No details yet</div>') +
+    (typeof clientLocRowHTML === 'function' ? clientLocRowHTML(cl) : '') + '</div>' +
     '<div id="client-card-photo"></div>' +
     '<div id="client-followups"></div>' +
     '<div id="client-orders"></div>' +
@@ -979,6 +993,7 @@ async function loadClientHistory(cl) {
       '<div class="t-meta"><span>' + esc(nameOf(it.exec_id)) + '</span><span>' + fmtDT(it.happened_at) + '</span></div>' +
       (it.outcome ? '<div style="margin:2px 0 5px">' + outcomeChip(it.outcome) + '</div>' : '') +
       '<div class="t-notes">' + esc(it.notes) + '</div>' +
+      (typeof visitLocHTML === 'function' ? visitLocHTML(it, cl) : '') +
       (it.interest_after ? '<div style="margin-top:7px">' + chipInterest(it.interest_after) + ' <span style="font-size:12px;color:var(--muted)">after this meeting</span></div>' : '') +
       (fuHtml ? '<div class="t-fus">' + fuHtml + '</div>' : '') +
       '</div>';
@@ -1058,12 +1073,17 @@ async function saveInteraction() {
   const btn = $('#save-int-btn'); btn.disabled = true; btn.textContent = 'Saving…';
   const interestAfter = S.formState.int_interest || null;
 
-  const { data: intRow, error } = await db.from('interactions').insert({
+  // visit check-in: where this meeting was recorded (skipped quietly if not allowed)
+  let pos = null;
+  if (typeof getPosition === 'function') { btn.textContent = 'Getting location…'; pos = await getPosition(9000); btn.textContent = 'Saving…'; }
+
+  const { data: intRow, error } = await db.from('interactions').insert(Object.assign({
     client_id: cl.id, exec_id: S.me.id,
     notes: notes || (outcomeVal ? '(' + outcomeVal + ')' : '(follow-ups only)'),
     outcome: outcomeVal || null,
     interest_after: interestAfter !== cl.interest ? interestAfter : null,
-  }).select('id').single();
+  }, typeof visitFields === 'function' ? visitFields(pos) : {})).select('id').single();
+  if (!error && typeof maybeSaveShopLocation === 'function') await maybeSaveShopLocation(cl, pos);
   if (error) { btn.disabled = false; btn.textContent = 'Save meeting'; toast('Could not save — please try again.', 'err'); return; }
 
   if (fus.length) {
@@ -1171,7 +1191,8 @@ async function renderReport() {
   };
 
   c.innerHTML =
-    '<div class="filter-chips">' + chip('today', 'Today') + chip('7d', '7 days') + chip('30d', '30 days') + chip('all', 'All') + '</div>' +
+    '<div id="report-targets"></div>' +
+    '<div class="filter-chips" style="margin-top:14px">' + chip('today', 'Today') + chip('7d', '7 days') + chip('30d', '30 days') + chip('all', 'All') + '</div>' +
 
     '<div class="stat-row">' +
     '<div class="stat"><div class="st-num">' + clients.length + '</div><div class="st-label">New clients</div></div>' +
@@ -1211,6 +1232,7 @@ async function renderReport() {
     ((clients.length >= 1000 || meets.length >= 1000) ? '<div class="notice">Showing the most recent 1000 records of this period.</div>' : '') +
     '<div style="height:6px"></div>';
   if (typeof loadReportOrders === 'function') loadReportOrders(S.report.period);
+  if (typeof renderTargetsSection === 'function') renderTargetsSection($('#report-targets'));
 }
 
 async function reportExecView(execId, execName) {
@@ -1224,6 +1246,7 @@ async function reportExecView(execId, execName) {
   const rows = data || [];
   c.innerHTML =
     '<div class="card" style="padding:13px 15px"><b>' + esc(execName) + '</b> <span style="color:var(--muted);font-size:13px">· ' + rows.length + ' meeting' + (rows.length === 1 ? '' : 's') + ' ' + esc(periodLabel(S.report.period)) + '</span></div>' +
+    (typeof renderDayRoute === 'function' ? '<button class="btn btn-secondary" data-action="v-route" data-id="' + execId + '" data-name="' + esc(execName) + '" style="margin-bottom:12px">🗺️ Route for a day</button>' : '') +
     (rows.length ? rows.map(function (it) {
       const cl = it.clients || {};
       const note = String(it.notes || '');
@@ -1338,8 +1361,8 @@ async function exportAllData() {
 
     const today = todayStr();
     downloadFile('bj-clients-' + today + '.csv', buildCsv(
-      ['Trade name', 'Company', 'Contact person', 'Designation', 'Mobile', 'Other mobiles', 'Email', "Owner's name", 'Address', 'Area', 'City', 'State', 'Polki jewellery', 'Category', 'Order type', 'Interest', 'Entry', 'Added by', 'Added on', 'Card front (7-day link)', 'Card back (7-day link)'],
-      clients.map((c) => [c.trade_name, c.company_name, c.contact_person, c.designation, c.mobile, c.phone_other, c.email, c.owner_name, c.address, c.area, c.city, c.state, ynExp(c.is_polki_buyer), c.category, c.order_type, c.interest, c.entry_source, pName.get(c.created_by) || '', fmtExp(c.created_at), urlMap.get(c.card_image_path) || '', urlMap.get(c.card_image_back_path) || ''])));
+      ['Trade name', 'Company', 'Contact person', 'Designation', 'Mobile', 'Other mobiles', 'Email', "Owner's name", 'Address', 'Area', 'City', 'State', 'Polki jewellery', 'Category', 'Order type', 'Interest', 'Entry', 'Added by', 'Added on', 'Card front (7-day link)', 'Card back (7-day link)', 'GSTIN', 'Shop location'],
+      clients.map((c) => [c.trade_name, c.company_name, c.contact_person, c.designation, c.mobile, c.phone_other, c.email, c.owner_name, c.address, c.area, c.city, c.state, ynExp(c.is_polki_buyer), c.category, c.order_type, c.interest, c.entry_source, pName.get(c.created_by) || '', fmtExp(c.created_at), urlMap.get(c.card_image_path) || '', urlMap.get(c.card_image_back_path) || '', c.gstin || '', c.lat != null ? c.lat + ',' + c.lng : ''])));
 
     await new Promise((r) => setTimeout(r, 450));
     downloadFile('bj-meetings-' + today + '.csv', buildCsv(
@@ -1352,11 +1375,17 @@ async function exportAllData() {
       followups.map((f) => [cName.get(f.client_id) || '', f.type, f.content, f.due_date || '', f.status, pName.get(f.assigned_to) || '', pName.get(f.created_by) || '', fmtExp(f.created_at), fmtExp(f.done_at)])));
 
     let nFiles = 3;
-    if (typeof exportOrdersData === 'function') {
-      try { await exportOrdersData(pName, cName, today); nFiles = 6; }
-      catch (e) { toast('Clients, meetings and follow-ups downloaded — orders export failed.', 'err'); if (btn) { btn.disabled = false; btn.textContent = '⬇ Export all data'; } return; }
+    const failed = [];
+    const extra = [
+      ['orders', 3, typeof exportOrdersData === 'function' ? () => exportOrdersData(pName, cName, today) : null],
+      ['catalogue', 1, typeof exportCatalogueData === 'function' ? () => exportCatalogueData(pName, today) : null],
+      ['karigars', 1, typeof exportKarigarData === 'function' ? () => exportKarigarData(pName, today) : null],
+    ];
+    for (const x of extra) {
+      if (!x[2]) continue;
+      try { await x[2](); nFiles += x[1]; } catch (e) { failed.push(x[0]); }
     }
-    toast(nFiles === 6 ? '6 files downloaded — clients, meetings, follow-ups, orders, order items, payments ✓' : '3 files downloaded — clients, meetings, follow-ups ✓', 'ok');
+    toast(nFiles + ' files downloaded ✓' + (failed.length ? ' — could not export: ' + failed.join(', ') : ''), failed.length ? 'err' : 'ok');
   } catch (e) {
     toast('Export failed — please try again.', 'err');
   }
@@ -1390,10 +1419,18 @@ async function renderMore() {
 
       '<div class="section-label">Data backup</div>' +
       '<div class="card">' +
-      '<p style="margin:0 0 10px;font-size:14px;color:var(--muted)">Every entry is saved instantly to the secure database, and an automatic snapshot of everything is kept daily for 30 days. Download your complete data (3 Excel-ready files) any time:</p>' +
+      '<p style="margin:0 0 10px;font-size:14px;color:var(--muted)">Every entry is saved instantly to the secure database, and an automatic snapshot of everything is kept daily for 30 days. Download your complete data (Excel-ready files) any time:</p>' +
       '<button class="btn btn-primary" data-action="export-data" id="export-btn">⬇ Export all data</button>' +
       '</div>';
   }
+  const mrow = (action, icon, title, sub) => '<button class="more-row" data-action="' + action + '"><span class="mr-ic">' + icon + '</span><span class="mr-t"><b>' + title + '</b><span>' + sub + '</span></span><span class="mr-go">›</span></button>';
+  html += '<div class="section-label">Business tools</div><div class="card more-list">' +
+    (typeof renderKarigars === 'function' ? mrow('k-list', '🔨', 'Karigars', 'Gold given, received back and labour') : '') +
+    (typeof renderRateHistory === 'function' ? mrow('rate-history', '🪙', 'Gold rate', isOwner ? 'Set today\'s rate · history' : 'Today\'s rate · history') : '') +
+    (typeof renderDues === 'function' ? mrow('dues-open', '💰', 'Client dues', 'Who owes how much · reminders') : '') +
+    (isOwner && typeof renderBizForm === 'function' ? mrow('biz-open', '🏷️', 'Business details', 'Address, GSTIN, bank — printed on PDFs') : '') +
+    (typeof renderLangPicker === 'function' ? mrow('lang-open', '🌐', 'Language / भाषा / ભાષા', 'English, हिन्दी, ગુજરાતી') : '') +
+    '</div>';
   html += '<div class="empty" style="padding-top:6px;font-size:12.5px">' + esc(BRAND) + ' · Marketing app</div>';
   $('#content').innerHTML = html;
 
@@ -1505,6 +1542,7 @@ async function enterApp() {
   ]);
   S.team = new Map((teamRes.data || []).map((p) => [p.id, p]));
   S.geminiConfigured = !!statusRes.gemini_configured;
+  await Promise.all((window.LOGIN_HOOKS || []).map((h) => Promise.resolve().then(h).catch(() => null)));
 
   renderShell();
   switchTab('today');
