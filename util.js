@@ -128,6 +128,19 @@ async function signedUrls(bucket, paths) {
   return out;
 }
 
+/* every row of a query, 1000 at a time (the server sends at most 1000 per request).
+   makeQuery() must build a fresh, ordered query each time. */
+async function fetchPaged(makeQuery, max) {
+  const out = [];
+  for (let from = 0; from < (max || 50000); from += 1000) {
+    const { data, error } = await makeQuery().range(from, from + 999);
+    if (error) throw error;
+    out.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  return out;
+}
+
 /* ---------------- small UI bits ---------------- */
 function loadingHTML() { return '<div class="empty">Loading…</div>'; }
 /* progress bar: actual of target, coloured by whether it keeps pace with the month */

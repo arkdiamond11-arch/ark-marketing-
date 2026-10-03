@@ -1191,6 +1191,8 @@ async function renderReport() {
   };
 
   c.innerHTML =
+    (typeof renderReports === 'function' ? '<div class="action-row rep-shortcuts"><button class="btn btn-primary" data-action="rep-open">📊 Full reports</button>' +
+      (typeof renderAccounts === 'function' ? '<button class="btn btn-secondary" data-action="acc-open">📒 Accounts</button>' : '') + '</div>' : '') +
     '<div id="report-targets"></div>' +
     '<div class="filter-chips" style="margin-top:14px">' + chip('today', 'Today') + chip('7d', '7 days') + chip('30d', '30 days') + chip('all', 'All') + '</div>' +
 
@@ -1380,6 +1382,8 @@ async function exportAllData() {
       ['orders', 3, typeof exportOrdersData === 'function' ? () => exportOrdersData(pName, cName, today) : null],
       ['catalogue', 1, typeof exportCatalogueData === 'function' ? () => exportCatalogueData(pName, today) : null],
       ['karigars', 1, typeof exportKarigarData === 'function' ? () => exportKarigarData(pName, today) : null],
+      ['production steps', 1, typeof exportStepsData === 'function' ? () => exportStepsData(pName, today) : null],
+      ['accounts', 2, typeof exportAccountsData === 'function' ? () => exportAccountsData(pName, cName, today) : null],
     ];
     for (const x of extra) {
       if (!x[2]) continue;
@@ -1425,9 +1429,13 @@ async function renderMore() {
   }
   const mrow = (action, icon, title, sub) => '<button class="more-row" data-action="' + action + '"><span class="mr-ic">' + icon + '</span><span class="mr-t"><b>' + title + '</b><span>' + sub + '</span></span><span class="mr-go">›</span></button>';
   html += '<div class="section-label">Business tools</div><div class="card more-list">' +
-    (typeof renderKarigars === 'function' ? mrow('k-list', '🔨', 'Karigars', 'Gold given, received back and labour') : '') +
-    (typeof renderRateHistory === 'function' ? mrow('rate-history', '🪙', 'Gold rate', isOwner ? 'Set today\'s rate · history' : 'Today\'s rate · history') : '') +
+    (isOwner && typeof renderReports === 'function' ? mrow('rep-open', '📊', 'Reports', 'Sales, diamonds, payments, parties — filter and download') : '') +
+    (isOwner && typeof renderAccounts === 'function' ? mrow('acc-open', '📒', 'Accounts', 'Cash book, bank book and expenses') : '') +
+    (!isOwner && typeof renderMyExpenses === 'function' ? mrow('exp-mine', '🧾', 'My expenses', 'Travel, courier and other spends') : '') +
     (typeof renderDues === 'function' ? mrow('dues-open', '💰', 'Client dues', 'Who owes how much · reminders') : '') +
+    (typeof renderKarigars === 'function' ? mrow('k-list', '🔨', 'Karigars', 'Metal given, received back and labour') : '') +
+    (typeof renderRateHistory === 'function' ? mrow('rate-history', '🪙', 'Gold & silver rate', isOwner ? 'Set today\'s rate · history' : 'Today\'s rate · history') : '') +
+    (isOwner && typeof renderStepTemplates === 'function' ? mrow('stpl-open', '⚙️', 'Production steps', 'The step lists used for orders') : '') +
     (isOwner && typeof renderBizForm === 'function' ? mrow('biz-open', '🏷️', 'Business details', 'Address, GSTIN, bank — printed on PDFs') : '') +
     (typeof renderLangPicker === 'function' ? mrow('lang-open', '🌐', 'Language / भाषा / ભાષા', 'English, हिन्दी, ગુજરાતી') : '') +
     '</div>';

@@ -223,6 +223,8 @@ async function loadOrderList() {
   const live = rows.filter(isLive);
   const due = live.reduce((a, o) => a + balanceOf(o), 0);
   const quotesOnly = L.status === 'quote';
+  S.stepInfo = typeof loadStepInfo === 'function' ? await loadStepInfo(rows.filter((o) => isOpenStatus(o.status)).map((o) => o.id)) : null;
+  if (!$('#o-list')) return;
   box.innerHTML =
     '<div class="stat-row">' +
     '<div class="stat"><div class="st-num">' + rows.length + (rows.length >= 300 ? '+' : '') + '</div><div class="st-label">' + (quotesOnly ? 'Quotations' : 'Orders') + '</div></div>' +
@@ -241,6 +243,8 @@ function orderListItemHTML(o, showClient) {
     '<div class="li-sub">' + esc(OTYPE_LABEL[o.order_type] || '') + ' · ' + esc(fmtD(o.order_date)) +
     (o.due_date ? ' · ' + dueHTML(o) : '') + '</div>' +
     '<div class="li-chips">' + chipStatus(o.status) +
+    (S.stepInfo && S.stepInfo.get(o.id) && S.stepInfo.get(o.id).total && isOpenStatus(o.status)
+      ? '<span class="chip chip-step">⚙ ' + esc(S.stepInfo.get(o.id).cur || 'All steps done') + ' · ' + S.stepInfo.get(o.id).done + '/' + S.stepInfo.get(o.id).total + '</span>' : '') +
     (num(o.total_amount) ? '<span class="chip chip-cat">' + inr(o.total_amount) + '</span>' : '') +
     (bal > 0 && isLive(o) ? '<span class="chip chip-hot">Due ' + inr(bal) + '</span>' : '') +
     '</div></div><div style="color:var(--muted)">›</div></div>';
@@ -283,9 +287,12 @@ async function loadPickClient(qRaw) {
 /* ============================================================
    ORDER FORM (new + edit)
    ============================================================ */
-function blankItem() {
-  return { category: '', description: '', design_code: '', qty: '1', gross_wt: '', net_wt: '', stone_details: '', stone_amount: '', size: '',
+function blankItem(prev) {
+  const it = { category: '', description: '', design_code: '', qty: '1', gross_wt: '', net_wt: '', stone_details: '', stone_amount: '', size: '',
     photo_path: null, _photo: null, catalogue_id: null, cat_photo: null };
+  Object.assign(it, JEWEL_BLANK);
+  if (prev && prev.metal_color) it.metal_color = prev.metal_color;   // a new line keeps the colour of the one before
+  return it;
 }
 
 function startNewOrder(client, typeKey, replace) {
@@ -327,12 +334,12 @@ async function startEditOrder(id) {
     gstTouched: num(o.gst_pct) !== (o.order_type === 'job_work' ? 5 : 3),
     rateAuto: false,
     client: o.clients || { id: o.client_id, trade_name: 'Client' },
-    items: items.map((it) => ({
+    items: items.map((it) => Object.assign({
       category: s(it.category), description: s(it.description), design_code: s(it.design_code), qty: s(it.qty || 1),
       gross_wt: s(it.gross_wt), net_wt: s(it.net_wt), stone_details: s(it.stone_details),
       stone_amount: num(it.stone_amount) ? s(it.stone_amount) : '', size: s(it.size), photo_path: it.photo_path, _photo: null,
       catalogue_id: it.catalogue_id || null, cat_photo: it.catalogue_id ? catPhoto.get(it.catalogue_id) || null : null,
-    })),
+    }, jewelForm(it))),
     o: {
       order_date: s(o.order_date), due_date: s(o.due_date), rate_per_g: s(o.rate_per_g), making_per_g: s(o.making_per_g),
       wastage_pct: s(o.wastage_pct), discount: num(o.discount) ? s(o.discount) : '', gst_pct: s(o.gst_pct),
@@ -511,8 +518,9 @@ function redrawOrderItems() {
       f('size', 'Size', 'e.g. 2.6 / 16 in') +
       f('gross_wt', 'Gross wt (g)', '0.000', true) +
       f('net_wt', 'Net metal wt (g)', '0.000', true) +
-      f('stone_details', 'Stones', 'e.g. Polki 12 ct, kundan', false) +
-      f('stone_amount', 'Stone value ₹', '0', true) +
+      jewelItemFieldsHTML(it, i, S.formState.o_metal || 'Gold') +
+      f('stone_details', 'Other stones', 'e.g. kundan, emerald drops', false) +
+      f('stone_amount', it.diamond_type ? 'Stones + diamonds ₹' : 'Stone value ₹', '0', true) +
       '</div>' +
       '<div class="oi-photo">' + photo + '</div>' +
       '</div>';
@@ -568,8 +576,20 @@ function onOrderInput(e) {
   const t = e.target;
   if (!S.ord || !$('#order-form')) return;
   if (t.dataset.oi != null) {
-    const it = S.ord.items[+t.dataset.idx];
-    if (it) it[t.dataset.oi] = t.value;
+    const idx = +t.dataset.idx, key = t.dataset.oi;
+    const it = S.ord.items[idx];
+    if (it) it[key] = t.value;
+    if (it && JEWEL_TOGGLE_KEYS.indexOf(key) > -1) {
+      if (key === 'diamond_type' && !t.value) { it.diamond_ct = ''; it.diamond_pcs = ''; it.diamond_quality = ''; it.diamond_rate = ''; it.diamond_cert_lab = ''; it.diamond_cert_no = ''; }
+      redrawOrderItems();
+    } else if (it && (key === 'diamond_ct' || key === 'diamond_rate')) {
+      const v = jewelAutoStoneValue(it);
+      if (v != null) {
+        it.stone_amount = v;
+        const el = document.querySelector('[data-oi="stone_amount"][data-idx="' + idx + '"]');
+        if (el) el.value = v;
+      }
+    }
     orderRecalcView();
   } else if (t.dataset.of) {
     if (t.id === 'o-karigar' && t.value === '__new') {
@@ -607,6 +627,9 @@ function onSegChange(group) {
     if (purityOptions(metal).indexOf(S.formState.o_purity) === -1) S.formState.o_purity = defaultPurity(metal);
     const w = $('#o-purity-wrap');
     if (w) w.innerHTML = segHTML('o_purity', purityOptions(metal), S.formState.o_purity);
+    // a gold colour does not fit silver (and the other way round)
+    S.ord.items.forEach((it) => { if (it.metal_color && colorOptions(metal).indexOf(it.metal_color) === -1) it.metal_color = ''; });
+    redrawOrderItems();
     applyAutoRate();
   }
   if (group === 'o_purity') applyAutoRate();
@@ -640,7 +663,7 @@ function orderItemPhoto(idx) {
 
 function itemHasContent(it) {
   return !!(String(it.category || '').trim() || String(it.description || '').trim() || String(it.design_code || '').trim() ||
-    num(it.net_wt) || num(it.gross_wt) || it._photo || it.photo_path || it.catalogue_id);
+    num(it.net_wt) || num(it.gross_wt) || it._photo || it.photo_path || it.catalogue_id || it.diamond_type);
 }
 
 async function saveOrder(asQuote) {
@@ -715,7 +738,7 @@ async function saveOrder(asQuote) {
   }
 
   // items: add the new set first, then remove the old one (so nothing is lost if a step fails)
-  const itemRows = items.map((it, i) => ({
+  const itemRows = items.map((it, i) => Object.assign({
     order_id: id, sort: i,
     category: String(it.category || '').trim() || null,
     description: String(it.description || '').trim() || null,
@@ -727,7 +750,7 @@ async function saveOrder(asQuote) {
     size: String(it.size || '').trim() || null,
     photo_path: it.photo_path || null,
     catalogue_id: it.catalogue_id || null,
-  }));
+  }, jewelRow(it)));
   const { error: itErr } = await db.from('order_items').insert(itemRows);
   if (itErr) toast('Order saved, but the items could not be saved — open the order and tap Edit to add them again.', 'err');
   else if (S.ord.oldItemIds.length) await db.from('order_items').delete().in('id', S.ord.oldItemIds);
@@ -782,6 +805,7 @@ async function openOrder(id, replace) {
       const top = S.sub[S.sub.length - 1];
       if (!x || !top || top.title !== title) return;   // user already moved on
       renderOrderPage(x); loadOrderDetails(x);
+      if (typeof loadOrderSteps === 'function') loadOrderSteps(x);
     };
     if (first) { const x = first; first = null; use(x); }
     else { $('#content').innerHTML = '<div class="empty">Loading…</div>'; fetchOrder(id).then(use); }   // fresh data after Back
@@ -822,6 +846,8 @@ function renderOrderPage(o) {
     '<button class="btn btn-secondary" data-action="o-note" data-id="' + o.id + '">＋ Note</button>' +
     '</div>' +
 
+    '<div id="o-steps-view"></div>' +
+
     '<div class="section-label">Documents (PDF)</div>' +
     '<div class="doc-row">' +
     (quote ? docBtn('quote', 'Quotation') : docBtn('slip', 'Order slip')) +
@@ -855,6 +881,7 @@ async function loadOrderDetails(o) {
   const c = orderCalc(o, items);
   const bal = balanceOf(o);
   const quote = o.status === 'quote';
+  const disc = pays.filter((p) => p.mode === 'Discount').reduce((a, p) => a + num(p.amount), 0);
   const row = (k, v, cls) => '<div class="o-lrow' + (cls ? ' ' + cls : '') + '"><span>' + k + '</span><b>' + v + '</b></div>';
 
   // money
@@ -869,7 +896,8 @@ async function loadOrderDetails(o) {
     (num(o.gst_pct) ? row('GST ' + num(o.gst_pct) + '%', inr(c.gst)) : '') +
     row(quote ? 'Quoted total' : 'Order total', inr(o.total_amount), 'o-total') +
     (quote ? '' :
-      row('Received', inr(o.paid_amount)) +
+      row('Received', inr(num(o.paid_amount) - disc)) +
+      (disc ? row('Settlement discount', '− ' + inr(disc)) : '') +
       row('Balance due', inr(bal), bal > 0 ? 'o-due' : 'o-paid') +
       (num(o.paid_amount) - num(o.total_amount) >= 1 ? row('Extra received (refund / adjust)', inr(num(o.paid_amount) - num(o.total_amount)), 'o-due') : '')) +
     '</div>';
@@ -892,7 +920,11 @@ async function loadOrderDetails(o) {
         '<div class="o-item-title">' + (i + 1) + '. ' + esc(it.category || 'Item') + (it.design_code ? ' <span class="o-tag">' + esc(it.design_code) + '</span>' : '') + '</div>' +
         (it.description ? '<div class="o-item-desc">' + esc(it.description) + '</div>' : '') +
         (bits.length ? '<div class="o-item-meta">' + bits.join(' · ') + '</div>' : '') +
-        (it.stone_details || num(it.stone_amount) ? '<div class="o-item-meta">Stones: ' + esc(it.stone_details || '') + (num(it.stone_amount) ? ' — ' + inr(it.stone_amount) : '') + '</div>' : '') +
+        jewelMetaHTML(it, o.metal) +
+        (it.diamond_type
+          ? (it.stone_details ? '<div class="o-item-meta">Other stones: ' + esc(it.stone_details) + '</div>' : '') +
+            (num(it.stone_amount) ? '<div class="o-item-meta">Stones + diamonds: ' + inr(it.stone_amount) + '</div>' : '')
+          : (it.stone_details || num(it.stone_amount) ? '<div class="o-item-meta">Stones: ' + esc(it.stone_details || '') + (num(it.stone_amount) ? (it.stone_details ? ' — ' : '') + inr(it.stone_amount) : '') + '</div>' : '')) +
         (it.catalogue_id ? '<div class="o-item-meta"><a href="#" data-action="cat-open" data-id="' + it.catalogue_id + '">Catalogue piece ›</a></div>' : '') +
         '</div></div>';
     }).join('') : '<div class="empty" style="padding:10px">No items — tap Edit to add them.</div>');
@@ -1039,6 +1071,8 @@ async function shareOrderWhatsApp(id) {
     if (num(it.qty) > 1) w.push(it.qty + ' pcs');
     if (it.net_wt != null) w.push('net ' + grams(it.net_wt));
     lines.push((i + 1) + '. ' + [it.category, it.design_code, it.description].filter(Boolean).join(' — ') + (w.length ? ' (' + w.join(', ') + ')' : ''));
+    const jb = jewelPdfBits(it, o.metal);
+    if (jb.length) lines.push('   ' + jb.join(' · '));
   });
   if (o.order_type === 'job_work' && o.client_metal_g != null) {
     lines.push('');
@@ -1085,7 +1119,7 @@ async function onOrderAction(a, el) {
   else if (a === 'o-new') { S.pendingCatItems = null; const c = await fetchClient(el.dataset.id); if (c) startNewOrder(c, el.dataset.type || null); }
   else if (a === 'o-open') openOrder(el.dataset.id);
   else if (a === 'o-filter') { S.olist[el.dataset.g] = el.dataset.v; renderOrders(); }
-  else if (a === 'o-item-add') { S.ord.items.push(blankItem()); redrawOrderItems(); orderRecalcView(); }
+  else if (a === 'o-item-add') { S.ord.items.push(blankItem(S.ord.items[S.ord.items.length - 1])); redrawOrderItems(); orderRecalcView(); }
   else if (a === 'o-item-del') { S.ord.items.splice(+el.dataset.idx, 1); if (!S.ord.items.length) S.ord.items.push(blankItem()); redrawOrderItems(); orderRecalcView(); }
   else if (a === 'o-item-photo') orderItemPhoto(+el.dataset.idx);
   else if (a === 'o-item-photo-del') { const it = S.ord.items[+el.dataset.idx]; if (it) { it._photo = null; it.photo_path = null; } redrawOrderItems(); }
@@ -1211,9 +1245,13 @@ async function exportOrdersData(pName, cName, today) {
       o.karigar_received_g, o.karigar_received_on || '', o.karigar_labour, o.notes, pName.get(o.created_by) || '', fmtExp(o.created_at)])));
   await new Promise((r) => setTimeout(r, 450));
   downloadFile('bj-order-items-' + today + '.csv', buildCsv(
-    ['Order no', 'Client', '#', 'Piece', 'Tag / design no', 'Description', 'Qty', 'Gross wt (g)', 'Net wt (g)', 'Stones', 'Stone value', 'Size'],
+    ['Order no', 'Client', '#', 'Piece', 'Tag / design no', 'Description', 'Qty', 'Gross wt (g)', 'Net wt (g)', 'Colour / finish',
+      'Diamonds / stones', 'Carats', 'Diamond pcs', 'Diamond quality', 'Rate per ct', 'Diamond certificate', 'Diamond cert no',
+      'Jewellery certificate', 'Jewellery cert / HUID no', 'Other stones', 'Stone value', 'Size'],
     items.map((it) => [oNo.get(it.order_id) || '', oClient.get(it.order_id) || '', it.sort + 1, it.category, it.design_code, it.description, it.qty,
-      it.gross_wt, it.net_wt, it.stone_details, it.stone_amount, it.size])));
+      it.gross_wt, it.net_wt, it.metal_color, diamondLabel(it.diamond_type), it.diamond_ct, it.diamond_pcs, it.diamond_quality, it.diamond_rate,
+      it.diamond_type ? (it.diamond_cert_lab || 'Not certified') : '', it.diamond_cert_no, it.jewel_cert_type || '', it.jewel_cert_no,
+      it.stone_details, it.stone_amount, it.size])));
   await new Promise((r) => setTimeout(r, 450));
   downloadFile('bj-order-payments-' + today + '.csv', buildCsv(
     ['Order no', 'Client', 'Date', 'Amount', 'Mode', 'Note', 'Recorded by'],

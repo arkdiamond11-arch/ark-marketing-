@@ -442,7 +442,7 @@ async function buildOrderPdf(orderId, kind) {
   if (priced) cols.push({ h: 'Amount', w: 24, a: 'right' });
   cols[3].w = PG_W - PM * 2 - cols.reduce((a, x) => a + x.w, 0);
   const rows = items.map((it, i) => {
-    const r = [String(i + 1), it.category || '', it.design_code || '', it.description || '', String(it.qty || 1),
+    const r = [String(i + 1), it.category || '', it.design_code || '', [it.description].concat(jewelPdfBits(it, o.metal)).filter(Boolean).join('; '), String(it.qty || 1),
       it.gross_wt != null ? pG(it.gross_wt) : '', it.net_wt != null ? pG(it.net_wt) : '',
       [it.stone_details, num(it.stone_amount) ? pRs(it.stone_amount) : ''].filter(Boolean).join(' - ')];
     if (priced) r.push(pRs(orderCalc(o, [it]).subtotal));
@@ -465,17 +465,20 @@ async function buildOrderPdf(orderId, kind) {
     if (num(o.gst_pct)) t.push(['GST ' + num(o.gst_pct) + '%', pRs(c.gst)]);
     t.push([quote ? 'Estimated total' : 'Order total', pRs(o.total_amount || c.total), 'total']);
     if (!quote) {
-      t.push(['Received', pRs(o.paid_amount)]);
+      const disc = pays.filter((p) => p.mode === 'Discount').reduce((a, p) => a + num(p.amount), 0);
+      t.push(['Received', pRs(num(o.paid_amount) - disc)]);
+      if (disc) t.push(['Settlement discount', '- ' + pRs(disc)]);
       const bal = balanceOf(o);
       t.push(['Balance due', pRs(bal), bal > 0 ? 'due' : 'paid']);
     }
     pTotals(d, t);
   }
 
-  if (!quote && pays.length) {
+  const money = pays.filter((p) => p.mode !== 'Discount');
+  if (!quote && money.length) {
     pHeading(d, 'Payments received');
     d.table([{ h: 'Date', w: 30 }, { h: 'Mode', w: 28 }, { h: 'Note', w: PG_W - PM * 2 - 30 - 28 - 32 }, { h: 'Amount', w: 32, a: 'right' }],
-      pays.map((p) => [pDate(p.paid_on), p.mode || '', p.note || '', pRs(p.amount)]));
+      money.map((p) => [pDate(p.paid_on), p.mode || '', p.note || '', pRs(p.amount)]));
   }
 
   const led = jwLedger(o, c.net);
@@ -517,7 +520,8 @@ async function orderChallanPdf(o, cl, items) {
   const rows = items.map((it, i) => {
     const fine = pur ? num(it.net_wt) * pur / 100 : 0;
     q += Math.max(1, parseInt(it.qty, 10) || 1); g += num(it.gross_wt); n += num(it.net_wt); f += fine;
-    return [String(i + 1), [it.category, it.design_code, it.description].filter(Boolean).join(' - ') + (it.stone_details ? ' (stones: ' + it.stone_details + ')' : ''),
+    return [String(i + 1), [it.category, it.design_code, it.description].filter(Boolean).join(' - ') + (it.stone_details ? ' (stones: ' + it.stone_details + ')' : '') +
+      (jewelPdfBits(it, o.metal).length ? '; ' + jewelPdfBits(it, o.metal).join('; ') : ''),
       '7113', String(it.qty || 1), it.gross_wt != null ? pG(it.gross_wt) : '', it.net_wt != null ? pG(it.net_wt) : '', pPurity(o.purity), pur ? pG(fine) : ''];
   });
   const t = ['', 'Total', '', String(q), g ? pG(g) : '', pG(n), '', pur ? pG(f) : ''];
@@ -587,31 +591,35 @@ async function buildClientStatementPdf(clientId) {
   const cl = await fetchClient(clientId);
   if (!cl) throw new Error('client');
   const L = await clientLedgerData(clientId);
+  const T = L.totals;
   const d = await pdfStart('ACCOUNT STATEMENT', [['Date', pDate(todayStr())], ['Orders', String(L.live.length)]]);
   d.y = pParty(d, PM, d.y, PG_W - PM * 2, 'CUSTOMER', clientLines(cl)) + 3;
-  pTotals(d, [['Total of orders', pRs(L.totals.business)], ['Received', pRs(L.totals.received)],
-    ['Balance due', pRs(L.totals.due), 'total']]);
-  if (L.live.length) {
-    pHeading(d, 'Orders');
-    d.table([{ h: 'Order', w: 22 }, { h: 'Date', w: 26 }, { h: 'Type', w: 26 }, { h: 'Status', w: 26 }, { h: 'Total', w: 28, a: 'right' }, { h: 'Received', w: 27, a: 'right' }, { h: 'Balance', w: 27, a: 'right' }],
-      L.live.map((o) => [ordNo(o.order_no), pDate(o.order_date), OTYPE_LABEL[o.order_type] || '', OSTATUS_LABEL[o.status] || '', pRs(o.total_amount), pRs(o.paid_amount), pRs(balanceOf(o))]), { zebra: true });
-  }
-  if (L.pays.length) {
-    pHeading(d, 'Payments');
-    const on = new Map(L.live.map((o) => [o.id, ordNo(o.order_no)]));
-    d.table([{ h: 'Date', w: 28 }, { h: 'Order', w: 24 }, { h: 'Mode', w: 26 }, { h: 'Note', w: PG_W - PM * 2 - 28 - 24 - 26 - 30 }, { h: 'Amount', w: 30, a: 'right' }],
-      L.pays.map((p) => [pDate(p.paid_on), on.get(p.order_id) || '', p.mode || '', p.note || '', pRs(p.amount)]), { zebra: true });
+  const tot = [];
+  if (T.opening) tot.push(['Opening balance', pRs(T.opening)]);
+  tot.push(['Total of orders', pRs(T.business)]);
+  if (T.charges) tot.push(['Other charges', pRs(T.charges)]);
+  if (T.refunds) tot.push(['Refunds paid', pRs(T.refunds)]);
+  tot.push(['Received', pRs(T.received)]);
+  if (T.discount) tot.push(['Discount', pRs(T.discount)]);
+  tot.push(Math.abs(T.due) < 1 ? ['Account clear', 'Rs. 0', 'total'] : [T.due <= -1 ? 'Advance with us' : 'Balance due', pRs(Math.abs(T.due)), 'total']);
+  pTotals(d, tot);
+  if (L.entries.length) {
+    pHeading(d, 'Account statement');
+    const cols = [{ h: 'Date', w: 24 }, { h: 'Particulars', w: 0 }, { h: 'Debit', w: 27, a: 'right' }, { h: 'Credit', w: 27, a: 'right' }, { h: 'Balance', w: 32, a: 'right' }];
+    cols[1].w = PG_W - PM * 2 - cols.reduce((a, x) => a + x.w, 0);
+    d.table(cols, L.entries.map((e) => [pDate(e.date), e.text, e.debit ? pRs(e.debit) : '', e.credit ? pRs(e.credit) : '',
+      Math.abs(e.bal) < 1 ? 'Clear' : pRs(Math.abs(e.bal)) + (e.bal > 0 ? ' Dr' : ' Cr')]), { zebra: true, size: 8.4 });
   }
   if (L.gold.length) {
     pHeading(d, 'Gold account (job work)');
     const rows = L.gold.map((g) => [ordNo(g.o.order_no), pDate(g.o.order_date), pG(g.led.inFine), pG(g.led.usedFine), pG(g.led.bal)]);
-    const t = ['Total', '', pG(L.totals.goldIn), pG(L.totals.goldUsed), pG(L.totals.goldBal)];
+    const t = ['Total', '', pG(T.goldIn), pG(T.goldUsed), pG(T.goldBal)];
     t.bold = true;
     rows.push(t);
     d.table([{ h: 'Order', w: 26 }, { h: 'Date', w: 30 }, { h: 'Fine gold received (g)', w: 42, a: 'right' }, { h: 'Fine gold used (g)', w: 42, a: 'right' }, { h: 'Balance (g)', w: 42, a: 'right' }], rows);
-    pNote(d, '', L.totals.goldBal > 0.0005 ? 'Your gold with us: ' + pG(L.totals.goldBal) + ' g fine.' : L.totals.goldBal < -0.0005 ? 'Gold due from you: ' + pG(-L.totals.goldBal) + ' g fine.' : 'Gold account settled.');
+    pNote(d, '', T.goldBal > 0.0005 ? 'Your gold with us: ' + pG(T.goldBal) + ' g fine.' : T.goldBal < -0.0005 ? 'Gold due from you: ' + pG(-T.goldBal) + ' g fine.' : 'Gold account settled.');
   }
-  pNote(d, '', 'Please check this statement and let us know of any difference. Thank you for your business.', 8.2);
+  pNote(d, '', 'Dr = amount due from you, Cr = advance with us. Please check this statement and let us know of any difference. Thank you for your business.', 8.2);
   pSignatures(d, '');
   return { pdf: d, name: safeFileName((cl.trade_name || 'Client') + ' - Statement ' + todayStr()) + '.pdf', text: 'Account statement from ' + bizName() };
 }

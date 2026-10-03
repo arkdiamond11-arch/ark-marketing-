@@ -21,7 +21,7 @@ async function summaryData() {
     db.from('orders').select('status, total_amount, created_by').eq('order_date', y).limit(5000),
     db.from('orders').select('due_date').in('status', OPEN_STATUSES).not('due_date', 'is', null).lte('due_date', t).limit(5000),
     meQ(db.from('followups').select('due_date').eq('type', 'reminder').eq('status', 'pending').lte('due_date', t).limit(5000), 'assigned_to'),
-    owner ? db.from('orders').select('client_id, total_amount, paid_amount').in('status', ['new', 'in_production', 'ready', 'delivered']).limit(10000) : Promise.resolve({ data: [] }),
+    owner && typeof partyBalances === 'function' ? partyBalances().then((m) => ({ data: m ? Array.from(m.values()) : [] })) : Promise.resolve({ data: [] }),
     owner ? db.from('orders').select('id').eq('status', 'quote').lte('order_date', soon).limit(5000) : Promise.resolve({ data: [] }),
     owner ? db.from('karigar_txns').select('kind, metal, fine_g').in('kind', ['issue', 'receive', 'wastage']).limit(20000) : Promise.resolve({ data: [] }),
   ]);
@@ -31,7 +31,7 @@ async function summaryData() {
   meet.forEach((m) => byExec.set(m.exec_id, (byExec.get(m.exec_id) || 0) + 1));
   const dueClients = new Set();
   let money = 0;
-  live.forEach((o) => { const b = balanceOf(o); if (b >= 1) { money += b; dueClients.add(o.client_id); } });
+  live.forEach((p) => { if (p.due >= 1) { money += p.due; dueClients.add(p.id); } });
   let kGold = 0, kSilver = 0;
   kt.forEach((x) => { const v = (x.kind === 'issue' ? 1 : -1) * num(x.fine_g); if (x.metal === 'Silver') kSilver += v; else kGold += v; });
   const myOrders = owner ? yOrders : yOrders.filter((o) => o.created_by === S.me.id);
