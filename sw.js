@@ -1,7 +1,7 @@
 /* Marketing app service worker — network-first, cache as offline fallback for the app shell */
-const CACHE = 'app-shell-v5';
+const CACHE = 'app-shell-v6';
 const SHELL = ['index.html', 'styles.css', 'config.js', 'manifest.json', 'icon-192.png', 'icon.svg',
-  'app.js', 'i18n.js', 'jewel.js', 'orders.js', 'util.js', 'rates.js', 'docs.js', 'ledger.js', 'steps.js',
+  'app.js', 'i18n.js', 'jewel.js', 'orders.js', 'util.js', 'docs.js', 'ledger.js', 'steps.js',
   'accounts.js', 'reports.js', 'catalogue.js', 'karigars.js', 'visits.js', 'targets.js', 'summary.js'];
 
 self.addEventListener('install', (e) => {
@@ -29,7 +29,7 @@ self.addEventListener('fetch', (e) => {
         caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
         return res;
       })
-      // offline: the scripts are loaded as "file.js?v=5", the shell was cached without the "?v=5"
+      // offline: the scripts are loaded as "file.js?v=6", the shell was cached without the "?v=6"
       .catch(() => caches.match(e.request, { ignoreSearch: true }).then((m) => m || caches.match('index.html')))
   );
 });

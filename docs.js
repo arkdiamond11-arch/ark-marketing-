@@ -535,10 +535,10 @@ async function orderChallanPdf(o, cl, items) {
       'Fine gold in these goods including ' + num(o.wastage_pct) + '% wastage: ' + pG(led.usedFine) + ' g.  ' +
       (Math.abs(led.bal) < 0.0005 ? 'Settled.' : led.bal > 0 ? 'Your gold still with us: ' + pG(led.bal) + ' g fine.' : 'Gold due from you: ' + pG(-led.bal) + ' g fine.'));
   }
-  const rate = num(o.rate_per_g) || rateFor(o.metal, o.purity);
+  const rate = num(o.rate_per_g);
   if (rate && n) {
     pNote(d, 'VALUE OF GOODS', 'Approximately ' + pRs(n * rate + items.reduce((a, it) => a + num(it.stone_amount), 0)) +
-      ' (net weight at ' + pRs(rate) + '/g' + (num(o.rate_per_g) ? '' : ', ' + (o.metal === 'Silver' ? 'silver' : 'gold') + ' rate of ' + pDate(S.rate && S.rate.rate_date)) + ', plus stones).');
+      ' (net weight at ' + pRs(rate) + '/g, plus stones).');
   }
   if (o.order_type === 'job_work') pNote(d, '', 'Job-work (making) charges are billed separately on a tax invoice.', 8.2);
   pNote(d, 'TERMS', S.biz && S.biz.terms, 7.8);

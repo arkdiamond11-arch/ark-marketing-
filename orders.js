@@ -300,7 +300,7 @@ function startNewOrder(client, typeKey, replace) {
   S.pendingCatItems = null;
   if (pending && pending.length && !typeKey) typeKey = 'ready_stock';
   S.ord = {
-    id: null, orderNo: null, status: null, oldItemIds: [], oldCatIds: [], gstTouched: false, rateAuto: true,
+    id: null, orderNo: null, status: null, oldItemIds: [], oldCatIds: [], gstTouched: false,
     client: { id: client.id, trade_name: client.trade_name, city: client.city },
     items: [blankItem()],
     o: { order_date: todayStr(), due_date: '', gst_pct: typeKey === 'job_work' ? '5' : typeKey ? '3' : '', discount: '', karigar_id: '' },
@@ -310,7 +310,6 @@ function startNewOrder(client, typeKey, replace) {
   };
   if (pending && pending.length && typeof addCatItemsToOrder === 'function') addCatItemsToOrder(pending);
   S.formState.o_color = commonColor(S.ord.items) || null;
-  applyAutoRate();
   showSub('New Order', renderOrderForm, replace);
 }
 
@@ -333,7 +332,6 @@ async function startEditOrder(id) {
     id: o.id, orderNo: o.order_no, status: o.status, oldItemIds: items.map((x) => x.id), oldCatIds: catIds,
     // keep a custom GST; a default one follows the type if the type is changed
     gstTouched: num(o.gst_pct) !== (o.order_type === 'job_work' ? 5 : 3),
-    rateAuto: false,
     client: o.clients || { id: o.client_id, trade_name: 'Client' },
     items: items.map((it) => Object.assign({
       category: s(it.category), description: s(it.description), design_code: s(it.design_code), qty: s(it.qty || 1),
@@ -383,16 +381,6 @@ function formOrderObj() {
   return o;
 }
 
-/* fill the metal rate from today's gold rate until the user types their own */
-function applyAutoRate() {
-  if (!S.ord || !S.ord.rateAuto || typeof rateFor !== 'function') return;
-  const r = rateFor(S.formState.o_metal || 'Gold', purityVal(S.formState.o_purity));
-  S.ord.o.rate_per_g = r ? String(r) : (S.ord.o.rate_per_g || '');
-  const el = $('#o-rate'); if (el) el.value = S.ord.o.rate_per_g || '';
-  const h = $('#o-rate-hint');
-  if (h) h.textContent = r ? (S.formState.o_metal === 'Silver' ? 'Silver rate of ' : 'Gold rate of ') + rateDateLabel() : '';
-}
-
 function karigarOptionsHTML(sel) {
   const list = (S.karigars || []).filter((k) => k.active || k.id === sel);
   return '<option value="">— None —</option>' +
@@ -435,7 +423,7 @@ function renderOrderForm() {
     '<div class="field"><label id="o-color-label">' + colorFieldLabel(S.formState.o_metal) + '</label><div id="o-color-wrap">' + orderColorSegHTML() + '</div>' +
     '<div class="hint">Sets every item. If one item is different, change it in that item\'s box.</div></div>' +
     '<div class="o-2col">' +
-    '<div class="field" id="o-rate-wrap"><label>Metal rate ₹ / g</label>' + numIn('rate_per_g', 'e.g. 7200', 'o-rate') + '<div class="hint" id="o-rate-hint"></div></div>' +
+    '<div class="field" id="o-rate-wrap"><label>Metal rate ₹ / g</label>' + numIn('rate_per_g', 'e.g. 7200', 'o-rate') + '</div>' +
     '<div class="field"><label id="o-making-label">Making ₹ / g</label>' + numIn('making_per_g', 'e.g. 450') + '</div>' +
     '</div>' +
     '<div class="field" style="margin-bottom:2px"><label>Wastage %</label>' + numIn('wastage_pct', 'e.g. 4') + '<div class="hint" id="o-wastage-hint"></div></div>' +
@@ -492,7 +480,6 @@ function renderOrderForm() {
     '</div>';
   redrawOrderItems();
   applyOTypeVisibility();
-  if (S.ord.rateAuto) applyAutoRate();
   orderRecalcView();
 }
 
@@ -621,7 +608,6 @@ function onOrderInput(e) {
     }
     S.ord.o[t.dataset.of] = t.value;
     if (t.dataset.of === 'gst_pct') S.ord.gstTouched = true;
-    if (t.dataset.of === 'rate_per_g') { S.ord.rateAuto = false; const h = $('#o-rate-hint'); if (h) h.textContent = ''; }
     orderRecalcView();
   }
 }
@@ -647,14 +633,12 @@ function onSegChange(group) {
     S.ord.items.forEach((it) => { if (it.metal_color && colorOptions(metal).indexOf(it.metal_color) === -1) it.metal_color = ''; });
     redrawOrderItems();
     syncOrderColor();
-    applyAutoRate();
   }
   if (group === 'o_color') {
     const c = S.formState.o_color || '';
     S.ord.items.forEach((it) => { it.metal_color = c; });
     redrawOrderItems();
   }
-  if (group === 'o_purity') applyAutoRate();
   orderRecalcView();
 }
 window.INPUT_HOOKS.push(onOrderInput);

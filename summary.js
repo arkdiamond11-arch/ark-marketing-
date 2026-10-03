@@ -66,7 +66,6 @@ async function renderTodaySummary(el) {
   if (owner && (Math.abs(D.kGold) > 0.0005 || Math.abs(D.kSilver) > 0.0005)) {
     lines.push(line('🔨', '<b>With karigars:</b> ' + [Math.abs(D.kGold) > 0.0005 ? 'gold ' + grams(D.kGold) : '', Math.abs(D.kSilver) > 0.0005 ? 'silver ' + grams(D.kSilver) : ''].filter(Boolean).join(', ') + ' fine', ' data-action="k-list"'));
   }
-  if (owner && typeof rateIsToday === 'function' && !rateIsToday()) lines.push(line('🪙', '<b>Gold rate</b> not set for today', ' data-action="rate-edit"'));
   const collapsed = sumIsCollapsed();
   el.innerHTML = '<div class="card sum-card' + (collapsed ? ' collapsed' : '') + '">' +
     '<div class="sum-head" data-action="sum-toggle"><div><b>' + esc(hello) + '</b><div class="sum-date">' + esc(new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })) + '</div></div>' +
@@ -88,7 +87,6 @@ function summaryText() {
   if (D.quotes) L.push('Quotations waiting 3+ days: ' + D.quotes);
   if (Math.abs(D.kGold) > 0.0005) L.push('Gold with karigars: ' + grams(D.kGold) + ' fine');
   if (Math.abs(D.kSilver) > 0.0005) L.push('Silver with karigars: ' + grams(D.kSilver) + ' fine');
-  if (S.rate && rateIsToday()) L.push('Gold rate today: ' + RATE_FIELDS.filter((f) => num(S.rate[f[0]])).map((f) => f[1] + ' ' + inr(S.rate[f[0]])).join(', ') + ' /g');
   return L.join('\n');
 }
 

@@ -428,9 +428,8 @@ async function renderToday() {
   if (!overdue.length && !today.length && !upcoming.length && !later.length) {
     html += '<div class="empty"><div class="big">🌤️</div>No pending reminders.<br>Log an interaction and add follow-ups — they will appear here.</div>';
   }
-  c.innerHTML = '<div id="today-summary"></div><div id="today-rate"></div><div id="today-targets"></div><div id="today-orders"></div>' + html;
+  c.innerHTML = '<div id="today-summary"></div><div id="today-targets"></div><div id="today-orders"></div>' + html;
   if (typeof renderTodaySummary === 'function') renderTodaySummary($('#today-summary'));
-  if (typeof renderTodayRate === 'function') renderTodayRate($('#today-rate'));
   if (typeof renderMyTargets === 'function') renderMyTargets($('#today-targets'));
   if (typeof loadTodayOrders === 'function') loadTodayOrders();
 }
@@ -1434,7 +1433,6 @@ async function renderMore() {
     (!isOwner && typeof renderMyExpenses === 'function' ? mrow('exp-mine', '🧾', 'My expenses', 'Travel, courier and other spends') : '') +
     (typeof renderDues === 'function' ? mrow('dues-open', '💰', 'Client dues', 'Who owes how much · reminders') : '') +
     (typeof renderKarigars === 'function' ? mrow('k-list', '🔨', 'Karigars', 'Metal given, received back and labour') : '') +
-    (typeof renderRateHistory === 'function' ? mrow('rate-history', '🪙', 'Gold & silver rate', isOwner ? 'Set today\'s rate · history' : 'Today\'s rate · history') : '') +
     (isOwner && typeof renderStepTemplates === 'function' ? mrow('stpl-open', '⚙️', 'Production steps', 'The step lists used for orders') : '') +
     (isOwner && typeof renderBizForm === 'function' ? mrow('biz-open', '🏷️', 'Business details', 'Address, GSTIN, bank — printed on PDFs') : '') +
     (typeof renderLangPicker === 'function' ? mrow('lang-open', '🌐', 'Language / भाषा / ભાષા', 'English, हिन्दी, ગુજરાતી') : '') +

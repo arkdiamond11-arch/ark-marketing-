@@ -11,16 +11,6 @@ const CAT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 const CAT_STATUS_LABEL = { available: 'Available', reserved: 'Reserved', sold: 'Sold' };
 const CAT_MAX_PHOTOS = 6;
 
-/* approximate selling price at today's rate (null if no rate) */
-function catPrice(it) {
-  if (typeof rateFor !== 'function') return null;
-  const rate = rateFor(it.metal || 'Gold', it.purity);
-  if (!rate || !num(it.net_wt)) return null;
-  const c = orderCalc({ order_type: 'ready_stock', rate_per_g: rate, making_per_g: it.making_per_g, wastage_pct: it.wastage_pct, discount: 0, gst_pct: 3 },
-    [{ net_wt: it.net_wt, stone_amount: it.stone_amount, qty: 1 }]);
-  return { rate, c };
-}
-
 /* ---------------- tab: grid ---------------- */
 async function renderCatalogue() {
   setHeader('Catalogue', false);
@@ -83,7 +73,6 @@ async function loadCatGrid(sel, picking) {
     return;
   }
   box.innerHTML = '<div class="cat-grid">' + rows.map((it) => {
-    const p = catPrice(it);
     const on = picking && S.catPick.sel.has(it.id);
     return '<div class="cat-card' + (on ? ' picked' : '') + '" data-action="' + (picking ? 'cat-pick-toggle' : 'cat-open') + '" data-id="' + it.id + '">' +
       '<div class="cat-img">' + ((it.photo_paths || [])[0] ? '<img data-catimg="' + esc(it.photo_paths[0]) + '" alt="">' : '<span class="cat-noimg">💍</span>') +
@@ -92,7 +81,6 @@ async function loadCatGrid(sel, picking) {
       '<div class="cat-body"><div class="cat-tag">' + esc(it.tag_no || it.title || 'Design') + '</div>' +
       '<div class="cat-sub">' + esc([it.category, num(it.net_wt) ? grams(it.net_wt) : '', it.metal_color || '',
         it.diamond_type ? it.diamond_type + (num(it.diamond_ct) ? ' ' + num(it.diamond_ct) + ' ct' : '') : ''].filter(Boolean).join(' · ')) + '</div>' +
-      (p ? '<div class="cat-price">≈ ' + shortInr(p.c.total) + '</div>' : '') +
       '</div></div>';
   }).join('') + '</div>' + (rows.length >= 400 ? '<div class="notice">Showing the newest 400 — search to find older pieces.</div>' : '');
   fillCatImages(box);
@@ -142,7 +130,6 @@ function renderCatItem(it) {
   add('Making', num(it.making_per_g) ? inr(it.making_per_g) + ' / g' : '');
   add('Wastage', num(it.wastage_pct) ? num(it.wastage_pct) + '%' : '');
   add('Added by', esc(nameOf(it.created_by)) + ' · ' + fmtD(it.created_at));
-  const p = catPrice(it);
   const photos = it.photo_paths || [];
   $('#content').innerHTML =
     (photos.length ? '<div class="cat-photos" id="cat-photos">' + photos.map((ph) => '<img data-catimg="' + esc(ph) + '" alt="">').join('') + '</div>' : '') +
@@ -156,16 +143,6 @@ function renderCatItem(it) {
     '<button class="btn btn-secondary" data-action="cat-share" data-id="' + it.id + '">Share</button>' +
     '<button class="btn btn-secondary" data-action="cat-edit" data-id="' + it.id + '">Edit</button>' +
     '</div>' +
-
-    (p ? '<div class="section-label">Price at ' + esc(rateDateLabel() === 'today' ? 'today\'s' : 'the last') + ((it.metal || 'Gold') === 'Silver' ? ' silver rate' : ' gold rate') + '</div><div class="card o-totals">' +
-      '<div class="o-lrow"><span>Metal @ ' + inr(p.rate) + '/g</span><b>' + inr(p.c.metalValue) + '</b></div>' +
-      (p.c.wastageValue ? '<div class="o-lrow"><span>Wastage ' + num(it.wastage_pct) + '%</span><b>' + inr(p.c.wastageValue) + '</b></div>' : '') +
-      (p.c.making ? '<div class="o-lrow"><span>Making</span><b>' + inr(p.c.making) + '</b></div>' : '') +
-      (p.c.stones ? '<div class="o-lrow"><span>Stones</span><b>' + inr(p.c.stones) + '</b></div>' : '') +
-      '<div class="o-lrow"><span>GST 3%</span><b>' + inr(p.c.gst) + '</b></div>' +
-      '<div class="o-lrow o-total"><span>Approx. price</span><b>' + inr(p.c.total) + '</b></div></div>' :
-      (num(it.net_wt) ? '<div class="notice">' + (S.rate && (it.metal || 'Gold') !== 'Silver' && !purityKey(it.purity)
-        ? 'Add the purity (Edit) to see the price of this piece.' : 'Set today\'s gold rate to see the price of this piece.') + '</div>' : '')) +
 
     '<div class="card">' + rows.join('') + '</div>' +
     (it.notes ? '<div class="section-label">Notes</div><div class="card" style="white-space:pre-wrap;font-size:14.5px">' + esc(it.notes) + '</div>' : '') +
@@ -333,7 +310,7 @@ async function saveCatItem() {
 }
 
 /* ---------------- share ---------------- */
-function catCaption(it, withPrice) {
+function catCaption(it) {
   const lines = ['*' + bizName() + ' — ' + (it.tag_no ? 'Design ' + it.tag_no : (it.title || 'Design')) + '*'];
   const t = [it.category, it.tag_no ? it.title : ''].filter(Boolean).join(' · ');
   if (t) lines.push(t);
@@ -344,10 +321,6 @@ function catCaption(it, withPrice) {
   if (it.diamond_type) lines.push(diamondLine(it));
   if (it.jewel_cert_type) lines.push(jewelCertLine(it));
   if (it.stone_details) lines.push('Stones: ' + it.stone_details);
-  if (withPrice) {
-    const p = catPrice(it);
-    if (p) lines.push('Approx. price: ' + inr(p.c.total) + ' (gold rate of ' + rateDateLabel() + ', incl. 3% GST)');
-  }
   return lines.join('\n');
 }
 
@@ -374,12 +347,11 @@ async function shareCatItem(id) {
   ov.remove();
   const can = files.length && navigator.canShare && navigator.canShare({ files });
   const m = openModal('<h3>Share this design</h3><p>' + (can ? files.length + ' photo' + (files.length === 1 ? '' : 's') + ' with the details below.' : 'Send the details on WhatsApp' + (files.length ? ' — the photos will be downloaded to attach.' : '.')) + '</p>' +
-    '<label class="cf-check"><input type="checkbox" id="cs-price"> Include approx. price' + (catPrice(it) ? '' : ' (set today\'s gold rate first)') + '</label>' +
     '<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">' +
     (can ? '<button class="btn btn-primary" data-m="share">Share photos + details</button>' : '') +
     '<button class="btn ' + (can ? 'btn-secondary' : 'btn-primary') + '" data-m="wa">WhatsApp (text' + (can ? ' only' : '') + ')</button>' +
     '<button class="btn btn-ghost" data-m="no">Close</button></div>');
-  const cap = () => catCaption(it, $('#cs-price') && $('#cs-price').checked);
+  const cap = () => catCaption(it);
   if (can) m.querySelector('[data-m=share]').onclick = async () => {
     try { await navigator.share({ files, text: cap() }); closeModal(); } catch (e) { /* cancelled */ }
   };
@@ -454,7 +426,6 @@ function addCatItemsToOrder(list) {
     if (f.metal) S.formState.o_metal = f.metal;
     if (f.purity && purityKey(f.purity)) S.formState.o_purity = purityKey(f.purity);
     if (purityOptions(S.formState.o_metal || 'Gold').indexOf(S.formState.o_purity) === -1) S.formState.o_purity = defaultPurity(S.formState.o_metal || 'Gold');
-    applyAutoRate();
   }
   S.formState.o_color = commonColor(S.ord.items) || null;
 }
