@@ -309,6 +309,7 @@ function startNewOrder(client, typeKey, replace) {
     o_type: typeKey ? OTYPE_LABEL[typeKey] : null, o_metal: 'Gold', o_purity: '22K', o_jw_purity: '22K', o_pay_mode: 'Cash',
   };
   if (pending && pending.length && typeof addCatItemsToOrder === 'function') addCatItemsToOrder(pending);
+  S.formState.o_color = commonColor(S.ord.items) || null;
   applyAutoRate();
   showSub('New Order', renderOrderForm, replace);
 }
@@ -354,10 +355,22 @@ async function startEditOrder(id) {
     o_type: OTYPE_LABEL[o.order_type], o_metal: o.metal || 'Gold', o_purity: purityKey(o.purity),
     o_jw_purity: purityKey(o.client_metal_purity) || '22K', o_pay_mode: 'Cash',
   };
+  S.formState.o_color = commonColor(S.ord.items) || null;
   showSub('Edit · ' + ordNo(o.order_no), renderOrderForm);
 }
 
 function curOType() { return OTYPE_KEY[S.formState.o_type] || null; }
+
+/* gold colour / silver finish for the whole order — kept in step with the items */
+function orderColorSegHTML() { return segHTML('o_color', colorOptions(S.formState.o_metal || 'Gold'), S.formState.o_color || null); }
+function syncOrderColor() {
+  if (!S.ord) return;
+  S.formState.o_color = commonColor(S.ord.items) || null;
+  const w = $('#o-color-wrap');
+  if (w) w.innerHTML = orderColorSegHTML();
+  const l = $('#o-color-label');
+  if (l) l.textContent = colorFieldLabel(S.formState.o_metal || 'Gold');
+}
 
 /* The order-level values as the calculator expects them. */
 function formOrderObj() {
@@ -419,6 +432,8 @@ function renderOrderForm() {
     '<div class="card">' +
     '<div class="field"><label>Metal</label>' + segHTML('o_metal', ['Gold', 'Silver'], S.formState.o_metal) + '</div>' +
     '<div class="field"><label>Purity</label><div id="o-purity-wrap">' + segHTML('o_purity', purityOptions(S.formState.o_metal), S.formState.o_purity) + '</div></div>' +
+    '<div class="field"><label id="o-color-label">' + colorFieldLabel(S.formState.o_metal) + '</label><div id="o-color-wrap">' + orderColorSegHTML() + '</div>' +
+    '<div class="hint">Sets every item. If one item is different, change it in that item\'s box.</div></div>' +
     '<div class="o-2col">' +
     '<div class="field" id="o-rate-wrap"><label>Metal rate ₹ / g</label>' + numIn('rate_per_g', 'e.g. 7200', 'o-rate') + '<div class="hint" id="o-rate-hint"></div></div>' +
     '<div class="field"><label id="o-making-label">Making ₹ / g</label>' + numIn('making_per_g', 'e.g. 450') + '</div>' +
@@ -579,6 +594,7 @@ function onOrderInput(e) {
     const idx = +t.dataset.idx, key = t.dataset.oi;
     const it = S.ord.items[idx];
     if (it) it[key] = t.value;
+    if (key === 'metal_color') syncOrderColor();
     if (it && JEWEL_TOGGLE_KEYS.indexOf(key) > -1) {
       if (key === 'diamond_type' && !t.value) { it.diamond_ct = ''; it.diamond_pcs = ''; it.diamond_quality = ''; it.diamond_rate = ''; it.diamond_cert_lab = ''; it.diamond_cert_no = ''; }
       redrawOrderItems();
@@ -630,7 +646,13 @@ function onSegChange(group) {
     // a gold colour does not fit silver (and the other way round)
     S.ord.items.forEach((it) => { if (it.metal_color && colorOptions(metal).indexOf(it.metal_color) === -1) it.metal_color = ''; });
     redrawOrderItems();
+    syncOrderColor();
     applyAutoRate();
+  }
+  if (group === 'o_color') {
+    const c = S.formState.o_color || '';
+    S.ord.items.forEach((it) => { it.metal_color = c; });
+    redrawOrderItems();
   }
   if (group === 'o_purity') applyAutoRate();
   orderRecalcView();
@@ -1119,8 +1141,12 @@ async function onOrderAction(a, el) {
   else if (a === 'o-new') { S.pendingCatItems = null; const c = await fetchClient(el.dataset.id); if (c) startNewOrder(c, el.dataset.type || null); }
   else if (a === 'o-open') openOrder(el.dataset.id);
   else if (a === 'o-filter') { S.olist[el.dataset.g] = el.dataset.v; renderOrders(); }
-  else if (a === 'o-item-add') { S.ord.items.push(blankItem(S.ord.items[S.ord.items.length - 1])); redrawOrderItems(); orderRecalcView(); }
-  else if (a === 'o-item-del') { S.ord.items.splice(+el.dataset.idx, 1); if (!S.ord.items.length) S.ord.items.push(blankItem()); redrawOrderItems(); orderRecalcView(); }
+  else if (a === 'o-item-add') {
+    const ni = blankItem(S.ord.items[S.ord.items.length - 1]);
+    if (S.formState.o_color) ni.metal_color = S.formState.o_color;
+    S.ord.items.push(ni); redrawOrderItems(); orderRecalcView();
+  }
+  else if (a === 'o-item-del') { S.ord.items.splice(+el.dataset.idx, 1); if (!S.ord.items.length) S.ord.items.push(blankItem()); redrawOrderItems(); syncOrderColor(); orderRecalcView(); }
   else if (a === 'o-item-photo') orderItemPhoto(+el.dataset.idx);
   else if (a === 'o-item-photo-del') { const it = S.ord.items[+el.dataset.idx]; if (it) { it._photo = null; it.photo_path = null; } redrawOrderItems(); }
   else if (a === 'o-save') saveOrder(el.dataset.quote === '1');

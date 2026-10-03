@@ -1556,10 +1556,42 @@ async function enterApp() {
   switchTab('today');
 }
 
+/* A new version of the app was published while this screen was open → offer a one-tap update.
+   index.html carries the version number (var v = '…'). */
+function watchForUpdates() {
+  const mine = String(window.APP_V || '');
+  if (!mine) return;
+  let shown = false, last = 0;
+  const check = async () => {
+    if (shown || Date.now() - last < 5 * 60000) return;
+    last = Date.now();
+    try {
+      const r = await fetch('index.html', { cache: 'no-store' });
+      if (!r.ok) return;
+      const m = /var v = '([^']+)'/.exec(await r.text());
+      if (m && m[1] !== mine) { shown = true; showUpdateBar(); }
+    } catch (e) { /* offline — try again later */ }
+  };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+  setInterval(check, 30 * 60000);
+  setTimeout(check, 15000);
+}
+function showUpdateBar() {
+  if (document.querySelector('.update-bar')) return;
+  const b = document.createElement('div');
+  b.className = 'update-bar';
+  b.innerHTML = '<span>A new version of the app is ready.</span><button type="button" class="ub-go">Update</button>' +
+    '<button type="button" class="ub-x" aria-label="Later">✕</button>';
+  b.querySelector('.ub-go').onclick = () => location.reload();
+  b.querySelector('.ub-x').onclick = () => b.remove();
+  document.body.appendChild(b);
+}
+
 async function boot() {
   if ('serviceWorker' in navigator) {
     try { navigator.serviceWorker.register('sw.js'); } catch (e) {}
   }
+  watchForUpdates();
   const { data: { session } } = await db.auth.getSession();
   S.session = session;
 

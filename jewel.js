@@ -98,8 +98,15 @@ function jewelMetaHTML(it, metal) {
   return h;
 }
 
+/* the colour all the items share ('' when they differ or none is set) */
+function commonColor(items) {
+  const list = (items || []).map((x) => x.metal_color || '');
+  return list.length && list[0] && list.every((c) => c === list[0]) ? list[0] : '';
+}
+function colorFieldLabel(metal) { return metal === 'Silver' ? 'Silver finish' : 'Gold colour'; }
+
 /* ---------------- the extra boxes inside an order item card ---------------- */
-function jewelItemFieldsHTML(it, i, metal) {
+function jewelItemFieldsHTML(it, i, metal, opts) {
   const inp = (k, label, ph, dec, full) => '<div class="' + (full ? 'full' : '') + '"><div class="oi-l">' + label + '</div>' +
     '<input type="text"' + (dec ? ' inputmode="decimal"' : '') + ' autocomplete="off" data-oi="' + k + '" data-idx="' + i + '" value="' + esc(it[k]) + '" placeholder="' + (ph || '') + '"></div>';
   const sel = (k, label, opts, emptyLabel, full) => {
@@ -111,8 +118,8 @@ function jewelItemFieldsHTML(it, i, metal) {
       list.map((o) => '<option value="' + esc(o) + '"' + (o === cur ? ' selected' : '') + '>' + esc(k === 'diamond_type' ? diamondLabel(o) : o) + '</option>').join('') +
       '</select></div>';
   };
-  let h = sel('metal_color', metal === 'Silver' ? 'Silver finish' : 'Gold colour', colorOptions(metal), '—') +
-    sel('jewel_cert_type', 'Jewellery certificate', JEWEL_CERTS, 'Not certified');
+  let h = (opts && opts.noColor ? '' : sel('metal_color', colorFieldLabel(metal), colorOptions(metal), '—')) +
+    sel('jewel_cert_type', 'Jewellery certificate', JEWEL_CERTS, 'Not certified', !!(opts && opts.noColor));
   if (it.jewel_cert_type) h += inp('jewel_cert_no', it.jewel_cert_type.indexOf('HUID') > -1 ? 'HUID no.' : 'Certificate no.', '', false, true);
   h += sel('diamond_type', 'Diamonds / stones', DIAMOND_TYPES, 'None', !it.diamond_type);
   if (it.diamond_type) {

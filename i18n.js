@@ -1096,6 +1096,10 @@ const I18N = {
   'Showing the first 300 — Excel and PDF have all of them': ['पहली 300 दिख रही हैं — Excel और PDF में सब हैं', 'પહેલી 300 દેખાય છે — Excel અને PDF માં બધી છે'],
   'Gold & silver rate': ['सोना और चांदी का भाव', 'સોના અને ચાંદીનો ભાવ'],
   'Metal given, received back and labour': ['धातु दी, वापस मिली और मज़दूरी', 'ધાતુ આપી, પાછી મળી અને મજૂરી'],
+  /* ---------- colour for the whole order, app updates ---------- */
+  "Sets every item. If one item is different, change it in that item's box": ['सभी आइटम पर लगेगा। अगर किसी आइटम का अलग है, तो उसी आइटम के बॉक्स में बदलें', 'બધી આઇટમ પર લાગશે. જો કોઈ આઇટમનું અલગ હોય, તો એ જ આઇટમના બૉક્સમાં બદલો'],
+  'Diamonds & certificate': ['हीरे और सर्टिफिकेट', 'હીરા અને સર્ટિફિકેટ'],
+  'A new version of the app is ready': ['ऐप का नया वर्ज़न तैयार है', 'એપનું નવું વર્ઝન તૈયાર છે'],
 };
 
 /* Sentences with changing parts (numbers, names, dates).

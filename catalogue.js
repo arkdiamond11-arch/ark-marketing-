@@ -196,7 +196,7 @@ function renderCatForm(existing) {
   const v = (k) => esc(e[k] == null ? '' : e[k]);
   if (!S.catForm || S.catForm.id !== (e.id || null)) {
     S.catForm = { id: e.id || null, photos: (e.photo_paths || []).map((p) => ({ path: p })), removed: [], j: jewelForm(e) };
-    S.formState = { cf_metal: e.metal || 'Gold', cf_purity: purityKey(e.purity) || (e.id ? null : '22K') };
+    S.formState = { cf_metal: e.metal || 'Gold', cf_purity: purityKey(e.purity) || (e.id ? null : '22K'), cf_color: e.metal_color || null };
   }
   const cats = ITEM_CATS.slice();
   if (e.category && cats.indexOf(e.category) === -1) cats.unshift(e.category);
@@ -215,6 +215,7 @@ function renderCatForm(existing) {
     '<div class="field"><label>Description</label><textarea id="cf-desc" style="min-height:64px" placeholder="Finish, colours, size…">' + v('description') + '</textarea></div>' +
     '<div class="field"><label>Metal</label>' + segHTML('cf_metal', ['Gold', 'Silver'], S.formState.cf_metal) + '</div>' +
     '<div class="field"><label>Purity</label><div id="cf-purity-wrap">' + segHTML('cf_purity', purityOptions(S.formState.cf_metal), S.formState.cf_purity) + '</div></div>' +
+    '<div class="field"><label id="cf-color-label">' + colorFieldLabel(S.formState.cf_metal) + '</label><div id="cf-color-wrap">' + segHTML('cf_color', colorOptions(S.formState.cf_metal || 'Gold'), S.formState.cf_color || null) + '</div></div>' +
     '<div class="o-2col">' +
     '<div class="field"><label>Gross wt (g)</label><input type="text" inputmode="decimal" id="cf-gross" value="' + v('gross_wt') + '" placeholder="0.000"></div>' +
     '<div class="field"><label>Net metal wt (g)</label><input type="text" inputmode="decimal" id="cf-net" value="' + v('net_wt') + '" placeholder="0.000"></div>' +
@@ -224,7 +225,7 @@ function renderCatForm(existing) {
     '<div class="field"><label>Wastage %</label><input type="text" inputmode="decimal" id="cf-wastage" value="' + v('wastage_pct') + '" placeholder="e.g. 4"></div>' +
     '</div>' +
     '</div>' +
-    '<div class="section-label">Colour, diamonds &amp; certificate</div>' +
+    '<div class="section-label">Diamonds &amp; certificate</div>' +
     '<div class="card"><div class="oi-grid" id="cf-jewel"></div>' +
     '<div class="field" style="margin:12px 0 2px"><label>Notes (team only)</label><textarea id="cf-notes" style="min-height:60px" placeholder="Where it is kept, supplier, cost…">' + v('notes') + '</textarea></div>' +
     '</div>' +
@@ -239,7 +240,7 @@ function renderCatForm(existing) {
 function drawCatJewel() {
   const box = $('#cf-jewel');
   if (!box || !S.catForm) return;
-  box.innerHTML = jewelItemFieldsHTML(S.catForm.j, 0, S.formState.cf_metal || 'Gold').replace(/data-oi=/g, 'data-cj=');
+  box.innerHTML = jewelItemFieldsHTML(S.catForm.j, 0, S.formState.cf_metal || 'Gold', { noColor: true }).replace(/data-oi=/g, 'data-cj=');
 }
 function onCatJewelInput(e) {
   const k = e.target.dataset.cj;
@@ -455,6 +456,7 @@ function addCatItemsToOrder(list) {
     if (purityOptions(S.formState.o_metal || 'Gold').indexOf(S.formState.o_purity) === -1) S.formState.o_purity = defaultPurity(S.formState.o_metal || 'Gold');
     applyAutoRate();
   }
+  S.formState.o_color = commonColor(S.ord.items) || null;
 }
 function catPickDone() {
   if (!S.catPick.sel.size) { toast('Tap the pieces you want first.', 'err'); return; }
@@ -466,6 +468,7 @@ function catPickDone() {
 
 /* ---------------- choice-button hook (metal → purity options) ---------------- */
 window.SEG_HOOKS.push((group) => {
+  if (group === 'cf_color' && S.catForm && $('#cat-form')) { S.catForm.j.metal_color = S.formState.cf_color || ''; return; }
   if (group !== 'cf_metal' || !$('#cat-form')) return;
   const metal = S.formState.cf_metal || 'Gold';
   if (!S.formState.cf_metal) S.formState.cf_metal = 'Gold';
@@ -474,6 +477,11 @@ window.SEG_HOOKS.push((group) => {
   if (w) w.innerHTML = segHTML('cf_purity', purityOptions(metal), S.formState.cf_purity);
   const j = S.catForm && S.catForm.j;
   if (j && j.metal_color && colorOptions(metal).indexOf(j.metal_color) === -1) j.metal_color = '';
+  S.formState.cf_color = (j && j.metal_color) || null;
+  const cw = $('#cf-color-wrap');
+  if (cw) cw.innerHTML = segHTML('cf_color', colorOptions(metal), S.formState.cf_color);
+  const cl = $('#cf-color-label');
+  if (cl) cl.textContent = colorFieldLabel(metal);
   drawCatJewel();
 });
 
