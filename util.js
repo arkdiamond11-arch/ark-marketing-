@@ -51,15 +51,33 @@ function fmtTime(iso) {
 }
 function daysBetween(a, b) { return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000); }
 
-/* ---------------- money ---------------- */
-/* ₹ in lakh / crore for tight spaces: ₹4.6L, ₹1.2Cr */
-function shortInr(n) {
-  n = Math.round(num(n));
-  const a = Math.abs(n);
-  if (a >= 1e7) return '₹' + (Math.round(n / 1e5) / 100) + 'Cr';
-  if (a >= 1e5) return '₹' + (Math.round(n / 1e3) / 100) + 'L';
-  if (a >= 1e3) return '₹' + (Math.round(n / 100) / 10) + 'K';
-  return '₹' + n;
+/* ---------------- periods (reports) ---------------- */
+const ACC_PERIODS = [['today', 'Today'], ['7d', '7 days'], ['month', 'This month'], ['lastmonth', 'Last month'], ['fy', 'This year'], ['all', 'All'], ['custom', 'Dates']];
+/* financial year: 1 April – 31 March */
+function fyStart() {
+  const d = new Date();
+  const y = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1;
+  return y + '-04-01';
+}
+function periodRange(p, from, to) {
+  const t = todayStr();
+  if (p === 'today') return [t, t];
+  if (p === '7d') return [todayStr(-6), t];
+  if (p === 'month') return [monthStart(), t];
+  if (p === 'lastmonth') { const s = addMonths(monthStart(), -1); return [s, todayStr(-new Date().getDate())]; }
+  if (p === 'fy') return [fyStart(), t];
+  if (p === 'custom') return [from || null, to || null];
+  return [null, null];
+}
+function rangeLabel(r) {
+  if (!r[0] && !r[1]) return 'All dates';
+  if (r[0] === r[1]) return fmtDLong(r[0]);
+  return (r[0] ? fmtD(r[0]) : '…') + ' – ' + (r[1] ? fmtD(r[1]) : '…');
+}
+function inRange(q, col, r) {
+  if (r[0]) q = q.gte(col, r[0]);
+  if (r[1]) q = q.lte(col, r[1]);
+  return q;
 }
 
 /* ---------------- phone / WhatsApp / maps ---------------- */
@@ -193,7 +211,7 @@ function renderBizForm() {
   const b = S.biz || {};
   const v = (k) => esc(b[k] == null ? '' : b[k]);
   $('#content').innerHTML =
-    '<div class="notice">These details are printed on order slips, quotations, challans and statements. Type them in English letters — PDFs cannot print Hindi or Gujarati letters.</div>' +
+    '<div class="notice">These details are printed on order slips, quotations and challans. Type them in English letters — PDFs cannot print Hindi or Gujarati letters.</div>' +
     '<div class="card">' +
     '<div class="field"><label>Business / legal name</label><input type="text" id="biz-name" value="' + esc(b.legal_name || BRAND) + '"></div>' +
     '<div class="field"><label>Address</label><textarea id="biz-address" style="min-height:70px" placeholder="Shop no., building, street, area">' + v('address') + '</textarea></div>' +
@@ -207,7 +225,6 @@ function renderBizForm() {
     '<div class="field"><label>Phone</label><input type="tel" id="biz-phone" value="' + v('phone') + '"></div>' +
     '<div class="field"><label>Email</label><input type="email" id="biz-email" value="' + v('email') + '"></div>' +
     '</div>' +
-    '<div class="field"><label>Bank details (printed on quotations)</label><textarea id="biz-bank" style="min-height:70px" placeholder="Bank name, account no., IFSC, branch">' + v('bank_details') + '</textarea></div>' +
     '<div class="field" style="margin-bottom:2px"><label>Terms (printed at the bottom)</label><textarea id="biz-terms" style="min-height:80px" placeholder="e.g. Goods once sold will not be taken back. Subject to Jaipur jurisdiction.">' + v('terms') + '</textarea></div>' +
     '</div>' +
     '<button class="btn btn-primary" data-action="biz-save" id="biz-save-btn">Save details</button><div style="height:10px"></div>';
@@ -225,7 +242,6 @@ async function saveBiz() {
     gstin: g || null,
     phone: $('#biz-phone').value.trim() || null,
     email: $('#biz-email').value.trim() || null,
-    bank_details: $('#biz-bank').value.trim() || null,
     terms: $('#biz-terms').value.trim() || null,
     updated_by: S.me.id,
   };

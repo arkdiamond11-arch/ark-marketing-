@@ -24,7 +24,8 @@ function colorLabel(metal, c) {
 }
 function diamondLabel(t) { return t ? (DIAMOND_LABEL[t] || t) : ''; }
 
-/* the database columns for one item, from the form's text values */
+/* the database columns for one item, from the form's text values
+   (diamond_rate is no longer shown, but an older value is kept when a line is saved again) */
 function jewelRow(it) {
   const s = (v) => String(v == null ? '' : v).trim();
   const type = s(it.diamond_type) || null;
@@ -64,7 +65,6 @@ function diamondLine(it) {
   if (num(it.diamond_ct)) b.push(num(it.diamond_ct) + ' ct');
   if (num(it.diamond_pcs)) b.push(Math.round(num(it.diamond_pcs)) + ' pcs');
   if (it.diamond_quality) b.push(it.diamond_quality);
-  if (num(it.diamond_rate)) b.push(inr(it.diamond_rate) + '/ct');
   if (it.diamond_cert_lab) b.push(it.diamond_cert_lab + ' certified' + (it.diamond_cert_no ? ' ' + it.diamond_cert_no : ''));
   else b.push('not certified');
   return b.join(' · ');
@@ -73,7 +73,7 @@ function jewelCertLine(it) {
   if (!it || !it.jewel_cert_type) return '';
   return it.jewel_cert_type + (it.jewel_cert_no ? ' ' + it.jewel_cert_no : '');
 }
-/* for PDFs (plain text, "Rs." for ₹) */
+/* for PDFs (plain text) */
 function jewelPdfBits(it, metal) {
   const b = [];
   if (it.metal_color) b.push(colorLabel(metal, it.metal_color));
@@ -126,7 +126,6 @@ function jewelItemFieldsHTML(it, i, metal, opts) {
     h += inp('diamond_ct', 'Carats (ct)', '0.00', true) +
       inp('diamond_pcs', 'Pieces', '0', true) +
       inp('diamond_quality', 'Quality', 'e.g. EF VVS') +
-      inp('diamond_rate', 'Rate ₹ / ct', '0', true) +
       sel('diamond_cert_lab', 'Diamond certificate', DIAMOND_LABS, 'Not certified');
     if (it.diamond_cert_lab) h += inp('diamond_cert_no', 'Certificate no.', '');
   }
@@ -134,10 +133,3 @@ function jewelItemFieldsHTML(it, i, metal, opts) {
 }
 /* keys whose change shows / hides other boxes */
 const JEWEL_TOGGLE_KEYS = ['diamond_type', 'diamond_cert_lab', 'jewel_cert_type'];
-
-/* carats × rate → stone value (keeps the order totals right) */
-function jewelAutoStoneValue(it) {
-  const ct = num(it.diamond_ct), rate = num(it.diamond_rate);
-  if (it.diamond_type && ct > 0 && rate > 0) return String(Math.round(ct * rate));
-  return null;
-}

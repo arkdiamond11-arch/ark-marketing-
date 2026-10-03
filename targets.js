@@ -1,8 +1,8 @@
 /* ============================================================
    MONTHLY TARGETS — the owner sets meetings / new clients /
-   orders / order value per person per month; everyone sees their
-   own progress on the Today screen, the owner sees all in Report.
-   Order counts and values leave out quotations and cancelled orders.
+   orders per person per month; everyone sees their own progress
+   on the Today screen, the owner sees all in Report.
+   Order counts leave out quotations and cancelled orders.
    ============================================================ */
 'use strict';
 
@@ -10,7 +10,6 @@ const TG_FIELDS = [
   ['meetings', 'Meetings', false],
   ['new_clients', 'New clients', false],
   ['orders', 'Orders', false],
-  ['order_value', 'Order value', true],
 ];
 
 /* how far through the month we are (1 for past months) */
@@ -27,17 +26,15 @@ async function monthActuals(ms) {
   const [ir, cr, or] = await Promise.all([
     db.from('interactions').select('exec_id').gte('happened_at', s).lt('happened_at', e).limit(20000),
     db.from('clients').select('created_by').gte('created_at', s).lt('created_at', e).limit(20000),
-    db.from('orders').select('created_by, status, total_amount').gte('order_date', ms).lt('order_date', next).limit(20000),
+    db.from('orders').select('created_by, status').gte('order_date', ms).lt('order_date', next).limit(20000),
   ]);
   const a = new Map();
-  const get = (id) => { if (!a.has(id)) a.set(id, { meetings: 0, new_clients: 0, orders: 0, order_value: 0 }); return a.get(id); };
+  const get = (id) => { if (!a.has(id)) a.set(id, { meetings: 0, new_clients: 0, orders: 0 }); return a.get(id); };
   (ir.data || []).forEach((r) => { if (r.exec_id) get(r.exec_id).meetings++; });
   (cr.data || []).forEach((r) => { if (r.created_by) get(r.created_by).new_clients++; });
   (or.data || []).forEach((r) => {
     if (!r.created_by || r.status === 'quote' || r.status === 'cancelled') return;
-    const g = get(r.created_by);
-    g.orders++;
-    g.order_value += num(r.total_amount);
+    get(r.created_by).orders++;
   });
   return a;
 }
@@ -45,7 +42,7 @@ async function monthActuals(ms) {
 function targetBarsHTML(t, act, ms) {
   const pace = monthPace(ms);
   const rows = TG_FIELDS.filter((f) => t && num(t[f[0]]) > 0).map((f) =>
-    progressHTML(f[1], act ? act[f[0]] : 0, t[f[0]], f[2] ? shortInr : null, pace));
+    progressHTML(f[1], act ? act[f[0]] : 0, t[f[0]], null, pace));
   return rows.join('');
 }
 
@@ -67,10 +64,10 @@ async function renderTargetsSection(el) {
     '<button data-action="tg-month" data-d="1" aria-label="Next month"' + (ms >= addMonths(monthStart(), 1) ? ' disabled' : '') + '>›</button></span></div>' +
     (ms === monthStart() ? '<div class="hint" style="margin:-4px 2px 8px">' + Math.round(pace * 100) + '% of the month gone — bars turn amber when someone is behind that pace.</div>' : '') +
     people.map((p) => {
-      const t = tmap.get(p.id), a = act.get(p.id) || { meetings: 0, new_clients: 0, orders: 0, order_value: 0 };
+      const t = tmap.get(p.id), a = act.get(p.id) || { meetings: 0, new_clients: 0, orders: 0 };
       return '<div class="card tg-card"><div class="tg-head"><b>' + esc(p.full_name || p.email || '—') + '</b>' +
         '<button class="btn btn-small btn-ghost" data-action="tg-set" data-id="' + p.id + '">' + (t ? 'Change' : 'Set targets') + '</button></div>' +
-        (t ? targetBarsHTML(t, a, ms) : '<div class="tg-none">No targets · ' + a.meetings + ' meetings, ' + a.new_clients + ' new clients, ' + a.orders + ' orders (' + shortInr(a.order_value) + ')</div>') +
+        (t && TG_FIELDS.some((f) => num(t[f[0]]) > 0) ? targetBarsHTML(t, a, ms) : '<div class="tg-none">No targets · ' + a.meetings + ' meetings, ' + a.new_clients + ' new clients, ' + a.orders + ' orders</div>') +
         '</div>';
     }).join('');
 }
@@ -83,7 +80,7 @@ function openTargetModal(execId) {
     const prev = (data || []).find((t) => t.month === addMonths(ms, -1)) || null;
     const ov = openModal('<h3>Targets — ' + esc(p.full_name || '') + '</h3><p>' + esc(monthLabel(ms)) + '. Leave a box empty to skip it.</p>' +
       '<div class="o-2col">' +
-      TG_FIELDS.map((f) => '<div class="field"><label>' + esc(f[1]) + (f[2] ? ' ₹' : '') + '</label><input type="text" inputmode="numeric" id="tg-' + f[0] + '" value="' +
+      TG_FIELDS.map((f) => '<div class="field"><label>' + esc(f[1]) + '</label><input type="text" inputmode="numeric" id="tg-' + f[0] + '" value="' +
         (cur[f[0]] != null ? esc(String(num(cur[f[0]]))) : '') + '"></div>').join('') +
       '</div>' +
       (prev ? '<button class="btn btn-small btn-secondary" data-m="prev" style="margin:-4px 0 14px">Same as last month</button>' : '') +
@@ -94,7 +91,7 @@ function openTargetModal(execId) {
     };
     ov.querySelector('[data-m=yes]').onclick = async (e) => {
       const row = { exec_id: execId, month: ms, set_by: S.me.id };
-      TG_FIELDS.forEach((f) => { const v = numOrNull($('#tg-' + f[0]).value); row[f[0]] = v == null ? null : (f[2] ? round2(v) : Math.round(v)); });
+      TG_FIELDS.forEach((f) => { const v = numOrNull($('#tg-' + f[0]).value); row[f[0]] = v == null ? null : Math.round(v); });
       e.target.disabled = true;
       const { error } = await db.from('targets').upsert(row, { onConflict: 'exec_id,month' });
       if (error) { e.target.disabled = false; toast('Could not save — only the owner can set targets.', 'err'); return; }

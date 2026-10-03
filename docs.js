@@ -1,10 +1,10 @@
 /* ============================================================
    PDF DOCUMENTS — made inside the app (no outside library, works
    offline). Order slip · Quotation · Job-work delivery challan ·
-   Gold receipt · Karigar issue challan · Client statement ·
-   Karigar statement.
-   PDFs use the standard Helvetica font, so ₹ prints as "Rs." and
-   text in Hindi/Gujarati letters prints as "?".
+   Gold receipt · Karigar issue challan · Karigar statement.
+   Weights only — no prices or payments.
+   PDFs use the standard Helvetica font, so text in Hindi/Gujarati
+   letters prints as "?".
    ============================================================ */
 'use strict';
 
@@ -236,7 +236,6 @@ async function pdfImage(url, maxPx) {
 }
 
 /* ---------------- shared document parts ---------------- */
-function pRs(n) { return 'Rs. ' + Math.round(num(n)).toLocaleString('en-IN'); }
 function pG(n) { return (Math.round(num(n) * 1000) / 1000).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 }); }
 function pPurity(p) {
   if (p == null || p === '') return '-';
@@ -408,13 +407,12 @@ function dcNo(n) { return 'DC-' + String(n).padStart(4, '0'); }
    kind: 'slip' | 'quote' | 'challan' (job work return) | 'receipt' (client's gold)
    ============================================================ */
 async function buildOrderPdf(orderId, kind) {
-  const [or, ir, pr] = await Promise.all([
+  const [or, ir] = await Promise.all([
     db.from('orders').select('*, clients(*)').eq('id', orderId).maybeSingle(),
     db.from('order_items').select('*').eq('order_id', orderId).order('sort', { ascending: true }),
-    db.from('order_payments').select('*').eq('order_id', orderId).order('paid_on', { ascending: true }),
   ]);
   if (or.error || !or.data) throw new Error('order');
-  const o = or.data, cl = o.clients || {}, items = ir.data || [], pays = pr.data || [];
+  const o = or.data, cl = o.clients || {}, items = ir.data || [];
   if (kind === 'challan') return orderChallanPdf(o, cl, items);
   if (kind === 'receipt') return goldReceiptPdf(o, cl, items);
 
@@ -428,58 +426,22 @@ async function buildOrderPdf(orderId, kind) {
   d.y = pParty(d, PM, d.y, PG_W - PM * 2, quote ? 'QUOTATION FOR' : 'CUSTOMER', clientLines(cl)) + 3;
 
   const c = orderCalc(o, items);
-  const priced = c.total > 0;
   const mline = [
     (o.metal || 'Gold') + (o.purity ? ' ' + pPurity(o.purity) : ''),
-    o.order_type !== 'job_work' && num(o.rate_per_g) ? 'Rate ' + pRs(o.rate_per_g) + '/g' : '',
-    num(o.making_per_g) ? (o.order_type === 'job_work' ? 'Labour ' : 'Making ') + pRs(o.making_per_g) + '/g' : '',
-    num(o.wastage_pct) ? 'Wastage ' + num(o.wastage_pct) + '%' : '',
+    o.order_type === 'job_work' && num(o.wastage_pct) ? 'Wastage ' + num(o.wastage_pct) + '%' : '',
   ].filter(Boolean).join('   |   ');
   pNote(d, 'METAL', mline);
 
-  const cols = [{ h: '#', w: 7 }, { h: 'Piece', w: 22 }, { h: 'Tag / design', w: 22 }, { h: 'Description', w: 0 },
-    { h: 'Qty', w: 10, a: 'right' }, { h: 'Gross (g)', w: 17, a: 'right' }, { h: 'Net (g)', w: 17, a: 'right' }, { h: 'Stones', w: 26 }];
-  if (priced) cols.push({ h: 'Amount', w: 24, a: 'right' });
+  const cols = [{ h: '#', w: 7 }, { h: 'Piece', w: 22 }, { h: 'Tag / design', w: 24 }, { h: 'Description', w: 0 },
+    { h: 'Qty', w: 10, a: 'right' }, { h: 'Gross (g)', w: 18, a: 'right' }, { h: 'Net (g)', w: 18, a: 'right' }, { h: 'Stones', w: 30 }];
   cols[3].w = PG_W - PM * 2 - cols.reduce((a, x) => a + x.w, 0);
-  const rows = items.map((it, i) => {
-    const r = [String(i + 1), it.category || '', it.design_code || '', [it.description].concat(jewelPdfBits(it, o.metal)).filter(Boolean).join('; '), String(it.qty || 1),
-      it.gross_wt != null ? pG(it.gross_wt) : '', it.net_wt != null ? pG(it.net_wt) : '',
-      [it.stone_details, num(it.stone_amount) ? pRs(it.stone_amount) : ''].filter(Boolean).join(' - ')];
-    if (priced) r.push(pRs(orderCalc(o, [it]).subtotal));
-    return r;
-  });
-  const tot = ['', 'Total', '', '', String(c.pcs || ''), c.gross ? pG(c.gross) : '', pG(c.net), c.stones ? pRs(c.stones) : ''];
-  if (priced) tot.push(pRs(c.subtotal));
+  const rows = items.map((it, i) => [String(i + 1), it.category || '', it.design_code || '', [it.description].concat(jewelPdfBits(it, o.metal)).filter(Boolean).join('; '), String(it.qty || 1),
+    it.gross_wt != null ? pG(it.gross_wt) : '', it.net_wt != null ? pG(it.net_wt) : '', it.stone_details || '']);
+  const tot = ['', 'Total', '', '', String(c.pcs || ''), c.gross ? pG(c.gross) : '', pG(c.net), c.ct ? (Math.round(c.ct * 100) / 100) + ' ct' : ''];
   tot.bold = true;
   rows.push(tot);
   pHeading(d, 'Items');
   d.table(cols, rows, { zebra: true });
-
-  if (priced) {
-    const t = [];
-    if (o.order_type !== 'job_work' && c.metalValue) t.push(['Metal value', pRs(c.metalValue)]);
-    if (c.wastageValue) t.push(['Wastage', pRs(c.wastageValue)]);
-    if (c.making) t.push([o.order_type === 'job_work' ? 'Labour' : 'Making', pRs(c.making)]);
-    if (c.stones) t.push(['Stones', pRs(c.stones)]);
-    if (num(o.discount)) t.push(['Discount', '- ' + pRs(o.discount)]);
-    if (num(o.gst_pct)) t.push(['GST ' + num(o.gst_pct) + '%', pRs(c.gst)]);
-    t.push([quote ? 'Estimated total' : 'Order total', pRs(o.total_amount || c.total), 'total']);
-    if (!quote) {
-      const disc = pays.filter((p) => p.mode === 'Discount').reduce((a, p) => a + num(p.amount), 0);
-      t.push(['Received', pRs(num(o.paid_amount) - disc)]);
-      if (disc) t.push(['Settlement discount', '- ' + pRs(disc)]);
-      const bal = balanceOf(o);
-      t.push(['Balance due', pRs(bal), bal > 0 ? 'due' : 'paid']);
-    }
-    pTotals(d, t);
-  }
-
-  const money = pays.filter((p) => p.mode !== 'Discount');
-  if (!quote && money.length) {
-    pHeading(d, 'Payments received');
-    d.table([{ h: 'Date', w: 30 }, { h: 'Mode', w: 28 }, { h: 'Note', w: PG_W - PM * 2 - 30 - 28 - 32 }, { h: 'Amount', w: 32, a: 'right' }],
-      money.map((p) => [pDate(p.paid_on), p.mode || '', p.note || '', pRs(p.amount)]));
-  }
 
   const led = jwLedger(o, c.net);
   if (led) {
@@ -488,12 +450,8 @@ async function buildOrderPdf(orderId, kind) {
       [[pG(o.client_metal_g) + ' g' + (o.client_metal_on ? ' on ' + pDate(o.client_metal_on) : ''), pPurity(o.client_metal_purity), pG(led.inFine), pG(led.usedFine), pG(led.bal)]]);
   }
 
-  if (quote) {
-    const m = o.metal === 'Silver' ? 'silver' : 'gold';
-    pNote(d, '', 'Prices are worked out at the ' + m + ' rate shown above. The final bill uses the ' + m + ' rate on the day of delivery. Weights are approximate until the pieces are made.', 8.2);
-  }
+  if (quote) pNote(d, '', 'Weights are approximate until the pieces are made.', 8.2);
   pNote(d, 'NOTES', o.notes);
-  if (quote) pNote(d, 'BANK DETAILS', S.biz && S.biz.bank_details);
   pNote(d, 'TERMS', S.biz && S.biz.terms, 7.8);
 
   const urls = await orderItemPhotoUrls(items);
@@ -534,11 +492,6 @@ async function orderChallanPdf(o, cl, items) {
     pNote(d, 'GOLD ACCOUNT', 'Gold received from you: ' + pG(o.client_metal_g) + ' g at ' + pPurity(o.client_metal_purity) + ' = ' + pG(led.inFine) + ' g fine.  ' +
       'Fine gold in these goods including ' + num(o.wastage_pct) + '% wastage: ' + pG(led.usedFine) + ' g.  ' +
       (Math.abs(led.bal) < 0.0005 ? 'Settled.' : led.bal > 0 ? 'Your gold still with us: ' + pG(led.bal) + ' g fine.' : 'Gold due from you: ' + pG(-led.bal) + ' g fine.'));
-  }
-  const rate = num(o.rate_per_g);
-  if (rate && n) {
-    pNote(d, 'VALUE OF GOODS', 'Approximately ' + pRs(n * rate + items.reduce((a, it) => a + num(it.stone_amount), 0)) +
-      ' (net weight at ' + pRs(rate) + '/g, plus stones).');
   }
   if (o.order_type === 'job_work') pNote(d, '', 'Job-work (making) charges are billed separately on a tax invoice.', 8.2);
   pNote(d, 'TERMS', S.biz && S.biz.terms, 7.8);
@@ -585,45 +538,8 @@ async function buildKarigarChallanPdf(txnId) {
 }
 
 /* ============================================================
-   STATEMENTS
+   KARIGAR STATEMENT (metal only)
    ============================================================ */
-async function buildClientStatementPdf(clientId) {
-  const cl = await fetchClient(clientId);
-  if (!cl) throw new Error('client');
-  const L = await clientLedgerData(clientId);
-  const T = L.totals;
-  const d = await pdfStart('ACCOUNT STATEMENT', [['Date', pDate(todayStr())], ['Orders', String(L.live.length)]]);
-  d.y = pParty(d, PM, d.y, PG_W - PM * 2, 'CUSTOMER', clientLines(cl)) + 3;
-  const tot = [];
-  if (T.opening) tot.push(['Opening balance', pRs(T.opening)]);
-  tot.push(['Total of orders', pRs(T.business)]);
-  if (T.charges) tot.push(['Other charges', pRs(T.charges)]);
-  if (T.refunds) tot.push(['Refunds paid', pRs(T.refunds)]);
-  tot.push(['Received', pRs(T.received)]);
-  if (T.discount) tot.push(['Discount', pRs(T.discount)]);
-  tot.push(Math.abs(T.due) < 1 ? ['Account clear', 'Rs. 0', 'total'] : [T.due <= -1 ? 'Advance with us' : 'Balance due', pRs(Math.abs(T.due)), 'total']);
-  pTotals(d, tot);
-  if (L.entries.length) {
-    pHeading(d, 'Account statement');
-    const cols = [{ h: 'Date', w: 24 }, { h: 'Particulars', w: 0 }, { h: 'Debit', w: 27, a: 'right' }, { h: 'Credit', w: 27, a: 'right' }, { h: 'Balance', w: 32, a: 'right' }];
-    cols[1].w = PG_W - PM * 2 - cols.reduce((a, x) => a + x.w, 0);
-    d.table(cols, L.entries.map((e) => [pDate(e.date), e.text, e.debit ? pRs(e.debit) : '', e.credit ? pRs(e.credit) : '',
-      Math.abs(e.bal) < 1 ? 'Clear' : pRs(Math.abs(e.bal)) + (e.bal > 0 ? ' Dr' : ' Cr')]), { zebra: true, size: 8.4 });
-  }
-  if (L.gold.length) {
-    pHeading(d, 'Gold account (job work)');
-    const rows = L.gold.map((g) => [ordNo(g.o.order_no), pDate(g.o.order_date), pG(g.led.inFine), pG(g.led.usedFine), pG(g.led.bal)]);
-    const t = ['Total', '', pG(T.goldIn), pG(T.goldUsed), pG(T.goldBal)];
-    t.bold = true;
-    rows.push(t);
-    d.table([{ h: 'Order', w: 26 }, { h: 'Date', w: 30 }, { h: 'Fine gold received (g)', w: 42, a: 'right' }, { h: 'Fine gold used (g)', w: 42, a: 'right' }, { h: 'Balance (g)', w: 42, a: 'right' }], rows);
-    pNote(d, '', T.goldBal > 0.0005 ? 'Your gold with us: ' + pG(T.goldBal) + ' g fine.' : T.goldBal < -0.0005 ? 'Gold due from you: ' + pG(-T.goldBal) + ' g fine.' : 'Gold account settled.');
-  }
-  pNote(d, '', 'Dr = amount due from you, Cr = advance with us. Please check this statement and let us know of any difference. Thank you for your business.', 8.2);
-  pSignatures(d, '');
-  return { pdf: d, name: safeFileName((cl.trade_name || 'Client') + ' - Statement ' + todayStr()) + '.pdf', text: 'Account statement from ' + bizName() };
-}
-
 async function buildKarigarStatementPdf(karigarId) {
   const K = await karigarData(karigarId);
   if (!K.k) throw new Error('karigar');
@@ -635,10 +551,9 @@ async function buildKarigarStatementPdf(karigarId) {
     ['Gold with karigar (fine)', pG(B.gold) + ' g', 'total']];
   if (B.hasSilver) tot.push(['Fine silver issued', pG(B.Silver.issued) + ' g'], ['Fine silver received back', pG(B.Silver.received) + ' g'],
     ['Silver wastage allowed', pG(B.Silver.wastage) + ' g'], ['Silver with karigar (fine)', pG(B.silver) + ' g', 'total']);
-  tot.push(['Labour total', pRs(B.labour)], ['Paid', pRs(B.paid)], ['Labour payable', pRs(B.payable), 'total']);
   pTotals(d, tot);
-  const cols = (balHead) => [{ h: 'Date', w: 24 }, { h: 'Entry', w: 22 }, { h: 'Weight (g)', w: 19, a: 'right' }, { h: 'Purity', w: 22 }, { h: 'Fine (g)', w: 18, a: 'right' },
-    { h: 'Amount', w: 22, a: 'right' }, { h: 'Order / note', w: 35 }, { h: balHead, w: 20, a: 'right' }];
+  const cols = (balHead) => [{ h: 'Date', w: 24 }, { h: 'Entry', w: 26 }, { h: 'Weight (g)', w: 21, a: 'right' }, { h: 'Purity', w: 24 }, { h: 'Fine (g)', w: 21, a: 'right' },
+    { h: 'Order / note', w: 44 }, { h: balHead, w: 22, a: 'right' }];
   const ref = (t) => {
     const on = t.orders && t.orders.order_no ? ordNo(t.orders.order_no) : '';
     if (t.auto && t.note && on && t.note.indexOf(on) === 0) return t.note;   // entries from an order already start with its number
@@ -650,23 +565,18 @@ async function buildKarigarStatementPdf(karigarId) {
       const s = KTXN_SIGN[t.kind] || 0;
       if (s) run += s * num(t.fine_g);
       return [pDate(t.txn_date), KTXN_LABEL[t.kind] || t.kind, t.weight_g != null ? pG(t.weight_g) : '', t.purity != null && t.kind !== 'wastage' ? pPurity(t.purity) : '',
-        s ? pG(t.fine_g) : '', t.amount != null ? pRs(t.amount) : '', ref(t), s ? pG(run) : ''];
+        s ? pG(t.fine_g) : '', ref(t), s ? pG(run) : ''];
     });
   };
   const all = K.txns.slice().reverse();
   if (!B.hasSilver) {
     pHeading(d, 'Entries');
-    d.table(cols('Gold bal. (g)'), metalRows(all.filter((t) => txnMetal(t) === 'Gold' || !KTXN_SIGN[t.kind])), { zebra: true, size: 8 });
+    d.table(cols('Gold bal. (g)'), metalRows(all.filter((t) => txnMetal(t) === 'Gold')), { zebra: true, size: 8 });
   } else {
     pHeading(d, 'Gold entries');
-    d.table(cols('Gold bal. (g)'), metalRows(all.filter((t) => KTXN_SIGN[t.kind] && txnMetal(t) === 'Gold')), { zebra: true, size: 8 });
+    d.table(cols('Gold bal. (g)'), metalRows(all.filter((t) => txnMetal(t) === 'Gold')), { zebra: true, size: 8 });
     pHeading(d, 'Silver entries');
-    d.table(cols('Silver bal. (g)'), metalRows(all.filter((t) => KTXN_SIGN[t.kind] && txnMetal(t) === 'Silver')), { zebra: true, size: 8 });
-    const money = all.filter((t) => !KTXN_SIGN[t.kind]);
-    if (money.length) {
-      pHeading(d, 'Labour and payments');
-      d.table(cols(''), metalRows(money), { zebra: true, size: 8 });
-    }
+    d.table(cols('Silver bal. (g)'), metalRows(all.filter((t) => txnMetal(t) === 'Silver')), { zebra: true, size: 8 });
   }
   pSignatures(d, 'Karigar\'s signature');
   return { pdf: d, name: safeFileName((k.name || 'Karigar') + ' - Statement ' + todayStr()) + '.pdf', text: 'Karigar statement from ' + bizName() };
@@ -703,6 +613,5 @@ async function makeAndOfferPdf(builder) {
 }
 
 onAct('d-order', (el) => makeAndOfferPdf(() => buildOrderPdf(el.dataset.id, el.dataset.kind)));
-onAct('d-client', (el) => makeAndOfferPdf(() => buildClientStatementPdf(el.dataset.id)));
 onAct('d-karigar', (el) => makeAndOfferPdf(() => buildKarigarStatementPdf(el.dataset.id)));
 onAct('d-kchallan', (el) => makeAndOfferPdf(() => buildKarigarChallanPdf(el.dataset.id)));

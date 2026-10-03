@@ -428,9 +428,10 @@ async function renderToday() {
   if (!overdue.length && !today.length && !upcoming.length && !later.length) {
     html += '<div class="empty"><div class="big">🌤️</div>No pending reminders.<br>Log an interaction and add follow-ups — they will appear here.</div>';
   }
-  c.innerHTML = '<div id="today-summary"></div><div id="today-targets"></div><div id="today-orders"></div>' + html;
+  c.innerHTML = '<div id="today-summary"></div><div id="today-targets"></div><div id="today-pay"></div><div id="today-orders"></div>' + html;
   if (typeof renderTodaySummary === 'function') renderTodaySummary($('#today-summary'));
   if (typeof renderMyTargets === 'function') renderMyTargets($('#today-targets'));
+  if (typeof loadTodayPay === 'function') loadTodayPay();
   if (typeof loadTodayOrders === 'function') loadTodayOrders();
 }
 
@@ -908,6 +909,7 @@ async function openClient(id, replace) {
   showSub(cl.trade_name, () => {
     renderClientPage(cl);
     loadClientHistory(cl);
+    if (typeof loadClientPay === 'function') loadClientPay(cl);
     if (typeof loadClientOrders === 'function') loadClientOrders(cl);
   }, replace);
 }
@@ -939,6 +941,7 @@ function renderClientPage(cl) {
     (typeof renderOrders === 'function' ? '<button class="btn btn-primary" data-action="o-new" data-id="' + cl.id + '">＋ Order</button>' : '') +
     '<button class="btn btn-secondary" data-action="edit-client" data-id="' + cl.id + '">Edit</button>' +
     '</div>' +
+    '<div id="client-pay"></div>' +
 
     '<div class="card">' + (rows.join('') || '<div class="empty" style="padding:6px">No details yet</div>') +
     (typeof clientLocRowHTML === 'function' ? clientLocRowHTML(cl) : '') + '</div>' +
@@ -1106,7 +1109,7 @@ async function saveInteraction() {
   const orderType = outcomeVal === 'Job work order' ? 'job_work' : outcomeVal === 'Outright order' ? 'ready_stock' : null;
   if (orderType && typeof startNewOrder === 'function') {
     const ov = openModal(
-      '<h3>Record the order now?</h3><p>You marked this meeting as “' + esc(outcomeVal) + '”. Add the items, weights and advance so the order is tracked.</p>' +
+      '<h3>Record the order now?</h3><p>You marked this meeting as “' + esc(outcomeVal) + '”. Add the items and weights so the order is tracked.</p>' +
       '<div class="modal-actions">' +
       '<button class="btn btn-secondary" data-m="later">Later</button>' +
       '<button class="btn btn-primary" data-m="now">Create order</button></div>');
@@ -1191,10 +1194,10 @@ async function renderReport() {
 
   c.innerHTML =
     (typeof renderReports === 'function' ? '<div class="action-row rep-shortcuts"><button class="btn btn-primary" data-action="rep-open">📊 Full reports</button>' +
-      (typeof renderAccounts === 'function' ? '<button class="btn btn-secondary" data-action="acc-open">📒 Accounts</button>' : '') + '</div>' +
-      '<div class="section-label">Account books</div><div class="brk-row rep-books">' +
-      [['cash', 'Cash book'], ['bank', 'Bank book'], ['party', 'Party account'], ['sales_gold', 'Gold sales'], ['sales_silver', 'Silver sales'], ['sales_diamond', 'Diamond sales'],
-        ['expense', 'Expenses'], ['karigar', 'Karigars'], ['gst', 'GST']].map((x) => '<button class="brk-chip" data-action="rep-go" data-acct="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' : '') +
+      (typeof renderPayDues === 'function' ? '<button class="btn btn-secondary" data-action="dues-open">💰 Payment dues</button>' : '') + '</div>' +
+      '<div class="section-label">Reports</div><div class="brk-row rep-books">' +
+      [['pay', 'Payment status'], ['payhist', 'Payment dates'], ['items', 'Order items'], ['orders', 'Orders'], ['diamonds', 'Diamonds & stones'],
+        ['stock', 'Stock (catalogue)'], ['karigars', 'Karigar metal'], ['summary', 'Month summary']].map((x) => '<button class="brk-chip" data-action="rep-go" data-type="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' : '') +
     '<div id="report-targets"></div>' +
     '<div class="filter-chips" style="margin-top:14px">' + chip('today', 'Today') + chip('7d', '7 days') + chip('30d', '30 days') + chip('all', 'All') + '</div>' +
 
@@ -1381,11 +1384,11 @@ async function exportAllData() {
     let nFiles = 3;
     const failed = [];
     const extra = [
-      ['orders', 3, typeof exportOrdersData === 'function' ? () => exportOrdersData(pName, cName, today) : null],
+      ['orders', 2, typeof exportOrdersData === 'function' ? () => exportOrdersData(pName, cName, today) : null],
       ['catalogue', 1, typeof exportCatalogueData === 'function' ? () => exportCatalogueData(pName, today) : null],
       ['karigars', 1, typeof exportKarigarData === 'function' ? () => exportKarigarData(pName, today) : null],
       ['production steps', 1, typeof exportStepsData === 'function' ? () => exportStepsData(pName, today) : null],
-      ['accounts', 2, typeof exportAccountsData === 'function' ? () => exportAccountsData(pName, cName, today) : null],
+      ['payment dates', 1, typeof exportPayData === 'function' ? () => exportPayData(pName, cName, today) : null],
     ];
     for (const x of extra) {
       if (!x[2]) continue;
@@ -1431,13 +1434,11 @@ async function renderMore() {
   }
   const mrow = (action, icon, title, sub) => '<button class="more-row" data-action="' + action + '"><span class="mr-ic">' + icon + '</span><span class="mr-t"><b>' + title + '</b><span>' + sub + '</span></span><span class="mr-go">›</span></button>';
   html += '<div class="section-label">Business tools</div><div class="card more-list">' +
-    (isOwner && typeof renderReports === 'function' ? mrow('rep-open', '📊', 'Reports', 'Account books — cash, bank, party, gold, diamond … — and lists to filter and download') : '') +
-    (isOwner && typeof renderAccounts === 'function' ? mrow('acc-open', '📒', 'Accounts', 'Cash book, bank book and expenses') : '') +
-    (!isOwner && typeof renderMyExpenses === 'function' ? mrow('exp-mine', '🧾', 'My expenses', 'Travel, courier and other spends') : '') +
-    (typeof renderDues === 'function' ? mrow('dues-open', '💰', 'Client dues', 'Who owes how much · reminders') : '') +
-    (typeof renderKarigars === 'function' ? mrow('k-list', '🔨', 'Karigars', 'Metal given, received back and labour') : '') +
+    (isOwner && typeof renderReports === 'function' ? mrow('rep-open', '📊', 'Reports', 'Payment status, orders, items, diamonds, stock — filter and download') : '') +
+    (typeof renderPayDues === 'function' ? mrow('dues-open', '💰', 'Payment dues', 'Which party has to pay and by when · reminders') : '') +
+    (typeof renderKarigars === 'function' ? mrow('k-list', '🔨', 'Karigars', 'Metal given and received back') : '') +
     (isOwner && typeof renderStepTemplates === 'function' ? mrow('stpl-open', '⚙️', 'Production steps', 'The step lists used for orders') : '') +
-    (isOwner && typeof renderBizForm === 'function' ? mrow('biz-open', '🏷️', 'Business details', 'Address, GSTIN, bank — printed on PDFs') : '') +
+    (isOwner && typeof renderBizForm === 'function' ? mrow('biz-open', '🏷️', 'Business details', 'Address, GSTIN — printed on PDFs') : '') +
     (typeof renderLangPicker === 'function' ? mrow('lang-open', '🌐', 'Language / भाषा / ભાષા', 'English, हिन्दी, ગુજરાતી') : '') +
     '</div>';
   html += '<div class="empty" style="padding-top:6px;font-size:12.5px">' + esc(BRAND) + ' · Marketing app</div>';

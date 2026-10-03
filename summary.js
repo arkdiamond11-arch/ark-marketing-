@@ -1,6 +1,6 @@
 /* ============================================================
    MORNING SUMMARY — top of the Today screen.
-   Owner: yesterday's team activity, orders due, money due,
+   Owner: yesterday's team activity, orders due, payments due,
    quotations waiting, gold with karigars; shareable on WhatsApp.
    Team members: their own day.
    ============================================================ */
@@ -18,29 +18,27 @@ async function summaryData() {
   const res = await Promise.all([
     meQ(db.from('interactions').select('exec_id').gte('happened_at', yS).lt('happened_at', tS).limit(5000), 'exec_id'),
     meQ(db.from('clients').select('created_by').gte('created_at', yS).lt('created_at', tS).limit(5000), 'created_by'),
-    db.from('orders').select('status, total_amount, created_by').eq('order_date', y).limit(5000),
+    db.from('orders').select('status, created_by').eq('order_date', y).limit(5000),
     db.from('orders').select('due_date').in('status', OPEN_STATUSES).not('due_date', 'is', null).lte('due_date', t).limit(5000),
     meQ(db.from('followups').select('due_date').eq('type', 'reminder').eq('status', 'pending').lte('due_date', t).limit(5000), 'assigned_to'),
-    owner && typeof partyBalances === 'function' ? partyBalances().then((m) => ({ data: m ? Array.from(m.values()) : [] })) : Promise.resolve({ data: [] }),
+    typeof payAllEntries === 'function' ? payAllEntries().then((rows) => ({ data: rows })).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
     owner ? db.from('orders').select('id').eq('status', 'quote').lte('order_date', soon).limit(5000) : Promise.resolve({ data: [] }),
     owner ? db.from('karigar_txns').select('kind, metal, fine_g').in('kind', ['issue', 'receive', 'wastage']).limit(20000) : Promise.resolve({ data: [] }),
   ]);
   const meet = res[0].data || [], newCl = res[1].data || [], yOrders = (res[2].data || []).filter((o) => o.status !== 'quote' && o.status !== 'cancelled'),
-    due = res[3].data || [], rem = res[4].data || [], live = res[5].data || [], quotes = res[6].data || [], kt = res[7].data || [];
+    due = res[3].data || [], rem = res[4].data || [], pays = res[5].data || [], quotes = res[6].data || [], kt = res[7].data || [];
   const byExec = new Map();
   meet.forEach((m) => byExec.set(m.exec_id, (byExec.get(m.exec_id) || 0) + 1));
-  const dueClients = new Set();
-  let money = 0;
-  live.forEach((p) => { if (p.due >= 1) { money += p.due; dueClients.add(p.id); } });
+  const PG = typeof payDueGroups === 'function' ? payDueGroups(payIndex(pays)) : { late: [], today: [] };
   let kGold = 0, kSilver = 0;
   kt.forEach((x) => { const v = (x.kind === 'issue' ? 1 : -1) * num(x.fine_g); if (x.metal === 'Silver') kSilver += v; else kGold += v; });
   const myOrders = owner ? yOrders : yOrders.filter((o) => o.created_by === S.me.id);
   return {
     meetings: meet.length, byExec, newClients: newCl.length,
-    yOrders: myOrders.length, yValue: myOrders.reduce((a, o) => a + num(o.total_amount), 0),
+    yOrders: myOrders.length,
     dueToday: due.filter((d) => d.due_date === t).length, overdue: due.filter((d) => d.due_date < t).length,
     remToday: rem.filter((r) => r.due_date === t).length, remOverdue: rem.filter((r) => r.due_date < t).length,
-    money, moneyClients: dueClients.size, quotes: quotes.length, kGold, kSilver,
+    payLate: PG.late.length, payToday: PG.today.length, quotes: quotes.length, kGold, kSilver,
   };
 }
 
@@ -58,10 +56,10 @@ async function renderTodaySummary(el) {
   const names = Array.from(D.byExec.entries()).sort((a, b) => b[1] - a[1]).map((e) => esc(String(nameOf(e[0])).split(' ')[0]) + ' ' + e[1]).join(', ');
   const lines = [];
   lines.push(line('🗓️', '<b>Yesterday:</b> ' + D.meetings + ' meeting' + (D.meetings === 1 ? '' : 's') + (owner && names ? ' (' + names + ')' : '') +
-    ' · ' + D.newClients + ' new client' + (D.newClients === 1 ? '' : 's') + ' · ' + D.yOrders + ' order' + (D.yOrders === 1 ? '' : 's') + (D.yValue ? ' (' + shortInr(D.yValue) + ')' : '')));
+    ' · ' + D.newClients + ' new client' + (D.newClients === 1 ? '' : 's') + ' · ' + D.yOrders + ' order' + (D.yOrders === 1 ? '' : 's')));
   if (D.dueToday || D.overdue) lines.push(line('📦', '<b>Orders due:</b> ' + D.dueToday + ' today' + (D.overdue ? ', <span class="o-red">' + D.overdue + ' overdue</span>' : ''), ' data-action="o-goto" data-s="open"'));
   if (D.remToday || D.remOverdue) lines.push(line('⏰', '<b>Reminders:</b> ' + D.remToday + ' today' + (D.remOverdue ? ', <span class="o-red">' + D.remOverdue + ' overdue</span>' : '')));
-  if (owner && D.money >= 1) lines.push(line('💰', '<b>Payments due:</b> ' + inr(D.money) + ' from ' + D.moneyClients + ' client' + (D.moneyClients === 1 ? '' : 's'), ' data-action="dues-open"'));
+  if (D.payToday || D.payLate) lines.push(line('💰', '<b>Payments due:</b> ' + D.payToday + ' today' + (D.payLate ? ', <span class="o-red">' + D.payLate + ' overdue</span>' : ''), ' data-action="dues-open"'));
   if (owner && D.quotes) lines.push(line('📝', '<b>Quotations waiting</b> 3+ days: ' + D.quotes, ' data-action="o-goto" data-s="quote"'));
   if (owner && (Math.abs(D.kGold) > 0.0005 || Math.abs(D.kSilver) > 0.0005)) {
     lines.push(line('🔨', '<b>With karigars:</b> ' + [Math.abs(D.kGold) > 0.0005 ? 'gold ' + grams(D.kGold) : '', Math.abs(D.kSilver) > 0.0005 ? 'silver ' + grams(D.kSilver) : ''].filter(Boolean).join(', ') + ' fine', ' data-action="k-list"'));
@@ -80,10 +78,11 @@ function summaryText() {
   if (!D) return '';
   const names = Array.from(D.byExec.entries()).sort((a, b) => b[1] - a[1]).map((e) => String(nameOf(e[0])).split(' ')[0] + ' ' + e[1]).join(', ');
   const L = ['*' + bizName() + ' — ' + new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) + '*', '',
-    'Yesterday: ' + D.meetings + ' meetings' + (names ? ' (' + names + ')' : '') + ', ' + D.newClients + ' new clients, ' + D.yOrders + ' orders' + (D.yValue ? ' (' + inr(D.yValue) + ')' : ''),
+    'Yesterday: ' + D.meetings + ' meeting' + (D.meetings === 1 ? '' : 's') + (names ? ' (' + names + ')' : '') + ', ' + D.newClients + ' new client' + (D.newClients === 1 ? '' : 's') +
+      ', ' + D.yOrders + ' order' + (D.yOrders === 1 ? '' : 's'),
     'Orders due: ' + D.dueToday + ' today' + (D.overdue ? ', ' + D.overdue + ' overdue' : ''),
     'Reminders: ' + D.remToday + ' today' + (D.remOverdue ? ', ' + D.remOverdue + ' overdue' : '')];
-  if (D.money >= 1) L.push('Payments due: ' + inr(D.money) + ' from ' + D.moneyClients + ' clients');
+  if (D.payToday || D.payLate) L.push('Payments due: ' + D.payToday + ' today' + (D.payLate ? ', ' + D.payLate + ' overdue' : ''));
   if (D.quotes) L.push('Quotations waiting 3+ days: ' + D.quotes);
   if (Math.abs(D.kGold) > 0.0005) L.push('Gold with karigars: ' + grams(D.kGold) + ' fine');
   if (Math.abs(D.kSilver) > 0.0005) L.push('Silver with karigars: ' + grams(D.kSilver) + ' fine');

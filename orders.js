@@ -1,6 +1,8 @@
 /* ============================================================
    ORDERS add-on — job work, ready stock and custom orders,
-   quotations, payments, client gold and karigar sections.
+   quotations, client gold and karigar sections. No prices or
+   payments here — a party's payment status (due / done) is on
+   the party's page (payments.js).
    Loaded before app.js. Uses app.js helpers ($, db, S, esc,
    toast, showSub, openModal …) only at call time.
    ============================================================ */
@@ -15,7 +17,6 @@ const SILVER_PURITY = [['999', 99.9], ['925', 92.5]];
 const ALL_PURITY = PURITY.concat(SILVER_PURITY);
 const ITEM_CATS = ['Necklace', 'Choker', 'Long haar', 'Earrings', 'Jhumka', 'Bangles', 'Kada', 'Ring', 'Pendant set',
   'Maang tikka', 'Bracelet', 'Nath', 'Other'];
-const PAY_MODES = ['Cash', 'Bank'];   // UPI, cheque and transfers are all "Bank"
 const ORD_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3.5h8.5L18.5 7.5v13H6z" stroke-linejoin="round"/><path d="M14 3.5v4.5h4.5" stroke-linejoin="round"/><path d="M9 12h6.5M9 15.5h6.5M9 19h3.5" stroke-linecap="round"/></svg>';
 
 /* ---------------- helpers ---------------- */
@@ -31,8 +32,8 @@ function numOrNull(v) {
   return isFinite(x) ? x : null;
 }
 function round2(x) { return Math.round(x * 100) / 100; }
-function inr(n) { return '₹' + Math.round(num(n)).toLocaleString('en-IN'); }
 function grams(n) { return (Math.round(num(n) * 1000) / 1000).toLocaleString('en-IN', { maximumFractionDigits: 3 }) + ' g'; }
+function carats(n) { return (Math.round(num(n) * 100) / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 }) + ' ct'; }
 function purityKey(p) {
   if (p == null || p === '') return null;
   const f = ALL_PURITY.find((x) => Math.abs(x[1] - num(p)) < 0.01);
@@ -60,32 +61,20 @@ function chipOType(t) {
 }
 function isOpenStatus(s) { return OPEN_STATUSES.indexOf(s) !== -1; }
 function isLive(o) { return o.status !== 'cancelled' && o.status !== 'quote'; }
-function balanceOf(o) { return Math.max(0, round2(num(o.total_amount) - num(o.paid_amount))); }
 function dueHTML(o) {
   if (!o.due_date || !isOpenStatus(o.status)) return o.due_date ? 'Due ' + esc(fmtD(o.due_date)) : '';
   const late = o.due_date < todayStr();
   return '<span class="' + (late ? 'o-late' : '') + '">' + (late ? '' : 'Due ') + esc(dueLabel(o.due_date)) + '</span>';
 }
 
-/* ---------------- calculations ---------------- */
+/* ---------------- weights ---------------- */
 function orderCalc(o, items) {
-  const type = o.order_type;
-  let net = 0, gross = 0, stones = 0, pcs = 0;
+  let net = 0, gross = 0, pcs = 0, ct = 0;
   (items || []).forEach((it) => {
-    net += num(it.net_wt); gross += num(it.gross_wt); stones += num(it.stone_amount);
+    net += num(it.net_wt); gross += num(it.gross_wt); ct += it.diamond_type ? num(it.diamond_ct) : 0;
     pcs += Math.max(0, parseInt(it.qty, 10) || 0);
   });
-  const rate = type === 'job_work' ? 0 : num(o.rate_per_g);
-  const metalValue = net * rate;
-  const wastageValue = type === 'job_work' ? 0 : net * num(o.wastage_pct) / 100 * rate;
-  const making = net * num(o.making_per_g);
-  const subtotal = metalValue + wastageValue + making + stones;
-  const taxable = Math.max(0, subtotal - num(o.discount));
-  const gst = taxable * num(o.gst_pct) / 100;
-  return {
-    net, gross, pcs, stones, metalValue, wastageValue, making,
-    subtotal: round2(subtotal), taxable: round2(taxable), gst: round2(gst), total: Math.round(taxable + gst),
-  };
+  return { net, gross, pcs, ct };
 }
 
 /* Job work: client's fine gold in vs fine gold used (incl. wastage). */
@@ -116,7 +105,6 @@ function karigarHTML(o) {
     (pending ? '<div class="o-lnote">Still with the karigar — nothing received yet.</div>' :
       '<div class="o-lrow"><span>Received back' + (o.karigar_received_on ? ' · ' + esc(fmtD(o.karigar_received_on)) : '') + '</span><b>' + grams(recd) + '</b></div>' +
       '<div class="o-lnote ' + (issued - recd > 0.0005 ? 'neg' : '') + '">Difference (loss / wastage): <b>' + grams(issued - recd) + '</b></div>') +
-    (numOrNull(o.karigar_labour) != null ? '<div class="o-lrow"><span>Karigar labour</span><b>' + inr(o.karigar_labour) + '</b></div>' : '') +
     '</div>';
 }
 
@@ -148,9 +136,10 @@ async function syncCatalogueForOrder(orderId, orderStatus) {
   if (ids.length) await syncCatalogueStatus(orderStatus, ids, [], orderId);
 }
 
-/* ---------------- karigar account entries that come from an order ---------------- */
+/* ---------------- karigar account entries that come from an order ----------------
+   metal issued and received back (an older labour entry is left as it is) */
 async function syncOrderKarigarTxns(orderId, o, label) {
-  const { data: old } = await db.from('karigar_txns').select('id, kind').eq('order_id', orderId).eq('auto', true);
+  const { data: old } = await db.from('karigar_txns').select('id, kind').eq('order_id', orderId).eq('auto', true).in('kind', ['issue', 'receive']);
   const have = {};
   const extra = [];
   (old || []).forEach((t) => { if (!have[t.kind]) have[t.kind] = t.id; else extra.push(t.id); });
@@ -160,8 +149,7 @@ async function syncOrderKarigarTxns(orderId, o, label) {
   const want = {};
   if (o.karigar_id && o.karigar_issued_g != null) want.issue = { txn_date: o.karigar_issued_on || o.order_date, weight_g: o.karigar_issued_g, purity: pur, amount: null, metal };
   if (o.karigar_id && o.karigar_received_g != null) want.receive = { txn_date: o.karigar_received_on || o.order_date, weight_g: o.karigar_received_g, purity: pur, amount: null, metal };
-  if (o.karigar_id && o.karigar_labour != null) want.labour = { txn_date: o.karigar_received_on || o.karigar_issued_on || o.order_date, weight_g: null, purity: null, amount: o.karigar_labour, metal };
-  for (const kind of ['issue', 'receive', 'labour']) {
+  for (const kind of ['issue', 'receive']) {
     const row = want[kind] ? Object.assign({ karigar_id: o.karigar_id, note: label }, want[kind]) : null;
     if (have[kind] && row) await db.from('karigar_txns').update(row).eq('id', have[kind]);
     else if (have[kind] && !row) await db.from('karigar_txns').delete().eq('id', have[kind]);
@@ -182,7 +170,7 @@ async function renderOrders() {
   $('#content').innerHTML =
     '<div class="action-row" style="margin-bottom:12px">' +
     '<button class="btn btn-primary" data-action="o-tab-new">＋ New order</button>' +
-    '<button class="btn btn-secondary" data-action="dues-open">Client dues</button>' +
+    '<button class="btn btn-secondary" data-action="dues-open">Payment dues</button>' +
     '</div>' +
     '<div class="search-box"><input type="text" id="o-search" placeholder="Search client or order no…" autocomplete="off" value="' + esc(L.q) + '"></div>' +
     '<div class="filter-chips">' + chip('status', 'open', 'Open') + chip('status', 'ready', 'Ready') + chip('status', 'quote', 'Quotations') +
@@ -202,7 +190,7 @@ async function loadOrderList() {
   const box = $('#o-list');
   if (!box) return;
   const L = S.olist;
-  let q = db.from('orders').select('id, order_no, order_type, status, order_date, due_date, total_amount, paid_amount, clients!inner(trade_name, city)');
+  let q = db.from('orders').select('id, order_no, order_type, status, order_date, due_date, clients!inner(trade_name, city)');
   if (L.status === 'open') q = q.in('status', OPEN_STATUSES);
   else if (L.status !== 'all') q = q.eq('status', L.status);
   if (L.type !== 'all') q = q.eq('order_type', L.type);
@@ -220,22 +208,22 @@ async function loadOrderList() {
     box.innerHTML = '<div class="empty"><div class="big">📦</div>' + (s ? 'No order matches "' + esc(s) + '".' : 'No orders here yet.<br>Tap “New order”, or open a client and add one there.') + '</div>';
     return;
   }
-  const live = rows.filter(isLive);
-  const due = live.reduce((a, o) => a + balanceOf(o), 0);
   const quotesOnly = L.status === 'quote';
+  const t = todayStr();
+  const late = rows.filter((o) => isOpenStatus(o.status) && o.due_date && o.due_date < t).length;
+  const ready = rows.filter((o) => o.status === 'ready').length;
   S.stepInfo = typeof loadStepInfo === 'function' ? await loadStepInfo(rows.filter((o) => isOpenStatus(o.status)).map((o) => o.id)) : null;
   if (!$('#o-list')) return;
   box.innerHTML =
     '<div class="stat-row">' +
     '<div class="stat"><div class="st-num">' + rows.length + (rows.length >= 300 ? '+' : '') + '</div><div class="st-label">' + (quotesOnly ? 'Quotations' : 'Orders') + '</div></div>' +
-    '<div class="stat"><div class="st-num o-num-sm">' + inr((quotesOnly ? rows : live).reduce((a, o) => a + num(o.total_amount), 0)) + '</div><div class="st-label">' + (quotesOnly ? 'Quoted value' : 'Order value') + '</div></div>' +
-    (quotesOnly ? '' : '<div class="stat"><div class="st-num o-num-sm' + (due > 0 ? ' o-red' : '') + '">' + inr(due) + '</div><div class="st-label">Balance due</div></div>') +
+    (quotesOnly ? '' : '<div class="stat"><div class="st-num' + (late ? ' o-red' : '') + '">' + late + '</div><div class="st-label">Delivery late</div></div>' +
+      '<div class="stat"><div class="st-num">' + ready + '</div><div class="st-label">Ready</div></div>') +
     '</div><div style="height:8px"></div>' +
     rows.map((o) => orderListItemHTML(o, true)).join('');
 }
 
 function orderListItemHTML(o, showClient) {
-  const bal = balanceOf(o);
   const cl = o.clients || {};
   return '<div class="list-item" data-action="o-open" data-id="' + o.id + '">' +
     '<div class="li-main">' +
@@ -245,8 +233,6 @@ function orderListItemHTML(o, showClient) {
     '<div class="li-chips">' + chipStatus(o.status) +
     (S.stepInfo && S.stepInfo.get(o.id) && S.stepInfo.get(o.id).total && isOpenStatus(o.status)
       ? '<span class="chip chip-step">⚙ ' + esc(S.stepInfo.get(o.id).cur || 'All steps done') + ' · ' + S.stepInfo.get(o.id).done + '/' + S.stepInfo.get(o.id).total + '</span>' : '') +
-    (num(o.total_amount) ? '<span class="chip chip-cat">' + inr(o.total_amount) + '</span>' : '') +
-    (bal > 0 && isLive(o) ? '<span class="chip chip-hot">Due ' + inr(bal) + '</span>' : '') +
     '</div></div><div style="color:var(--muted)">›</div></div>';
 }
 
@@ -300,15 +286,12 @@ function startNewOrder(client, typeKey, replace) {
   S.pendingCatItems = null;
   if (pending && pending.length && !typeKey) typeKey = 'ready_stock';
   S.ord = {
-    id: null, orderNo: null, status: null, oldItemIds: [], oldCatIds: [], gstTouched: false,
+    id: null, orderNo: null, status: null, oldItemIds: [], oldCatIds: [],
     client: { id: client.id, trade_name: client.trade_name, city: client.city },
     items: [blankItem()],
-    o: { order_date: todayStr(), due_date: '', gst_pct: typeKey === 'job_work' ? '5' : '3', discount: '', karigar_id: '' },
+    o: { order_date: todayStr(), due_date: '', karigar_id: '' },
   };
-  S.formState = {
-    o_type: typeKey ? OTYPE_LABEL[typeKey] : null, o_metal: 'Gold', o_purity: '22K', o_jw_purity: '22K', o_pay_mode: 'Cash',
-    o_gst: lastGstChoice(),
-  };
+  S.formState = { o_type: typeKey ? OTYPE_LABEL[typeKey] : null, o_metal: 'Gold', o_purity: '22K', o_jw_purity: '22K' };
   if (pending && pending.length && typeof addCatItemsToOrder === 'function') addCatItemsToOrder(pending);
   S.formState.o_color = commonColor(S.ord.items) || null;
   showSub('New Order', renderOrderForm, replace);
@@ -331,31 +314,27 @@ async function startEditOrder(id) {
   }
   S.ord = {
     id: o.id, orderNo: o.order_no, status: o.status, oldItemIds: items.map((x) => x.id), oldCatIds: catIds,
-    // keep a custom GST; a default one follows the type if the type is changed
-    gstTouched: num(o.gst_pct) !== (o.order_type === 'job_work' ? 5 : 3),
     client: o.clients || { id: o.client_id, trade_name: 'Client' },
     items: items.map((it) => Object.assign({
       category: s(it.category), description: s(it.description), design_code: s(it.design_code), qty: s(it.qty || 1),
       gross_wt: s(it.gross_wt), net_wt: s(it.net_wt), stone_details: s(it.stone_details),
-      stone_amount: num(it.stone_amount) ? s(it.stone_amount) : '', size: s(it.size), photo_path: it.photo_path, _photo: null,
+      stone_amount: num(it.stone_amount) ? s(it.stone_amount) : '',   // not shown — an older value is kept when saved again
+      size: s(it.size), photo_path: it.photo_path, _photo: null,
       catalogue_id: it.catalogue_id || null, cat_photo: it.catalogue_id ? catPhoto.get(it.catalogue_id) || null : null,
     }, jewelForm(it))),
     o: {
-      order_date: s(o.order_date), due_date: s(o.due_date), rate_per_g: s(o.rate_per_g), making_per_g: s(o.making_per_g),
-      wastage_pct: s(o.wastage_pct), discount: num(o.discount) ? s(o.discount) : '', gst_pct: s(o.gst_pct),
+      order_date: s(o.order_date), due_date: s(o.due_date), wastage_pct: s(o.wastage_pct),
       client_metal_g: s(o.client_metal_g), client_metal_on: s(o.client_metal_on), karigar_id: s(o.karigar_id),
       karigar_issued_g: s(o.karigar_issued_g), karigar_issued_on: s(o.karigar_issued_on),
-      karigar_received_g: s(o.karigar_received_g), karigar_received_on: s(o.karigar_received_on), karigar_labour: s(o.karigar_labour),
+      karigar_received_g: s(o.karigar_received_g), karigar_received_on: s(o.karigar_received_on),
       notes: s(o.notes), legacy_karigar: o.karigar_id ? '' : s(o.karigar_name),
     },
   };
   if (!S.ord.items.length) S.ord.items.push(blankItem());
   S.formState = {
     o_type: OTYPE_LABEL[o.order_type], o_metal: o.metal || 'Gold', o_purity: purityKey(o.purity),
-    o_jw_purity: purityKey(o.client_metal_purity) || '22K', o_pay_mode: 'Cash',
-    o_gst: num(o.gst_pct) > 0 ? 'Add GST' : 'No GST',
+    o_jw_purity: purityKey(o.client_metal_purity) || '22K',
   };
-  if (!(num(o.gst_pct) > 0)) S.ord.o.gst_pct = o.order_type === 'job_work' ? '5' : '3';   // ready if GST is added
   S.formState.o_color = commonColor(S.ord.items) || null;
   showSub('Edit · ' + ordNo(o.order_no), renderOrderForm);
 }
@@ -373,17 +352,9 @@ function syncOrderColor() {
   if (l) l.textContent = colorFieldLabel(S.formState.o_metal || 'Gold');
 }
 
-/* The order-level values as the calculator expects them. */
-/* GST is a choice on each order; a new order starts with the last choice made on this phone */
-const GST_CHOICES = ['No GST', 'Add GST'];
-function lastGstChoice() {
-  try { return localStorage.getItem('gst_choice') === 'Add GST' ? 'Add GST' : 'No GST'; } catch (e) { return 'No GST'; }
-}
-function gstAdded() { return S.formState.o_gst === 'Add GST'; }
-
+/* The order-level values from the form. */
 function formOrderObj() {
   const o = Object.assign({}, S.ord.o);
-  if (!gstAdded()) o.gst_pct = 0;
   o.order_type = curOType();
   o.metal = S.formState.o_metal || 'Gold';
   // a purity left over from the other metal is never saved
@@ -427,17 +398,12 @@ function renderOrderForm() {
     '<button class="btn btn-secondary" data-action="o-cat-pick">Pick from catalogue</button>' +
     '</div>' +
 
-    '<div class="section-label">Metal &amp; rate</div>' +
+    '<div class="section-label">Metal</div>' +
     '<div class="card">' +
     '<div class="field"><label>Metal</label>' + segHTML('o_metal', ['Gold', 'Silver'], S.formState.o_metal) + '</div>' +
     '<div class="field"><label>Purity</label><div id="o-purity-wrap">' + segHTML('o_purity', purityOptions(S.formState.o_metal), S.formState.o_purity) + '</div></div>' +
-    '<div class="field"><label id="o-color-label">' + colorFieldLabel(S.formState.o_metal) + '</label><div id="o-color-wrap">' + orderColorSegHTML() + '</div>' +
+    '<div class="field" style="margin-bottom:2px"><label id="o-color-label">' + colorFieldLabel(S.formState.o_metal) + '</label><div id="o-color-wrap">' + orderColorSegHTML() + '</div>' +
     '<div class="hint">Sets every item. If one item is different, change it in that item\'s box.</div></div>' +
-    '<div class="o-2col">' +
-    '<div class="field" id="o-rate-wrap"><label>Metal rate ₹ / g</label>' + numIn('rate_per_g', 'e.g. 7200', 'o-rate') + '</div>' +
-    '<div class="field"><label id="o-making-label">Making ₹ / g</label>' + numIn('making_per_g', 'e.g. 450') + '</div>' +
-    '</div>' +
-    '<div class="field" style="margin-bottom:2px"><label>Wastage %</label>' + numIn('wastage_pct', 'e.g. 4') + '<div class="hint" id="o-wastage-hint"></div></div>' +
     '</div>' +
 
     '<div id="o-sec-jw">' +
@@ -448,6 +414,7 @@ function renderOrderForm() {
     '<div class="field"><label>Received on</label>' + dateIn('client_metal_on') + '</div>' +
     '</div>' +
     '<div class="field"><label>Purity of their gold</label>' + segHTML('o_jw_purity', PURITY.map((p) => p[0]), S.formState.o_jw_purity) + '</div>' +
+    '<div class="field" style="margin-bottom:2px"><label>Wastage %</label>' + numIn('wastage_pct', 'e.g. 4') + '<div class="hint">Gold used up in making — deducted from the client\'s gold.</div></div>' +
     '<div id="o-jw-ledger"></div>' +
     '</div></div>' +
 
@@ -463,24 +430,10 @@ function renderOrderForm() {
     '<div class="field"><label>Received back (g)</label>' + numIn('karigar_received_g') + '</div>' +
     '<div class="field"><label>Received on</label>' + dateIn('karigar_received_on') + '</div>' +
     '</div>' +
-    '<div class="field" style="margin-bottom:2px"><label>Karigar labour ₹</label>' + numIn('karigar_labour') + '</div>' +
     '<div id="o-kg-ledger"></div>' +
     '</div></div>' +
 
-    '<div class="section-label">Charges</div>' +
-    '<div class="card">' +
-    '<div class="field"><label>GST</label>' + segHTML('o_gst', GST_CHOICES, S.formState.o_gst) + '</div>' +
-    '<div class="o-2col">' +
-    '<div class="field"><label>Discount ₹</label>' + numIn('discount', '0') + '</div>' +
-    '<div class="field" id="o-gst-wrap"' + (gstAdded() ? '' : ' style="display:none"') + '><label>GST %</label>' + numIn('gst_pct', '3', 'o-gst') + '</div>' +
-    '</div><div class="hint" id="o-gst-hint" style="margin-top:-6px' + (gstAdded() ? '' : ';display:none') + '">Usually 3% on a jewellery sale and 5% on job-work labour — confirm with your CA.</div></div>' +
-
     '<div class="card o-totals" id="o-totals"></div>' +
-
-    (isNew ?
-      '<div class="section-label">Advance received (optional)</div>' +
-      '<div class="card"><div class="field"><label>Amount ₹</label>' + numIn('adv_amount', '0') + '</div>' +
-      '<div class="field" style="margin-bottom:2px"><label>Mode</label>' + segHTML('o_pay_mode', PAY_MODES, S.formState.o_pay_mode) + '</div></div>' : '') +
 
     '<div class="section-label">Notes</div>' +
     '<div class="card"><div class="field" style="margin-bottom:0"><textarea data-of="notes" style="min-height:80px" placeholder="Design details, finish, colour of stones, packing, special instructions…">' + fv('notes') + '</textarea></div></div>' +
@@ -534,8 +487,7 @@ function redrawOrderItems() {
       f('gross_wt', 'Gross wt (g)', '0.000', true) +
       f('net_wt', 'Net metal wt (g)', '0.000', true) +
       jewelItemFieldsHTML(it, i, S.formState.o_metal || 'Gold') +
-      f('stone_details', 'Other stones', 'e.g. kundan, emerald drops', false) +
-      f('stone_amount', it.diamond_type ? 'Stones + diamonds ₹' : 'Stone value ₹', '0', true) +
+      f('stone_details', 'Other stones', 'e.g. kundan, emerald drops', false, true) +
       '</div>' +
       '<div class="oi-photo">' + photo + '</div>' +
       '</div>';
@@ -554,16 +506,12 @@ function applyOTypeVisibility() {
   const show = (sel, on) => { const e = $(sel); if (e) e.style.display = on ? '' : 'none'; };
   show('#o-sec-jw', t === 'job_work');
   show('#o-sec-karigar', t === 'job_work' || t === 'custom');
-  show('#o-rate-wrap', t !== 'job_work');
-  const ml = $('#o-making-label'); if (ml) ml.textContent = t === 'job_work' ? 'Labour ₹ / g' : 'Making ₹ / g';
   const hint = $('#o-type-hint');
   if (hint) hint.textContent =
-    t === 'job_work' ? 'The client gives the gold — you charge only making / labour. Record their gold below so the balance is tracked.'
+    t === 'job_work' ? 'The client gives the gold. Record their gold below so the balance is tracked.'
       : t === 'ready_stock' ? 'Pieces from your ready stock. Note the tag number and weight of each piece the client picked.'
-        : t === 'custom' ? 'Made to the client\'s design at your gold rate. Add a reference photo for each item.'
+        : t === 'custom' ? 'Made to the client\'s design. Add a reference photo for each item.'
           : 'Choose one to continue.';
-  const wh = $('#o-wastage-hint');
-  if (wh) wh.textContent = t === 'job_work' ? 'Gold used up in making — deducted from the client\'s gold.' : 'Charged at the metal rate on the net weight.';
 }
 
 function orderRecalcView() {
@@ -573,14 +521,9 @@ function orderRecalcView() {
   const c = orderCalc(o, S.ord.items);
   const row = (k, v, cls) => '<div class="o-lrow' + (cls ? ' ' + cls : '') + '"><span>' + k + '</span><b>' + v + '</b></div>';
   box.innerHTML =
-    row('Net metal weight', grams(c.net) + (c.pcs ? ' · ' + c.pcs + ' pc' + (c.pcs === 1 ? '' : 's') : '')) +
-    (o.order_type !== 'job_work' ? row('Metal value', inr(c.metalValue)) : '') +
-    (c.wastageValue ? row('Wastage', inr(c.wastageValue)) : '') +
-    row(o.order_type === 'job_work' ? 'Labour' : 'Making', inr(c.making)) +
-    (c.stones ? row('Stones', inr(c.stones)) : '') +
-    (num(o.discount) ? row('Discount', '− ' + inr(o.discount)) : '') +
-    (gstAdded() ? row('GST ' + (num(o.gst_pct) || 0) + '%', inr(c.gst)) : row('GST', 'Not added')) +
-    row('Order total', inr(c.total), 'o-total');
+    (c.gross ? row('Gross weight', grams(c.gross)) : '') +
+    (c.ct ? row('Diamonds / stones', carats(c.ct)) : '') +
+    row('Net metal weight', grams(c.net) + (c.pcs ? ' · ' + c.pcs + ' pc' + (c.pcs === 1 ? '' : 's') : ''), 'o-total');
   const jl = $('#o-jw-ledger');
   if (jl) jl.innerHTML = jwLedgerHTML(jwLedger(o, c.net));
   const kl = $('#o-kg-ledger');
@@ -598,13 +541,6 @@ function onOrderInput(e) {
     if (it && JEWEL_TOGGLE_KEYS.indexOf(key) > -1) {
       if (key === 'diamond_type' && !t.value) { it.diamond_ct = ''; it.diamond_pcs = ''; it.diamond_quality = ''; it.diamond_rate = ''; it.diamond_cert_lab = ''; it.diamond_cert_no = ''; }
       redrawOrderItems();
-    } else if (it && (key === 'diamond_ct' || key === 'diamond_rate')) {
-      const v = jewelAutoStoneValue(it);
-      if (v != null) {
-        it.stone_amount = v;
-        const el = document.querySelector('[data-oi="stone_amount"][data-idx="' + idx + '"]');
-        if (el) el.value = v;
-      }
     }
     orderRecalcView();
   } else if (t.dataset.of) {
@@ -620,36 +556,13 @@ function onOrderInput(e) {
       return;
     }
     S.ord.o[t.dataset.of] = t.value;
-    if (t.dataset.of === 'gst_pct') S.ord.gstTouched = true;
     orderRecalcView();
   }
 }
 
 function onSegChange(group) {
   if (!S.ord || !$('#order-form')) return;
-  if (group === 'o_gst') {
-    if (!S.formState.o_gst) {   // tapped again → back to "No GST"
-      S.formState.o_gst = 'No GST';
-      const sw = document.querySelector('[data-group="o_gst"]');
-      if (sw) sw.parentElement.outerHTML = segHTML('o_gst', GST_CHOICES, 'No GST');
-    }
-    try { localStorage.setItem('gst_choice', S.formState.o_gst); } catch (e) { /* private mode */ }
-    if (gstAdded() && !num(S.ord.o.gst_pct)) {
-      S.ord.o.gst_pct = curOType() === 'job_work' ? '5' : '3';
-      const el = $('#o-gst'); if (el) el.value = S.ord.o.gst_pct;
-    }
-    const w = $('#o-gst-wrap'); if (w) w.style.display = gstAdded() ? '' : 'none';
-    const h = $('#o-gst-hint'); if (h) h.style.display = gstAdded() ? '' : 'none';
-  }
-  if (group === 'o_type') {
-    applyOTypeVisibility();
-    const t = curOType();
-    if (!S.ord.gstTouched && t) {
-      const g = t === 'job_work' ? '5' : '3';
-      S.ord.o.gst_pct = g;
-      const el = $('#o-gst'); if (el) el.value = g;
-    }
-  }
+  if (group === 'o_type') applyOTypeVisibility();
   if (group === 'o_metal') {
     const metal = S.formState.o_metal || 'Gold';
     if (!S.formState.o_metal) S.formState.o_metal = 'Gold';
@@ -705,7 +618,6 @@ async function saveOrder(asQuote) {
   const items = S.ord.items.filter(itemHasContent);
   if (!items.length) { toast('Add at least one item.', 'err'); return; }
   const o = formOrderObj();
-  const c = orderCalc(o, items);
   const isNew = !S.ord.id;
   const kg = t !== 'ready_stock';
   const kid = kg ? (o.karigar_id || null) : null;
@@ -717,13 +629,7 @@ async function saveOrder(asQuote) {
     due_date: o.due_date || null,
     metal: o.metal,
     purity: o.purity,
-    rate_per_g: t === 'job_work' ? null : numOrNull(o.rate_per_g),
-    making_per_g: numOrNull(o.making_per_g),
     wastage_pct: numOrNull(o.wastage_pct),
-    discount: round2(num(o.discount)),
-    gst_pct: numOrNull(o.gst_pct),
-    subtotal: c.subtotal,
-    total_amount: c.total,
     client_metal_g: t === 'job_work' ? numOrNull(o.client_metal_g) : null,
     client_metal_purity: t === 'job_work' && numOrNull(o.client_metal_g) != null ? o.client_metal_purity : null,
     client_metal_on: t === 'job_work' ? (o.client_metal_on || null) : null,
@@ -733,7 +639,6 @@ async function saveOrder(asQuote) {
     karigar_issued_on: kg ? (o.karigar_issued_on || null) : null,
     karigar_received_g: kg ? numOrNull(o.karigar_received_g) : null,
     karigar_received_on: kg ? (o.karigar_received_on || null) : null,
-    karigar_labour: kg ? numOrNull(o.karigar_labour) : null,
     notes: String(o.notes || '').trim() || null,
   };
 
@@ -779,7 +684,7 @@ async function saveOrder(asQuote) {
     qty: Math.max(1, parseInt(it.qty, 10) || 1),
     gross_wt: numOrNull(it.gross_wt), net_wt: numOrNull(it.net_wt),
     stone_details: String(it.stone_details || '').trim() || null,
-    stone_amount: round2(num(it.stone_amount)),
+    stone_amount: round2(num(it.stone_amount)),   // not shown any more — keeps an older value
     size: String(it.size || '').trim() || null,
     photo_path: it.photo_path || null,
     catalogue_id: it.catalogue_id || null,
@@ -796,14 +701,6 @@ async function saveOrder(asQuote) {
   // karigar account entries
   if (row.karigar_id || !isNew) await syncOrderKarigarTxns(id, row, ordNo(orderNo) + ' · ' + (S.ord.client.trade_name || ''));
 
-  if (isNew && !asQuote && num(o.adv_amount) > 0) {
-    const { error: pErr } = await db.from('order_payments').insert({
-      order_id: id, amount: round2(num(o.adv_amount)), mode: S.formState.o_pay_mode || null,
-      paid_on: row.order_date, note: 'Advance', created_by: S.me.id,
-    });
-    if (pErr) toast('Order saved, but the advance could not be recorded — add it from the order page.', 'err');
-  }
-
   await db.from('order_updates').insert({
     order_id: id, status: isNew ? status : null,
     note: isNew ? (asQuote ? 'Quotation created' : 'Order created') : 'Details edited', created_by: S.me.id,
@@ -811,7 +708,6 @@ async function saveOrder(asQuote) {
 
   if (!itErr) {
     toast(photoFail ? 'Saved — but a design photo could not be uploaded.' : (isNew ? (asQuote ? 'Quotation saved ✓' : 'Order saved ✓') : 'Saved ✓'), photoFail ? 'err' : 'ok');
-    if (isNew && asQuote && num(o.adv_amount) > 0) toast('Quotation saved — the advance was not recorded (record it after the client confirms).');
   }
   S.ord = null;
   // editing: drop the Edit screen so Back doesn't lead to a stale copy of the order
@@ -851,7 +747,6 @@ function renderOrderPage(o) {
   const flow = statusFlow(o.order_type);
   const idx = flow.indexOf(o.status);
   const next = idx >= 0 && idx < flow.length - 1 ? flow[idx + 1] : null;
-  const bal = balanceOf(o);
   const steps = (o.status === 'cancelled' || quote) ? '' :
     '<div class="o-steps">' + flow.map((s, i) => '<span class="' + (i <= idx ? 'done' : '') + (i === idx ? ' cur' : '') + '">' + esc(OSTATUS_LABEL[s]) + '</span>').join('<i>›</i>') + '</div>';
   const docBtn = (kind, label) => '<button class="btn btn-small btn-secondary" data-action="d-order" data-id="' + o.id + '" data-kind="' + kind + '">' + label + '</button>';
@@ -871,12 +766,9 @@ function renderOrderPage(o) {
     (o.status === 'cancelled' ? '<button class="btn btn-primary" data-action="o-status" data-id="' + o.id + '" data-s="new" style="margin-bottom:10px">Reopen order</button>' : '') +
 
     '<div class="action-row">' +
-    (quote ? '' : '<button class="btn btn-secondary" data-action="o-pay" data-id="' + o.id + '" data-bal="' + bal + '">＋ Payment</button>') +
-    '<button class="btn btn-secondary" data-action="o-share" data-id="' + o.id + '">WhatsApp</button>' +
-    '</div>' +
-    '<div class="action-row">' +
     '<button class="btn btn-secondary" data-action="o-edit" data-id="' + o.id + '">Edit</button>' +
     '<button class="btn btn-secondary" data-action="o-note" data-id="' + o.id + '">＋ Note</button>' +
+    '<button class="btn btn-secondary" data-action="o-share" data-id="' + o.id + '">WhatsApp</button>' +
     '</div>' +
 
     '<div id="o-steps-view"></div>' +
@@ -889,12 +781,11 @@ function renderOrderPage(o) {
     (o.karigar_id && numOrNull(o.karigar_issued_g) != null ? '<button class="btn btn-small btn-secondary" data-action="o-kchallan" data-id="' + o.id + '">Karigar challan</button>' : '') +
     '</div>' +
 
-    '<div class="section-label">Money</div>' +
-    '<div class="card" id="o-money"><div class="empty" style="padding:6px">Loading…</div></div>' +
+    '<div class="section-label">Weight</div>' +
+    '<div class="card" id="o-sum"><div class="empty" style="padding:6px">Loading…</div></div>' +
     '<div id="o-items-view"></div>' +
     '<div id="o-ledgers"></div>' +
     (o.notes ? '<div class="section-label">Notes</div><div class="card" style="white-space:pre-wrap;font-size:14.5px">' + esc(o.notes) + '</div>' : '') +
-    '<div id="o-payments"></div>' +
     '<div id="o-timeline"></div>' +
 
     '<div style="display:flex;gap:10px;justify-content:center;margin:18px 0 6px">' +
@@ -904,35 +795,24 @@ function renderOrderPage(o) {
 }
 
 async function loadOrderDetails(o) {
-  const [ir, pr, ur] = await Promise.all([
+  const [ir, ur] = await Promise.all([
     db.from('order_items').select('*').eq('order_id', o.id).order('sort', { ascending: true }),
-    db.from('order_payments').select('*').eq('order_id', o.id).order('paid_on', { ascending: true }).order('created_at', { ascending: true }),
     db.from('order_updates').select('*').eq('order_id', o.id).order('created_at', { ascending: false }).limit(100),
   ]);
-  if (!$('#o-money')) return;
-  const items = ir.data || [], pays = pr.data || [], ups = ur.data || [];
+  if (!$('#o-sum')) return;
+  const items = ir.data || [], ups = ur.data || [];
   const c = orderCalc(o, items);
-  const bal = balanceOf(o);
-  const quote = o.status === 'quote';
-  const disc = pays.filter((p) => p.mode === 'Discount').reduce((a, p) => a + num(p.amount), 0);
   const row = (k, v, cls) => '<div class="o-lrow' + (cls ? ' ' + cls : '') + '"><span>' + k + '</span><b>' + v + '</b></div>';
+  const silver = o.metal === 'Silver';
 
-  // money
-  $('#o-money').innerHTML =
+  // weights
+  $('#o-sum').innerHTML =
     '<div class="o-ledger" style="margin:0;border:0;padding:0;background:none">' +
-    row('Net metal weight', grams(c.net) + (o.purity ? ' · ' + esc(purityLabel(o.purity)) : '')) +
-    (o.order_type !== 'job_work' && num(o.rate_per_g) ? row('Metal @ ' + inr(o.rate_per_g) + '/g', inr(c.metalValue)) : '') +
-    (c.wastageValue ? row('Wastage ' + num(o.wastage_pct) + '%', inr(c.wastageValue)) : '') +
-    (num(o.making_per_g) ? row((o.order_type === 'job_work' ? 'Labour' : 'Making') + ' @ ' + inr(o.making_per_g) + '/g', inr(c.making)) : '') +
-    (c.stones ? row('Stones', inr(c.stones)) : '') +
-    (num(o.discount) ? row('Discount', '− ' + inr(o.discount)) : '') +
-    (num(o.gst_pct) ? row('GST ' + num(o.gst_pct) + '%', inr(c.gst)) : '') +
-    row(quote ? 'Quoted total' : 'Order total', inr(o.total_amount), 'o-total') +
-    (quote ? '' :
-      row('Received', inr(num(o.paid_amount) - disc)) +
-      (disc ? row('Settlement discount', '− ' + inr(disc)) : '') +
-      row('Balance due', inr(bal), bal > 0 ? 'o-due' : 'o-paid') +
-      (num(o.paid_amount) - num(o.total_amount) >= 1 ? row('Extra received (refund / adjust)', inr(num(o.paid_amount) - num(o.total_amount)), 'o-due') : '')) +
+    row('Net metal weight', grams(c.net) + (o.purity ? ' · ' + esc(purityLabel(o.purity)) : ''), 'o-total') +
+    (o.purity && c.net ? row(silver ? 'Fine silver' : 'Fine gold', grams(c.net * num(o.purity) / 100)) : '') +
+    (c.gross ? row('Gross weight', grams(c.gross)) : '') +
+    (c.pcs ? row('Pieces', String(c.pcs)) : '') +
+    (c.ct ? row('Diamonds / stones', carats(c.ct)) : '') +
     '</div>';
 
   // items
@@ -954,10 +834,7 @@ async function loadOrderDetails(o) {
         (it.description ? '<div class="o-item-desc">' + esc(it.description) + '</div>' : '') +
         (bits.length ? '<div class="o-item-meta">' + bits.join(' · ') + '</div>' : '') +
         jewelMetaHTML(it, o.metal) +
-        (it.diamond_type
-          ? (it.stone_details ? '<div class="o-item-meta">Other stones: ' + esc(it.stone_details) + '</div>' : '') +
-            (num(it.stone_amount) ? '<div class="o-item-meta">Stones + diamonds: ' + inr(it.stone_amount) + '</div>' : '')
-          : (it.stone_details || num(it.stone_amount) ? '<div class="o-item-meta">Stones: ' + esc(it.stone_details || '') + (num(it.stone_amount) ? (it.stone_details ? ' — ' : '') + inr(it.stone_amount) : '') + '</div>' : '')) +
+        (it.stone_details ? '<div class="o-item-meta">' + (it.diamond_type ? 'Other stones: ' : 'Stones: ') + esc(it.stone_details) + '</div>' : '') +
         (it.catalogue_id ? '<div class="o-item-meta"><a href="#" data-action="cat-open" data-id="' + it.catalogue_id + '">Catalogue piece ›</a></div>' : '') +
         '</div></div>';
     }).join('') : '<div class="empty" style="padding:10px">No items — tap Edit to add them.</div>');
@@ -971,15 +848,6 @@ async function loadOrderDetails(o) {
       (led ? '<div class="o-lrow"><span>Received' + (o.client_metal_on ? ' · ' + esc(fmtD(o.client_metal_on)) : '') + '</span><b>' + grams(o.client_metal_g) + ' · ' + esc(purityLabel(o.client_metal_purity)) + '</b></div>' + jwLedgerHTML(led)
         : '<div class="empty" style="padding:6px">Client\'s gold not recorded yet — tap Edit.</div>') + '</div>' : '') +
     (kgH ? '<div class="section-label">Karigar</div><div class="card">' + kgH + '</div>' : '');
-
-  // payments
-  const pv = $('#o-payments');
-  if (pv) pv.innerHTML = quote ? '' : '<div class="section-label">Payments</div>' +
-    (pays.length ? '<div class="card">' + pays.map((p) =>
-      '<div class="o-pay-row"><div style="flex:1;min-width:0"><b>' + inr(p.amount) + '</b>' + (p.mode ? ' <span class="chip chip-cat">' + esc(p.mode) + '</span>' : '') +
-      '<div class="o-item-meta">' + esc(fmtD(p.paid_on)) + (p.note ? ' · ' + esc(p.note) : '') + ' · ' + esc(nameOf(p.created_by)) + '</div></div>' +
-      '<button class="fu-x" data-action="o-pay-del" data-id="' + p.id + '" data-order="' + o.id + '" aria-label="Remove payment">✕</button></div>').join('') + '</div>'
-      : '<div class="empty" style="padding:10px">No payment recorded yet.</div>');
 
   // timeline
   const tv = $('#o-timeline');
@@ -1009,11 +877,9 @@ async function setOrderStatus(id, s) {
     const taken = await piecesTaken(id);
     if (taken.length) { warnPiecesTaken(taken, 'Reopen anyway', go); return; }
   }
-  const bal = balanceOf(o);
   if (s === 'cancelled') confirmModal(o.status === 'quote' ? 'Client declined?' : 'Cancel this order?',
     o.status === 'quote' ? 'The quotation will be marked Cancelled. You can reopen it later.' : 'It stays on record as Cancelled. You can reopen it later.',
     o.status === 'quote' ? 'Mark declined' : 'Cancel order', go, true);
-  else if (s === 'delivered' && bal > 0) confirmModal('Balance still due', inr(bal) + ' is still unpaid on this order. Mark it delivered anyway?', 'Mark delivered', go);
   else go();
 }
 
@@ -1041,32 +907,6 @@ async function doConvertQuote(id) {
   await syncCatalogueForOrder(id, 'new');
   toast('Quotation converted to an order ✓', 'ok');
   openOrder(id, true);
-}
-
-function openPayModal(orderId, bal) {
-  const ov = openModal(
-    '<h3>Add payment</h3><p>' + (bal > 0 ? 'Balance due: <b>' + inr(bal) + '</b>' : 'This order is fully paid.') + '</p>' +
-    '<div class="field"><label>Amount ₹</label><input type="text" inputmode="decimal" id="op-amt" value="' + (bal > 0 ? Math.round(bal) : '') + '"></div>' +
-    '<div class="o-2col">' +
-    '<div class="field"><label>Mode</label><select id="op-mode">' + PAY_MODES.map((m) => '<option value="' + m + '">' + m + '</option>').join('') + '</select></div>' +
-    '<div class="field"><label>Date</label><input type="date" id="op-date" value="' + todayStr() + '"></div>' +
-    '</div>' +
-    '<div class="field"><label>Note (optional)</label><input type="text" id="op-note" placeholder="e.g. UPI ref. / cheque no."></div>' +
-    '<div class="modal-actions"><button class="btn btn-secondary" data-m="no">Cancel</button><button class="btn btn-primary" data-m="yes">Save payment</button></div>');
-  ov.querySelector('[data-m=no]').onclick = closeModal;
-  ov.querySelector('[data-m=yes]').onclick = async (e) => {
-    const amt = num($('#op-amt').value);
-    if (!(amt > 0)) { toast('Enter the amount received.', 'err'); return; }
-    e.target.disabled = true;
-    const { error } = await db.from('order_payments').insert({
-      order_id: orderId, amount: round2(amt), mode: $('#op-mode').value, paid_on: $('#op-date').value || todayStr(),
-      note: $('#op-note').value.trim() || null, created_by: S.me.id,
-    });
-    if (error) { e.target.disabled = false; toast('Could not save — try again.', 'err'); return; }
-    closeModal();
-    toast('Payment of ' + inr(amt) + ' recorded ✓', 'ok');
-    openOrder(orderId, true);
-  };
 }
 
 function openNoteModal(orderId) {
@@ -1111,11 +951,8 @@ async function shareOrderWhatsApp(id) {
     lines.push('');
     lines.push('Your gold received: ' + grams(o.client_metal_g) + (o.client_metal_purity ? ' (' + purityLabel(o.client_metal_purity) + ')' : ''));
   }
-  lines.push('');
-  if (num(o.total_amount)) lines.push((quote ? 'Estimated total: ' : 'Total: ') + inr(o.total_amount));
-  if (!quote && num(o.paid_amount)) lines.push('Received: ' + inr(o.paid_amount));
-  if (!quote && num(o.total_amount)) lines.push('*Balance: ' + inr(balanceOf(o)) + '*');
-  if (quote) lines.push('Final price as per the ' + (o.metal === 'Silver' ? 'silver' : 'gold') + ' rate on the day of delivery.');
+  const c = orderCalc(o, items || []);
+  if (c.net) lines.push('Total net weight: ' + grams(c.net) + (o.purity ? ' (' + purityLabel(o.purity) + ')' : ''));
   lines.push('');
   lines.push('Thank you!');
   window.open(waUrl(cl.mobile, lines.join('\n')), '_blank');
@@ -1125,7 +962,7 @@ async function deleteOrder(id) {
   const o = await fetchOrder(id);
   if (!o) return;
   confirmModal(o.status === 'quote' ? 'Delete this quotation?' : 'Delete this order?',
-    'It will be removed permanently with its items, payments and history. To keep a record, use “' + (o.status === 'quote' ? 'Client declined' : 'Cancel order') + '” instead.', 'Delete', async () => {
+    'It will be removed permanently with its items and history. To keep a record, use “' + (o.status === 'quote' ? 'Client declined' : 'Cancel order') + '” instead.', 'Delete', async () => {
     if (HOLDING_STATUSES.indexOf(o.status) > -1) await syncCatalogueForOrder(id, 'cancelled');
     await db.from('karigar_txns').delete().eq('order_id', id).eq('auto', true);
     const { error } = await db.from('orders').delete().eq('id', id);
@@ -1164,15 +1001,6 @@ async function onOrderAction(a, el) {
   else if (a === 'o-status') setOrderStatus(el.dataset.id, el.dataset.s);
   else if (a === 'o-convert') convertQuote(el.dataset.id);
   else if (a === 'o-edit') startEditOrder(el.dataset.id);
-  else if (a === 'o-pay') openPayModal(el.dataset.id, num(el.dataset.bal));
-  else if (a === 'o-pay-del') {
-    confirmModal('Remove this payment?', 'The balance on the order will go back up by this amount.', 'Remove', async () => {
-      const { error } = await db.from('order_payments').delete().eq('id', el.dataset.id);
-      if (error) { toast('Could not remove — try again.', 'err'); return; }
-      toast('Payment removed', 'ok');
-      openOrder(el.dataset.order, true);
-    }, true);
-  }
   else if (a === 'o-note') openNoteModal(el.dataset.id);
   else if (a === 'o-share') shareOrderWhatsApp(el.dataset.id);
   else if (a === 'o-delete') deleteOrder(el.dataset.id);
@@ -1186,17 +1014,14 @@ async function onOrderAction(a, el) {
 async function loadClientOrders(cl) {
   const el = $('#client-orders');
   if (!el) return;
-  const { data, error } = await db.from('orders').select('id, order_no, order_type, status, order_date, due_date, total_amount, paid_amount')
+  const { data, error } = await db.from('orders').select('id, order_no, order_type, status, order_date, due_date')
     .eq('client_id', cl.id).order('order_date', { ascending: false }).limit(100);
   if (!$('#client-orders')) return;
   if (error) { el.innerHTML = ''; return; }
   const rows = data || [];
   if (!rows.length) { el.innerHTML = ''; return; }
-  const due = rows.filter(isLive).reduce((a, o) => a + balanceOf(o), 0);
   const open = rows.filter((o) => isOpenStatus(o.status)).length;
-  el.innerHTML = '<div class="section-label sl-row"><span>Orders (' + rows.length + ')' +
-    (open ? ' · ' + open + ' open' : '') + (due > 0 ? ' · <span class="o-red">' + inr(due) + ' due</span>' : '') + '</span>' +
-    '<a href="#" data-action="lg-open" data-id="' + cl.id + '">Ledger ›</a></div>' +
+  el.innerHTML = '<div class="section-label">Orders (' + rows.length + ')' + (open ? ' · ' + open + ' open' : '') + '</div>' +
     rows.map((o) => orderListItemHTML(o, false)).join('');
 }
 
@@ -1204,7 +1029,7 @@ async function loadClientOrders(cl) {
 async function loadTodayOrders() {
   const el = $('#today-orders');
   if (!el) return;
-  const { data, error } = await db.from('orders').select('id, order_no, order_type, status, order_date, due_date, total_amount, paid_amount, clients(trade_name)')
+  const { data, error } = await db.from('orders').select('id, order_no, order_type, status, order_date, due_date, clients(trade_name)')
     .in('status', OPEN_STATUSES).not('due_date', 'is', null).lte('due_date', todayStr(3))
     .order('due_date', { ascending: true }).limit(30);
   if (!$('#today-orders') || error || !data || !data.length) return;
@@ -1220,11 +1045,11 @@ async function loadReportOrders(period) {
   const el = $('#report-orders');
   if (!el) return;
   const start = periodStartDate(period);
-  let q = db.from('orders').select('order_type, status, total_amount, paid_amount, created_by').limit(5000);
+  let q = db.from('orders').select('order_type, status, created_by').limit(5000);
   if (start) q = q.gte('order_date', start);
-  const [r, dueR] = await Promise.all([
+  const [r, payRows] = await Promise.all([
     q,
-    db.from('orders').select('total_amount, paid_amount').in('status', ['new', 'in_production', 'ready', 'delivered']).limit(5000),
+    typeof payAllEntries === 'function' ? payAllEntries().catch(() => []) : Promise.resolve([]),
   ]);
   if (!$('#report-orders')) return;
   if (r.error) { el.innerHTML = ''; return; }
@@ -1232,9 +1057,7 @@ async function loadReportOrders(period) {
   const rows = all.filter(isLive);
   const cancelled = all.filter((o) => o.status === 'cancelled').length;
   const quotes = all.filter((o) => o.status === 'quote');
-  const value = rows.reduce((a, o) => a + num(o.total_amount), 0);
-  const recd = rows.reduce((a, o) => a + num(o.paid_amount), 0);
-  const allDue = (dueR.data || []).reduce((a, o) => a + balanceOf(o), 0);
+  const PG = typeof payDueGroups === 'function' ? payDueGroups(payIndex(payRows)) : { all: [], late: [] };
   const byType = { job_work: 0, ready_stock: 0, custom: 0 };
   const byStatus = { new: 0, in_production: 0, ready: 0, delivered: 0 };
   const byExec = new Map();
@@ -1248,8 +1071,8 @@ async function loadReportOrders(period) {
     '<div class="section-label">Orders ' + esc(periodLabel(period)) + '</div>' +
     '<div class="stat-row">' +
     '<div class="stat"><div class="st-num">' + rows.length + '</div><div class="st-label">Orders</div></div>' +
-    '<div class="stat"><div class="st-num o-num-sm">' + inr(value) + '</div><div class="st-label">Order value</div></div>' +
-    '<div class="stat"><div class="st-num o-num-sm">' + inr(recd) + '</div><div class="st-label">Received</div></div>' +
+    '<div class="stat"><div class="st-num">' + (byStatus.new + byStatus.in_production + byStatus.ready) + '</div><div class="st-label">Open</div></div>' +
+    '<div class="stat"><div class="st-num">' + byStatus.delivered + '</div><div class="st-label">Delivered</div></div>' +
     '</div>' +
     '<div class="brk-row">' + tchip('job_work') + tchip('ready_stock') + tchip('custom') + '</div>' +
     '<div class="brk-row">' + ['new', 'in_production', 'ready', 'delivered'].map((s) =>
@@ -1258,7 +1081,8 @@ async function loadReportOrders(period) {
     (quotes.length ? '<button class="brk-chip" data-action="o-goto" data-s="quote">Quotations <b>' + quotes.length + '</b></button>' : '') + '</div>' +
     (byExec.size ? '<div class="brk-row">' + Array.from(byExec.entries()).sort((a, b) => b[1] - a[1]).map((e) =>
       '<span class="brk-chip" style="cursor:default">' + esc(nameOf(e[0])) + ' <b>' + e[1] + '</b></span>').join('') + '</div>' : '') +
-    '<div class="notice" style="margin-top:8px">Balance due on all open and delivered orders: <b>' + inr(allDue) + '</b> · <a href="#" data-action="dues-open">See who owes ›</a></div>';
+    (PG.all.length ? '<div class="notice" style="margin-top:8px">Payments due: <b>' + PG.all.length + '</b>' +
+      (PG.late.length ? ' · <span class="o-red">' + PG.late.length + ' overdue</span>' : '') + ' · <a href="#" data-action="dues-open">See who ›</a></div>' : '');
 }
 
 /* extra CSV files for Export */
@@ -1266,31 +1090,26 @@ async function exportOrdersData(pName, cName, today) {
   const results = await Promise.all([
     fetchAll('orders', 'created_at'),
     fetchAll('order_items', 'created_at'),
-    fetchAll('order_payments', 'created_at'),
   ]);
-  const orders = results[0], items = results[1], pays = results[2];
+  const orders = results[0], items = results[1];
   const oNo = new Map(orders.map((o) => [o.id, ordNo(o.order_no)]));
   const oClient = new Map(orders.map((o) => [o.id, cName.get(o.client_id) || '']));
   await new Promise((r) => setTimeout(r, 450));
   downloadFile('bj-orders-' + today + '.csv', buildCsv(
-    ['Order no', 'Client', 'Type', 'Status', 'Order date', 'Delivery by', 'Delivered on', 'Metal', 'Purity', 'Rate / g', 'Making / g', 'Wastage %',
-      'Discount', 'GST %', 'Subtotal', 'Total', 'Received', 'Balance', 'Client gold (g)', 'Client gold purity', 'Client gold on',
-      'Karigar', 'Issued to karigar (g)', 'Issued on', 'Received from karigar (g)', 'Received on', 'Karigar labour', 'Notes', 'Created by', 'Created on'],
+    ['Order no', 'Client', 'Type', 'Status', 'Order date', 'Delivery by', 'Delivered on', 'Metal', 'Purity', 'Wastage %',
+      'Client gold (g)', 'Client gold purity', 'Client gold on',
+      'Karigar', 'Issued to karigar (g)', 'Issued on', 'Received from karigar (g)', 'Received on', 'Notes', 'Created by', 'Created on'],
     orders.map((o) => [ordNo(o.order_no), cName.get(o.client_id) || '', OTYPE_LABEL[o.order_type], OSTATUS_LABEL[o.status], o.order_date, o.due_date || '',
-      o.delivered_on || '', o.metal, o.purity, o.rate_per_g, o.making_per_g, o.wastage_pct, o.discount, o.gst_pct, o.subtotal, o.total_amount, o.paid_amount,
-      isLive(o) ? balanceOf(o) : '', o.client_metal_g, o.client_metal_purity, o.client_metal_on || '', o.karigar_name, o.karigar_issued_g, o.karigar_issued_on || '',
-      o.karigar_received_g, o.karigar_received_on || '', o.karigar_labour, o.notes, pName.get(o.created_by) || '', fmtExp(o.created_at)])));
+      o.delivered_on || '', o.metal, o.purity, o.wastage_pct,
+      o.client_metal_g, o.client_metal_purity, o.client_metal_on || '', o.karigar_name, o.karigar_issued_g, o.karigar_issued_on || '',
+      o.karigar_received_g, o.karigar_received_on || '', o.notes, pName.get(o.created_by) || '', fmtExp(o.created_at)])));
   await new Promise((r) => setTimeout(r, 450));
   downloadFile('bj-order-items-' + today + '.csv', buildCsv(
     ['Order no', 'Client', '#', 'Piece', 'Tag / design no', 'Description', 'Qty', 'Gross wt (g)', 'Net wt (g)', 'Colour / finish',
-      'Diamonds / stones', 'Carats', 'Diamond pcs', 'Diamond quality', 'Rate per ct', 'Diamond certificate', 'Diamond cert no',
-      'Jewellery certificate', 'Jewellery cert / HUID no', 'Other stones', 'Stone value', 'Size'],
+      'Diamonds / stones', 'Carats', 'Diamond pcs', 'Diamond quality', 'Diamond certificate', 'Diamond cert no',
+      'Jewellery certificate', 'Jewellery cert / HUID no', 'Other stones', 'Size'],
     items.map((it) => [oNo.get(it.order_id) || '', oClient.get(it.order_id) || '', it.sort + 1, it.category, it.design_code, it.description, it.qty,
-      it.gross_wt, it.net_wt, it.metal_color, diamondLabel(it.diamond_type), it.diamond_ct, it.diamond_pcs, it.diamond_quality, it.diamond_rate,
+      it.gross_wt, it.net_wt, it.metal_color, diamondLabel(it.diamond_type), it.diamond_ct, it.diamond_pcs, it.diamond_quality,
       it.diamond_type ? (it.diamond_cert_lab || 'Not certified') : '', it.diamond_cert_no, it.jewel_cert_type || '', it.jewel_cert_no,
-      it.stone_details, it.stone_amount, it.size])));
-  await new Promise((r) => setTimeout(r, 450));
-  downloadFile('bj-order-payments-' + today + '.csv', buildCsv(
-    ['Order no', 'Client', 'Date', 'Amount', 'Mode', 'Note', 'Recorded by'],
-    pays.map((p) => [oNo.get(p.order_id) || '', oClient.get(p.order_id) || '', p.paid_on, p.amount, p.mode, p.note, pName.get(p.created_by) || ''])));
+      it.stone_details, it.size])));
 }

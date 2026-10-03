@@ -123,12 +123,7 @@ function renderCatItem(it) {
   add('Net metal weight', it.net_wt != null ? grams(it.net_wt) : '');
   add('Diamonds / stones', esc(diamondLine(it)));
   add('Jewellery certificate', esc(jewelCertLine(it)));
-  if (it.diamond_type) {
-    add('Other stones', esc(it.stone_details || ''));
-    add('Stones + diamonds', num(it.stone_amount) ? inr(it.stone_amount) : '');
-  } else add('Stones', esc(it.stone_details || '') + (num(it.stone_amount) ? (it.stone_details ? ' — ' : '') + inr(it.stone_amount) : ''));
-  add('Making', num(it.making_per_g) ? inr(it.making_per_g) + ' / g' : '');
-  add('Wastage', num(it.wastage_pct) ? num(it.wastage_pct) + '%' : '');
+  add(it.diamond_type ? 'Other stones' : 'Stones', esc(it.stone_details || ''));
   add('Added by', esc(nameOf(it.created_by)) + ' · ' + fmtD(it.created_at));
   const photos = it.photo_paths || [];
   $('#content').innerHTML =
@@ -196,15 +191,12 @@ function renderCatForm(existing) {
     '<div class="o-2col">' +
     '<div class="field"><label>Gross wt (g)</label><input type="text" inputmode="decimal" id="cf-gross" value="' + v('gross_wt') + '" placeholder="0.000"></div>' +
     '<div class="field"><label>Net metal wt (g)</label><input type="text" inputmode="decimal" id="cf-net" value="' + v('net_wt') + '" placeholder="0.000"></div>' +
-    '<div class="field"><label>Other stones</label><input type="text" id="cf-stones" value="' + v('stone_details') + '" placeholder="e.g. kundan, emerald drops"></div>' +
-    '<div class="field"><label>Stones + diamonds ₹</label><input type="text" inputmode="decimal" id="cf-stoneamt" value="' + (num(e.stone_amount) ? v('stone_amount') : '') + '" placeholder="0"></div>' +
-    '<div class="field"><label>Making ₹ / g</label><input type="text" inputmode="decimal" id="cf-making" value="' + v('making_per_g') + '" placeholder="e.g. 450"></div>' +
-    '<div class="field"><label>Wastage %</label><input type="text" inputmode="decimal" id="cf-wastage" value="' + v('wastage_pct') + '" placeholder="e.g. 4"></div>' +
     '</div>' +
+    '<div class="field"><label>Other stones</label><input type="text" id="cf-stones" value="' + v('stone_details') + '" placeholder="e.g. kundan, emerald drops"></div>' +
     '</div>' +
     '<div class="section-label">Diamonds &amp; certificate</div>' +
     '<div class="card"><div class="oi-grid" id="cf-jewel"></div>' +
-    '<div class="field" style="margin:12px 0 2px"><label>Notes (team only)</label><textarea id="cf-notes" style="min-height:60px" placeholder="Where it is kept, supplier, cost…">' + v('notes') + '</textarea></div>' +
+    '<div class="field" style="margin:12px 0 2px"><label>Notes (team only)</label><textarea id="cf-notes" style="min-height:60px" placeholder="Where it is kept, supplier…">' + v('notes') + '</textarea></div>' +
     '</div>' +
     '<button class="btn btn-primary" data-action="cat-save" id="cf-save">' + (e.id ? 'Save changes' : 'Save design') + '</button>' +
     '<div style="height:10px"></div></div>';
@@ -227,9 +219,6 @@ function onCatJewelInput(e) {
   if (JEWEL_TOGGLE_KEYS.indexOf(k) > -1) {
     if (k === 'diamond_type' && !e.target.value) Object.assign(j, { diamond_ct: '', diamond_pcs: '', diamond_quality: '', diamond_rate: '', diamond_cert_lab: '', diamond_cert_no: '' });
     drawCatJewel();
-  } else if (k === 'diamond_ct' || k === 'diamond_rate') {
-    const v = jewelAutoStoneValue(j);
-    if (v != null && $('#cf-stoneamt')) $('#cf-stoneamt').value = v;
   }
 }
 
@@ -274,8 +263,7 @@ async function saveCatItem() {
     description: $('#cf-desc').value.trim() || null,
     metal: S.formState.cf_metal || 'Gold', purity: purityVal(S.formState.cf_purity),
     gross_wt: numOrNull($('#cf-gross').value), net_wt: numOrNull($('#cf-net').value),
-    stone_details: $('#cf-stones').value.trim() || null, stone_amount: round2(num($('#cf-stoneamt').value)),
-    making_per_g: numOrNull($('#cf-making').value), wastage_pct: numOrNull($('#cf-wastage').value),
+    stone_details: $('#cf-stones').value.trim() || null,
     notes: $('#cf-notes').value.trim() || null,
   };
   Object.assign(row, jewelRow(F.j || {}));
@@ -407,7 +395,7 @@ function catToItem(c) {
   return Object.assign(blankItem(), jewelForm(c), {
     category: c.category || '', description: [c.title, c.description].filter(Boolean).join(' — '), design_code: c.tag_no || '', qty: '1',
     gross_wt: c.gross_wt != null ? String(c.gross_wt) : '', net_wt: c.net_wt != null ? String(c.net_wt) : '',
-    stone_details: c.stone_details || '', stone_amount: num(c.stone_amount) ? String(c.stone_amount) : '',
+    stone_details: c.stone_details || '',
     catalogue_id: c.id, cat_photo: (c.photo_paths || [])[0] || null,
   });
 }
@@ -421,8 +409,6 @@ function addCatItemsToOrder(list) {
   if (!S.ord.items.length) S.ord.items.push(blankItem());
   const f = fresh[0];
   if (f) {
-    if (!num(S.ord.o.making_per_g) && num(f.making_per_g)) S.ord.o.making_per_g = String(num(f.making_per_g));
-    if (!num(S.ord.o.wastage_pct) && num(f.wastage_pct)) S.ord.o.wastage_pct = String(num(f.wastage_pct));
     if (f.metal) S.formState.o_metal = f.metal;
     if (f.purity && purityKey(f.purity)) S.formState.o_purity = purityKey(f.purity);
     if (purityOptions(S.formState.o_metal || 'Gold').indexOf(S.formState.o_purity) === -1) S.formState.o_purity = defaultPurity(S.formState.o_metal || 'Gold');
@@ -462,11 +448,11 @@ async function exportCatalogueData(pName, today) {
   await new Promise((r) => setTimeout(r, 450));
   downloadFile('bj-catalogue-' + today + '.csv', buildCsv(
     ['Tag no', 'Piece', 'Design name', 'Description', 'Metal', 'Purity', 'Colour / finish', 'Gross wt (g)', 'Net wt (g)', 'Diamonds / stones', 'Carats', 'Diamond pcs',
-      'Diamond quality', 'Rate per ct', 'Diamond certificate', 'Diamond cert no', 'Jewellery certificate', 'Jewellery cert / HUID no',
-      'Other stones', 'Stone value', 'Making / g', 'Wastage %', 'Status', 'Photos', 'Notes', 'Added by', 'Added on'],
+      'Diamond quality', 'Diamond certificate', 'Diamond cert no', 'Jewellery certificate', 'Jewellery cert / HUID no',
+      'Other stones', 'Status', 'Photos', 'Notes', 'Added by', 'Added on'],
     rows.map((c) => [c.tag_no, c.category, c.title, c.description, c.metal, c.purity, c.metal_color, c.gross_wt, c.net_wt, diamondLabel(c.diamond_type), c.diamond_ct, c.diamond_pcs,
-      c.diamond_quality, c.diamond_rate, c.diamond_type ? (c.diamond_cert_lab || 'Not certified') : '', c.diamond_cert_no, c.jewel_cert_type || '', c.jewel_cert_no,
-      c.stone_details, c.stone_amount, c.making_per_g, c.wastage_pct,
+      c.diamond_quality, c.diamond_type ? (c.diamond_cert_lab || 'Not certified') : '', c.diamond_cert_no, c.jewel_cert_type || '', c.jewel_cert_no,
+      c.stone_details,
       CAT_STATUS_LABEL[c.status] || c.status, (c.photo_paths || []).length, c.notes, pName.get(c.created_by) || '', fmtExp(c.created_at)])));
 }
 

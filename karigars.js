@@ -1,7 +1,8 @@
 /* ============================================================
-   KARIGAR ACCOUNTS — gold / silver issued, received back, wastage
-   allowed, labour and payments, per karigar. Entries made from an
-   order's karigar section appear here automatically.
+   KARIGAR ACCOUNTS — gold / silver issued, received back and
+   wastage allowed, per karigar. Entries made from an order's
+   karigar section appear here automatically. No money here
+   (older labour / payment entries stay in the database, hidden).
    Balance (per metal) = fine issued − fine received − wastage allowed.
    Gold and silver are always kept apart.
    ============================================================ */
@@ -18,23 +19,23 @@ async function loadKarigars() {
 
 function txnMetal(t) { return t && t.metal === 'Silver' ? 'Silver' : 'Gold'; }
 
+/* metal entries only (issue / receive / wastage) — older labour and payment entries are left out */
+function isMetalTxn(t) { return KTXN_SIGN[t.kind] != null; }
+
 /* gold: b.issued / b.received / b.wastage / b.gold · silver: b.Silver.{issued, received, wastage, bal} */
 function karigarBalances(txns) {
   const z = () => ({ issued: 0, received: 0, wastage: 0, bal: 0 });
-  const b = { Gold: z(), Silver: z(), labour: 0, paid: 0, payable: 0 };
+  const b = { Gold: z(), Silver: z() };
   (txns || []).forEach((t) => {
     const f = num(t.fine_g), m = b[txnMetal(t)];
     if (t.kind === 'issue') m.issued += f;
     else if (t.kind === 'receive') m.received += f;
     else if (t.kind === 'wastage') m.wastage += f;
-    else if (t.kind === 'labour') b.labour += num(t.amount);
-    else if (t.kind === 'payment') b.paid += num(t.amount);
   });
   ['Gold', 'Silver'].forEach((k) => { const m = b[k]; m.bal = m.issued - m.received - m.wastage; });
   b.issued = b.Gold.issued; b.received = b.Gold.received; b.wastage = b.Gold.wastage; b.gold = b.Gold.bal;
   b.silver = b.Silver.bal;
   b.hasSilver = (b.Silver.issued + b.Silver.received + b.Silver.wastage) > 0.0005;
-  b.payable = b.labour - b.paid;
   return b;
 }
 
@@ -44,7 +45,7 @@ async function karigarData(id) {
     db.from('karigar_txns').select('*, orders(order_no)').eq('karigar_id', id)
       .order('txn_date', { ascending: false }).order('created_at', { ascending: false }).limit(3000),
   ]);
-  const txns = tr.data || [];
+  const txns = (tr.data || []).filter(isMetalTxn);
   return { k: kr.data || null, txns, bal: karigarBalances(txns) };
 }
 
@@ -54,7 +55,7 @@ async function renderKarigars() {
   c.innerHTML = '<button class="btn btn-primary" data-action="k-new" style="margin-bottom:12px">＋ Add karigar</button><div id="k-list">' + loadingHTML() + '</div>';
   const [kr, tr] = await Promise.all([
     db.from('karigars').select('*').order('name', { ascending: true }),
-    db.from('karigar_txns').select('karigar_id, kind, metal, fine_g, amount').limit(20000),
+    db.from('karigar_txns').select('karigar_id, kind, metal, fine_g').in('kind', ['issue', 'receive', 'wastage']).limit(20000),
   ]);
   const box = $('#k-list');
   if (!box) return;
@@ -66,7 +67,6 @@ async function renderKarigars() {
     .sort((a, b) => (b.k.active - a.k.active) || (b.b.gold - a.b.gold) || a.k.name.localeCompare(b.k.name));
   const totGold = list.reduce((a, x) => a + Math.max(0, x.b.gold), 0);
   const totSilver = list.reduce((a, x) => a + Math.max(0, x.b.silver), 0);
-  const totPay = list.reduce((a, x) => a + Math.max(0, x.b.payable), 0);
   if (!list.length) {
     box.innerHTML = '<div class="empty"><div class="big">🔨</div>No karigars yet.<br>Add the people who make your jewellery to track the gold you give them.</div>';
     return;
@@ -75,7 +75,6 @@ async function renderKarigars() {
     '<div class="stat-row">' +
     '<div class="stat"><div class="st-num o-num-sm">' + grams(totGold) + '</div><div class="st-label">Fine gold with karigars</div></div>' +
     (totSilver > 0.0005 ? '<div class="stat"><div class="st-num o-num-sm">' + grams(totSilver) + '</div><div class="st-label">Fine silver with karigars</div></div>' : '') +
-    '<div class="stat"><div class="st-num o-num-sm">' + inr(totPay) + '</div><div class="st-label">Labour payable</div></div>' +
     '</div><div style="height:8px"></div>' +
     list.map((x) =>
       '<div class="list-item" data-action="k-open" data-id="' + x.k.id + '">' +
@@ -84,7 +83,6 @@ async function renderKarigars() {
       '<div class="li-chips">' +
       (Math.abs(x.b.gold) > 0.0005 ? '<span class="chip chip-type">Gold ' + grams(x.b.gold) + '</span>' : '<span class="chip chip-cat">Gold settled</span>') +
       (Math.abs(x.b.silver) > 0.0005 ? '<span class="chip chip-type">Silver ' + grams(x.b.silver) + '</span>' : '') +
-      (x.b.payable >= 1 ? '<span class="chip chip-hot">Labour due ' + inr(x.b.payable) + '</span>' : '') +
       '</div></div><div style="color:var(--muted)">›</div></div>').join('');
 }
 
@@ -111,11 +109,9 @@ function renderKarigarPage(K) {
     '<div class="lg-nums">' +
     '<div class="' + (b.gold > 0.0005 ? 'due' : 'clear') + '"><span>Fine gold with karigar</span><b>' + grams(b.gold) + '</b></div>' +
     (b.hasSilver ? '<div class="' + (b.silver > 0.0005 ? 'due' : 'clear') + '"><span>Fine silver with karigar</span><b>' + grams(b.silver) + '</b></div>' : '') +
-    '<div class="' + (b.payable >= 1 ? 'due' : 'clear') + '"><span>Labour payable</span><b>' + inr(b.payable) + '</b></div>' +
     '</div></div>' +
 
-    '<div class="k-actions">' + btn('issue', '＋ Issue') + btn('receive', '＋ Receive back') + btn('wastage', '＋ Wastage') +
-    btn('labour', '＋ Labour') + btn('payment', '＋ Payment') + '</div>' +
+    '<div class="k-actions">' + btn('issue', '＋ Issue') + btn('receive', '＋ Receive back') + btn('wastage', '＋ Wastage') + '</div>' +
 
     '<div class="action-row">' +
     '<button class="btn btn-secondary" data-action="d-karigar" data-id="' + k.id + '">Statement PDF</button>' +
@@ -132,18 +128,12 @@ function renderKarigarPage(K) {
       '<div class="o-lrow"><span>Fine silver received back</span><b>' + grams(b.Silver.received) + '</b></div>' +
       (b.Silver.wastage > 0.0005 ? '<div class="o-lrow"><span>Silver wastage allowed</span><b>' + grams(b.Silver.wastage) + '</b></div>' : '') +
       '<div class="o-lrow o-total"><span>Silver with karigar</span><b>' + grams(b.silver) + '</b></div>' : '') +
-    '<div class="o-lrow" style="margin-top:6px"><span>Labour total</span><b>' + inr(b.labour) + '</b></div>' +
-    '<div class="o-lrow"><span>Paid</span><b>' + inr(b.paid) + '</b></div>' +
-    '<div class="o-lrow o-total"><span>Labour payable</span><b>' + inr(b.payable) + '</b></div>' +
     '</div>' +
 
     '<div class="section-label">Entries (' + K.txns.length + ')</div>' +
     (K.txns.length ? K.txns.map((t) => {
-      const goldKind = KTXN_SIGN[t.kind] != null;
-      const what = goldKind
-        ? '<b>' + grams(t.kind === 'wastage' ? t.fine_g : t.weight_g) + '</b>' + (txnMetal(t) === 'Silver' ? ' silver' : '') +
-          (t.kind !== 'wastage' && t.purity != null ? ' · ' + esc(purityLabel(t.purity)) + ' → ' + grams(t.fine_g) + ' fine' : ' fine')
-        : '<b>' + inr(t.amount) + '</b>' + (t.mode ? ' · ' + esc(t.mode) : '');
+      const what = '<b>' + grams(t.kind === 'wastage' ? t.fine_g : t.weight_g) + '</b>' + (txnMetal(t) === 'Silver' ? ' silver' : '') +
+        (t.kind !== 'wastage' && t.purity != null ? ' · ' + esc(purityLabel(t.purity)) + ' → ' + grams(t.fine_g) + ' fine' : ' fine');
       return '<div class="k-txn"><div class="kt-main">' +
         '<span class="chip kt-' + esc(t.kind) + '">' + esc(KTXN_LABEL[t.kind] || t.kind) + '</span> ' + what +
         '<div class="o-item-meta">' + esc(fmtD(t.txn_date)) +
@@ -166,8 +156,7 @@ function karigarWaText(K) {
   return ['Namaste ' + K.k.name + ',', '', 'Account from ' + bizName() + ' as on ' + fmtDLong(todayStr()) + ':',
     'Fine gold with you: *' + grams(b.gold) + '*', '(issued ' + grams(b.issued) + ', received back ' + grams(b.received) + ', wastage ' + grams(b.wastage) + ')']
     .concat(b.hasSilver ? ['Fine silver with you: *' + grams(b.silver) + '*', '(issued ' + grams(b.Silver.issued) + ', received back ' + grams(b.Silver.received) + ', wastage ' + grams(b.Silver.wastage) + ')'] : [])
-    .concat([
-    'Labour: total ' + inr(b.labour) + ', paid ' + inr(b.paid) + ', *payable ' + inr(b.payable) + '*', '', 'Please check and let us know of any difference. Thank you.']).join('\n');
+    .concat(['', 'Please check and let us know of any difference. Thank you.']).join('\n');
 }
 
 /* ---------------- add / edit karigar ---------------- */
@@ -214,23 +203,20 @@ function openKTxnModal(kind) {
   const K = S.kpage;
   if (!K) return;
   const gold = kind === 'issue' || kind === 'receive';
-  const money = kind === 'labour' || kind === 'payment';
   const purOpts = (m) => (m === 'Silver' ? SILVER_PURITY : PURITY).map((p) => '<option value="' + p[1] + '"' + (p[0] === defaultPurity(m) ? ' selected' : '') + '>' + p[0] + ' (' + p[1] + ')</option>').join('') +
     '<option value="custom">Other…</option>';
-  const title = { issue: 'Issue metal', receive: 'Receive back', wastage: 'Wastage', labour: 'Labour', payment: 'Payment' }[kind] || '';
+  const title = { issue: 'Issue metal', receive: 'Receive back', wastage: 'Wastage' }[kind] || '';
   const ov = openModal('<h3>' + esc(title) + ' — ' + esc(K.k.name) + '</h3>' +
     '<p>' + (kind === 'issue' ? 'Gold or silver you are giving for making jewellery.' : kind === 'receive' ? 'Jewellery or metal the karigar gives back (weigh it).' :
-      kind === 'wastage' ? 'Fine metal you allow as wastage — it reduces what the karigar owes.' : kind === 'labour' ? 'Labour charges for work done.' : 'Money you paid the karigar.') + '</p>' +
+      'Fine metal you allow as wastage — it reduces what the karigar owes.') + '</p>' +
     (gold || kind === 'wastage' ? '<div class="field"><label>Metal</label><select id="kt-metal"><option value="Gold" selected>Gold</option><option value="Silver">Silver</option></select></div>' : '') +
     '<div class="o-2col">' +
     '<div class="field"><label>Date</label><input type="date" id="kt-date" value="' + todayStr() + '"></div>' +
     (gold ? '<div class="field"><label>Weight (g)</label><input type="text" inputmode="decimal" id="kt-w" placeholder="0.000"></div>' : '') +
     (kind === 'wastage' ? '<div class="field"><label>Fine weight (g)</label><input type="text" inputmode="decimal" id="kt-w" placeholder="0.000"></div>' : '') +
-    (money ? '<div class="field"><label>Amount ₹</label><input type="text" inputmode="decimal" id="kt-amt" placeholder="0"></div>' : '') +
     '</div>' +
     (gold ? '<div class="o-2col"><div class="field"><label>Purity</label><select id="kt-pur">' + purOpts('Gold') + '</select></div>' +
       '<div class="field" id="kt-cpur-wrap" style="display:none"><label>Purity %</label><input type="text" inputmode="decimal" id="kt-cpur" placeholder="e.g. 83.3"></div></div>' : '') +
-    (kind === 'payment' ? '<div class="field"><label>Mode</label><select id="kt-mode">' + PAY_MODES.map((m) => '<option value="' + m + '">' + m + '</option>').join('') + '</select></div>' : '') +
     '<div class="field"><label>Note</label><input type="text" id="kt-note" placeholder="' + (gold ? 'e.g. For 2 polki sets' : 'Optional') + '"></div>' +
     '<div class="modal-actions"><button class="btn btn-secondary" data-m="no">Cancel</button><button class="btn btn-primary" data-m="yes">Save</button></div>');
   const sel = ov.querySelector('#kt-pur');
@@ -249,16 +235,11 @@ function openKTxnModal(kind) {
         if (!(row.purity > 0 && row.purity <= 100)) { toast('Type the purity %.', 'err'); return; }
       } else row.purity = 100;
     }
-    if (money) {
-      row.amount = numOrNull($('#kt-amt').value);
-      if (!(row.amount > 0)) { toast('Type the amount.', 'err'); return; }
-      if (kind === 'payment') row.mode = $('#kt-mode').value;
-    }
     e.target.disabled = true;
     const { error } = await db.from('karigar_txns').insert(row);
     if (error) { e.target.disabled = false; toast('Could not save — try again.', 'err'); return; }
     closeModal();
-    toast(({ issue: 'Issue recorded', receive: 'Receipt recorded', wastage: 'Wastage recorded', labour: 'Labour recorded', payment: 'Payment recorded' }[kind] || 'Saved') + ' ✓', 'ok');
+    toast(({ issue: 'Issue recorded', receive: 'Receipt recorded', wastage: 'Wastage recorded' }[kind] || 'Saved') + ' ✓', 'ok');
     openKarigar(K.k.id, true);
   };
 }
@@ -269,8 +250,8 @@ async function exportKarigarData(pName, today) {
   const kName = new Map(ks.map((k) => [k.id, k.name]));
   await new Promise((r) => setTimeout(r, 450));
   downloadFile('bj-karigar-entries-' + today + '.csv', buildCsv(
-    ['Karigar', 'Date', 'Entry', 'Metal', 'Weight (g)', 'Purity', 'Fine (g)', 'Amount', 'Mode', 'Note', 'From an order', 'Recorded by'],
-    ts.map((t) => [kName.get(t.karigar_id) || '', t.txn_date, KTXN_LABEL[t.kind] || t.kind, KTXN_SIGN[t.kind] ? txnMetal(t) : '', t.weight_g, t.purity, t.fine_g, t.amount, t.mode, t.note,
+    ['Karigar', 'Date', 'Entry', 'Metal', 'Weight (g)', 'Purity', 'Fine (g)', 'Note', 'From an order', 'Recorded by'],
+    ts.filter(isMetalTxn).map((t) => [kName.get(t.karigar_id) || '', t.txn_date, KTXN_LABEL[t.kind] || t.kind, txnMetal(t), t.weight_g, t.purity, t.fine_g, t.note,
       t.auto ? 'Yes' : '', pName.get(t.created_by) || ''])));
 }
 
