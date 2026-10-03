@@ -2,13 +2,13 @@
    ACCOUNTS — money in and out, by cash and bank, for any period:
    payments from clients (on orders and on account), payments to
    karigars, refunds and expenses. Expenses are added here.
-   Bank includes UPI and cheques. Old gold and discounts are shown
-   separately — they are not cash or bank money.
+   Money is Cash or Bank (UPI, cheques and transfers are Bank).
+   Discounts are shown separately — they are not money.
    ============================================================ */
 'use strict';
 
 const EXP_CATS = ['Rent', 'Salary', 'Travel', 'Hallmarking', 'Certification', 'Courier', 'Packing', 'Polish / labour', 'Electricity', 'Office', 'Other'];
-const EXP_MODES = ['Cash', 'Bank', 'UPI', 'Cheque'];
+const EXP_MODES = ['Cash', 'Bank'];
 const ACC_PERIODS = [['today', 'Today'], ['7d', '7 days'], ['month', 'This month'], ['lastmonth', 'Last month'], ['fy', 'This year'], ['all', 'All'], ['custom', 'Dates']];
 
 function modeBucket(m) {
@@ -101,13 +101,13 @@ async function renderAccounts() {
   box.innerHTML =
     '<div class="hint" style="margin:0 2px 8px">' + esc(rangeLabel(r)) + '</div>' +
     '<div class="section-label">Cash</div><div class="stat-row">' + tile('In', T.cashIn) + tile('Out', T.cashOut) + tile('Net', T.cashIn - T.cashOut, T.cashIn - T.cashOut < 0 ? 'o-red' : '') + '</div>' +
-    '<div class="section-label">Bank, UPI &amp; cheque</div><div class="stat-row">' + tile('In', T.bankIn) + tile('Out', T.bankOut) + tile('Net', T.bankIn - T.bankOut, T.bankIn - T.bankOut < 0 ? 'o-red' : '') + '</div>' +
+    '<div class="section-label">Bank</div><div class="stat-row">' + tile('In', T.bankIn) + tile('Out', T.bankOut) + tile('Net', T.bankIn - T.bankOut, T.bankIn - T.bankOut < 0 ? 'o-red' : '') + '</div>' +
     ((T.gold || T.disc || T.expenses) ? '<div class="hint" style="margin:6px 2px 0">' + [T.expenses ? 'Expenses ' + inr(T.expenses) : '', T.gold ? 'Old gold taken ' + inr(T.gold) : '',
       T.disc ? 'Discounts given ' + inr(T.disc) : ''].filter(Boolean).join(' · ') + '</div>' : '') +
     '<div class="action-row" style="margin-top:12px">' +
     '<button class="btn btn-primary" data-action="exp-add">＋ Add expense</button>' +
     '<button class="btn btn-secondary" data-action="acc-csv">⬇ Excel</button></div>' +
-    '<div class="filter-chips">' + [['all', 'All'], ['cash', 'Cash'], ['bank', 'Bank'], ['other', 'Old gold & discounts']].map((x) =>
+    '<div class="filter-chips">' + [['all', 'All'], ['cash', 'Cash'], ['bank', 'Bank'], ['other', 'Discounts']].map((x) =>
       '<button class="' + (A.show === x[0] ? 'on' : '') + '" data-action="acc-show" data-v="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' +
     (list.length ? '<div class="card" style="padding:4px 14px">' + list.slice(0, 400).map((x) =>
       '<div class="acc-row"><div class="acc-main"><b>' + esc(x.who || '—') + '</b><div class="o-item-meta">' + esc(fmtD(x.date)) + ' · ' + esc(x.what) + (x.mode ? ' · ' + esc(x.mode) : '') + '</div></div>' +

@@ -12,7 +12,7 @@
 
 const PARTY_KIND_LABEL = { opening: 'Opening balance', payment: 'Payment received', discount: 'Discount / settlement', charge: 'Other charge', refund: 'Refund paid' };
 const PARTY_SIGN = { opening: 1, charge: 1, refund: 1, payment: -1, discount: -1 };   // effect on what the client owes
-const MONEY_MODES = ['Cash', 'Bank', 'UPI', 'Cheque', 'Old gold'];
+const MONEY_MODES = ['Cash', 'Bank'];   // UPI, cheque and transfers are all "Bank"
 
 function isLiveOrder(o) { return o.status !== 'cancelled' && o.status !== 'quote'; }
 function isDiscountPay(p) { return p.mode === 'Discount'; }

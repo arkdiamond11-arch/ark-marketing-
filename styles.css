@@ -544,3 +544,10 @@ a.btn { text-decoration: none; }
 .update-bar span { flex: 1; }
 .update-bar button { border: 0; border-radius: 9px; background: var(--gold); color: #2b1a05; font-weight: 800; padding: 8px 14px; font-size: 14px; cursor: pointer; }
 .update-bar button.ub-x { background: none; color: #fff; opacity: .7; padding: 6px 8px; font-weight: 600; }
+
+/* account books */
+.lg-in { color: var(--green); }
+.lg-out { color: var(--red); }
+.lg-mode { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: #eee9f2; color: #5b4a6b; vertical-align: 1px; }
+.lg-st-row.lg-st-open { background: #fbf7ef; margin: 0 -12px; padding: 9px 12px; }
+.rep-books { margin-bottom: 4px; }

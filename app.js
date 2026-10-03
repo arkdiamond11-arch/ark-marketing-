@@ -1191,7 +1191,10 @@ async function renderReport() {
 
   c.innerHTML =
     (typeof renderReports === 'function' ? '<div class="action-row rep-shortcuts"><button class="btn btn-primary" data-action="rep-open">📊 Full reports</button>' +
-      (typeof renderAccounts === 'function' ? '<button class="btn btn-secondary" data-action="acc-open">📒 Accounts</button>' : '') + '</div>' : '') +
+      (typeof renderAccounts === 'function' ? '<button class="btn btn-secondary" data-action="acc-open">📒 Accounts</button>' : '') + '</div>' +
+      '<div class="section-label">Account books</div><div class="brk-row rep-books">' +
+      [['cash', 'Cash book'], ['bank', 'Bank book'], ['party', 'Party account'], ['sales_gold', 'Gold sales'], ['sales_silver', 'Silver sales'], ['sales_diamond', 'Diamond sales'],
+        ['expense', 'Expenses'], ['karigar', 'Karigars'], ['gst', 'GST']].map((x) => '<button class="brk-chip" data-action="rep-go" data-acct="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' : '') +
     '<div id="report-targets"></div>' +
     '<div class="filter-chips" style="margin-top:14px">' + chip('today', 'Today') + chip('7d', '7 days') + chip('30d', '30 days') + chip('all', 'All') + '</div>' +
 
@@ -1428,7 +1431,7 @@ async function renderMore() {
   }
   const mrow = (action, icon, title, sub) => '<button class="more-row" data-action="' + action + '"><span class="mr-ic">' + icon + '</span><span class="mr-t"><b>' + title + '</b><span>' + sub + '</span></span><span class="mr-go">›</span></button>';
   html += '<div class="section-label">Business tools</div><div class="card more-list">' +
-    (isOwner && typeof renderReports === 'function' ? mrow('rep-open', '📊', 'Reports', 'Sales, diamonds, payments, parties — filter and download') : '') +
+    (isOwner && typeof renderReports === 'function' ? mrow('rep-open', '📊', 'Reports', 'Account books — cash, bank, party, gold, diamond … — and lists to filter and download') : '') +
     (isOwner && typeof renderAccounts === 'function' ? mrow('acc-open', '📒', 'Accounts', 'Cash book, bank book and expenses') : '') +
     (!isOwner && typeof renderMyExpenses === 'function' ? mrow('exp-mine', '🧾', 'My expenses', 'Travel, courier and other spends') : '') +
     (typeof renderDues === 'function' ? mrow('dues-open', '💰', 'Client dues', 'Who owes how much · reminders') : '') +

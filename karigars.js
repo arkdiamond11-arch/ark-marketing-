@@ -230,7 +230,7 @@ function openKTxnModal(kind) {
     '</div>' +
     (gold ? '<div class="o-2col"><div class="field"><label>Purity</label><select id="kt-pur">' + purOpts('Gold') + '</select></div>' +
       '<div class="field" id="kt-cpur-wrap" style="display:none"><label>Purity %</label><input type="text" inputmode="decimal" id="kt-cpur" placeholder="e.g. 83.3"></div></div>' : '') +
-    (kind === 'payment' ? '<div class="field"><label>Mode</label><select id="kt-mode">' + PAY_MODES.filter((m) => m !== 'Old gold').map((m) => '<option value="' + m + '">' + m + '</option>').join('') + '</select></div>' : '') +
+    (kind === 'payment' ? '<div class="field"><label>Mode</label><select id="kt-mode">' + PAY_MODES.map((m) => '<option value="' + m + '">' + m + '</option>').join('') + '</select></div>' : '') +
     '<div class="field"><label>Note</label><input type="text" id="kt-note" placeholder="' + (gold ? 'e.g. For 2 polki sets' : 'Optional') + '"></div>' +
     '<div class="modal-actions"><button class="btn btn-secondary" data-m="no">Cancel</button><button class="btn btn-primary" data-m="yes">Save</button></div>');
   const sel = ov.querySelector('#kt-pur');

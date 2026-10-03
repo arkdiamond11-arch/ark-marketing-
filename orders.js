@@ -15,7 +15,7 @@ const SILVER_PURITY = [['999', 99.9], ['925', 92.5]];
 const ALL_PURITY = PURITY.concat(SILVER_PURITY);
 const ITEM_CATS = ['Necklace', 'Choker', 'Long haar', 'Earrings', 'Jhumka', 'Bangles', 'Kada', 'Ring', 'Pendant set',
   'Maang tikka', 'Bracelet', 'Nath', 'Other'];
-const PAY_MODES = ['Cash', 'UPI', 'Bank', 'Cheque', 'Old gold'];
+const PAY_MODES = ['Cash', 'Bank'];   // UPI, cheque and transfers are all "Bank"
 const ORD_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3.5h8.5L18.5 7.5v13H6z" stroke-linejoin="round"/><path d="M14 3.5v4.5h4.5" stroke-linejoin="round"/><path d="M9 12h6.5M9 15.5h6.5M9 19h3.5" stroke-linecap="round"/></svg>';
 
 /* ---------------- helpers ---------------- */
@@ -303,10 +303,11 @@ function startNewOrder(client, typeKey, replace) {
     id: null, orderNo: null, status: null, oldItemIds: [], oldCatIds: [], gstTouched: false,
     client: { id: client.id, trade_name: client.trade_name, city: client.city },
     items: [blankItem()],
-    o: { order_date: todayStr(), due_date: '', gst_pct: typeKey === 'job_work' ? '5' : typeKey ? '3' : '', discount: '', karigar_id: '' },
+    o: { order_date: todayStr(), due_date: '', gst_pct: typeKey === 'job_work' ? '5' : '3', discount: '', karigar_id: '' },
   };
   S.formState = {
     o_type: typeKey ? OTYPE_LABEL[typeKey] : null, o_metal: 'Gold', o_purity: '22K', o_jw_purity: '22K', o_pay_mode: 'Cash',
+    o_gst: lastGstChoice(),
   };
   if (pending && pending.length && typeof addCatItemsToOrder === 'function') addCatItemsToOrder(pending);
   S.formState.o_color = commonColor(S.ord.items) || null;
@@ -352,7 +353,9 @@ async function startEditOrder(id) {
   S.formState = {
     o_type: OTYPE_LABEL[o.order_type], o_metal: o.metal || 'Gold', o_purity: purityKey(o.purity),
     o_jw_purity: purityKey(o.client_metal_purity) || '22K', o_pay_mode: 'Cash',
+    o_gst: num(o.gst_pct) > 0 ? 'Add GST' : 'No GST',
   };
+  if (!(num(o.gst_pct) > 0)) S.ord.o.gst_pct = o.order_type === 'job_work' ? '5' : '3';   // ready if GST is added
   S.formState.o_color = commonColor(S.ord.items) || null;
   showSub('Edit · ' + ordNo(o.order_no), renderOrderForm);
 }
@@ -371,8 +374,16 @@ function syncOrderColor() {
 }
 
 /* The order-level values as the calculator expects them. */
+/* GST is a choice on each order; a new order starts with the last choice made on this phone */
+const GST_CHOICES = ['No GST', 'Add GST'];
+function lastGstChoice() {
+  try { return localStorage.getItem('gst_choice') === 'Add GST' ? 'Add GST' : 'No GST'; } catch (e) { return 'No GST'; }
+}
+function gstAdded() { return S.formState.o_gst === 'Add GST'; }
+
 function formOrderObj() {
   const o = Object.assign({}, S.ord.o);
+  if (!gstAdded()) o.gst_pct = 0;
   o.order_type = curOType();
   o.metal = S.formState.o_metal || 'Gold';
   // a purity left over from the other metal is never saved
@@ -457,10 +468,12 @@ function renderOrderForm() {
     '</div></div>' +
 
     '<div class="section-label">Charges</div>' +
-    '<div class="card"><div class="o-2col">' +
+    '<div class="card">' +
+    '<div class="field"><label>GST</label>' + segHTML('o_gst', GST_CHOICES, S.formState.o_gst) + '</div>' +
+    '<div class="o-2col">' +
     '<div class="field"><label>Discount ₹</label>' + numIn('discount', '0') + '</div>' +
-    '<div class="field"><label>GST %</label>' + numIn('gst_pct', '3', 'o-gst') + '</div>' +
-    '</div><div class="hint" style="margin-top:-6px">Usually 3% on a jewellery sale and 5% on job-work labour — confirm with your CA.</div></div>' +
+    '<div class="field" id="o-gst-wrap"' + (gstAdded() ? '' : ' style="display:none"') + '><label>GST %</label>' + numIn('gst_pct', '3', 'o-gst') + '</div>' +
+    '</div><div class="hint" id="o-gst-hint" style="margin-top:-6px' + (gstAdded() ? '' : ';display:none') + '">Usually 3% on a jewellery sale and 5% on job-work labour — confirm with your CA.</div></div>' +
 
     '<div class="card o-totals" id="o-totals"></div>' +
 
@@ -566,7 +579,7 @@ function orderRecalcView() {
     row(o.order_type === 'job_work' ? 'Labour' : 'Making', inr(c.making)) +
     (c.stones ? row('Stones', inr(c.stones)) : '') +
     (num(o.discount) ? row('Discount', '− ' + inr(o.discount)) : '') +
-    row('GST ' + (num(o.gst_pct) || 0) + '%', inr(c.gst)) +
+    (gstAdded() ? row('GST ' + (num(o.gst_pct) || 0) + '%', inr(c.gst)) : row('GST', 'Not added')) +
     row('Order total', inr(c.total), 'o-total');
   const jl = $('#o-jw-ledger');
   if (jl) jl.innerHTML = jwLedgerHTML(jwLedger(o, c.net));
@@ -614,6 +627,20 @@ function onOrderInput(e) {
 
 function onSegChange(group) {
   if (!S.ord || !$('#order-form')) return;
+  if (group === 'o_gst') {
+    if (!S.formState.o_gst) {   // tapped again → back to "No GST"
+      S.formState.o_gst = 'No GST';
+      const sw = document.querySelector('[data-group="o_gst"]');
+      if (sw) sw.parentElement.outerHTML = segHTML('o_gst', GST_CHOICES, 'No GST');
+    }
+    try { localStorage.setItem('gst_choice', S.formState.o_gst); } catch (e) { /* private mode */ }
+    if (gstAdded() && !num(S.ord.o.gst_pct)) {
+      S.ord.o.gst_pct = curOType() === 'job_work' ? '5' : '3';
+      const el = $('#o-gst'); if (el) el.value = S.ord.o.gst_pct;
+    }
+    const w = $('#o-gst-wrap'); if (w) w.style.display = gstAdded() ? '' : 'none';
+    const h = $('#o-gst-hint'); if (h) h.style.display = gstAdded() ? '' : 'none';
+  }
   if (group === 'o_type') {
     applyOTypeVisibility();
     const t = curOType();
@@ -1024,7 +1051,7 @@ function openPayModal(orderId, bal) {
     '<div class="field"><label>Mode</label><select id="op-mode">' + PAY_MODES.map((m) => '<option value="' + m + '">' + m + '</option>').join('') + '</select></div>' +
     '<div class="field"><label>Date</label><input type="date" id="op-date" value="' + todayStr() + '"></div>' +
     '</div>' +
-    '<div class="field"><label>Note (optional)</label><input type="text" id="op-note" placeholder="e.g. Cheque no. / old gold 10 g"></div>' +
+    '<div class="field"><label>Note (optional)</label><input type="text" id="op-note" placeholder="e.g. UPI ref. / cheque no."></div>' +
     '<div class="modal-actions"><button class="btn btn-secondary" data-m="no">Cancel</button><button class="btn btn-primary" data-m="yes">Save payment</button></div>');
   ov.querySelector('[data-m=no]').onclick = closeModal;
   ov.querySelector('[data-m=yes]').onclick = async (e) => {
