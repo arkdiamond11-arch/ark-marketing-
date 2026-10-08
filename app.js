@@ -451,37 +451,111 @@ function renderNewChoice() {
     '<div class="notice">Tip: after saving the client, you will be asked to record the meeting — reminders you add will show on the Today screen.</div>';
 }
 
+/* Camera or gallery. The picker element stays in the page until a photo comes back —
+   some phones never hand over the photo (gallery especially) if it is not in the page. */
 function pickImage(cb, fromGallery) {
+  const old = document.getElementById('img-pick');
+  if (old) old.remove();
   const inp = document.createElement('input');
   inp.type = 'file';
+  inp.id = 'img-pick';
   inp.accept = 'image/*';
   if (!fromGallery) inp.setAttribute('capture', 'environment');
-  inp.onchange = () => { if (inp.files && inp.files[0]) cb(inp.files[0]); };
+  inp.tabIndex = -1;
+  inp.setAttribute('aria-hidden', 'true');
+  inp.style.cssText = 'position:fixed;left:-200px;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+  let done = false;
+  const take = () => {
+    const f = inp.files && inp.files[0];
+    if (done || !f) return;
+    done = true;
+    setTimeout(() => inp.remove(), 0);
+    cb(f);
+  };
+  inp.addEventListener('change', take);
+  inp.addEventListener('input', take);
+  document.body.appendChild(inp);
   inp.click();
 }
 
-function downscale(file, maxSide) {
-  return new Promise((resolve, reject) => {
+/* a photo file → canvas (at most maxSide px on the longest side). Tries three ways, because
+   phones differ: blob link (keeps the photo upright), createImageBitmap, then a data link. */
+async function decodeImage(file, maxSide) {
+  const fail = (code) => { const e = new Error('image'); e.code = code; return e; };
+  if (!file || !file.size) throw fail('empty');
+  const draw = (src, w, h) => {
+    if (!w || !h) throw fail('decode');
+    const sc = Math.min(1, maxSide / Math.max(w, h));
+    const cw = Math.max(1, Math.round(w * sc)), ch = Math.max(1, Math.round(h * sc));
+    const cv = document.createElement('canvas');
+    cv.width = cw; cv.height = ch;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, cw, ch);   // see-through PNGs → white, not black
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(src, 0, 0, cw, ch);
+    return cv;
+  };
+  const viaImg = (src) => new Promise((res, rej) => {
     const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
-      const w = Math.round(img.width * scale), hgt = Math.round(img.height * scale);
-      const cv = document.createElement('canvas');
-      cv.width = w; cv.height = hgt;
-      cv.getContext('2d').drawImage(img, 0, 0, w, hgt);
-      URL.revokeObjectURL(url);
-      cv.toBlob((blob) => {
-        if (!blob) return reject(new Error('image'));
-        const fr = new FileReader();
-        fr.onload = () => resolve({ blob, base64: String(fr.result).split(',')[1], mime: 'image/jpeg' });
-        fr.onerror = () => reject(new Error('image'));
-        fr.readAsDataURL(blob);
-      }, 'image/jpeg', 0.82);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image')); };
-    img.src = url;
+    img.onload = () => { try { res(draw(img, img.naturalWidth, img.naturalHeight)); } catch (e) { rej(e); } };
+    img.onerror = () => rej(fail('decode'));
+    img.src = src;
   });
+  const url = URL.createObjectURL(file);
+  try { return await viaImg(url); } catch (_) { /* try the next way */ } finally { URL.revokeObjectURL(url); }
+  if (window.createImageBitmap) {
+    try {
+      const bm = await createImageBitmap(file);
+      const cv = draw(bm, bm.width, bm.height);
+      if (bm.close) bm.close();
+      return cv;
+    } catch (_) { /* next */ }
+  }
+  try {
+    const dataUrl = await new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(String(fr.result));
+      fr.onerror = () => rej(fail('read'));
+      fr.readAsDataURL(file);
+    });
+    return await viaImg(dataUrl);
+  } catch (_) { /* give up */ }
+  throw fail(/hei[cf]/i.test((file.type || '') + ' ' + (file.name || '')) ? 'heic' : 'decode');
+}
+
+/* canvas → the photo object used everywhere: { blob, base64, mime } (JPEG) */
+function canvasToPhoto(cv, quality) {
+  return new Promise((resolve, reject) => {
+    const fromDataUrl = () => {
+      try {
+        const d = cv.toDataURL('image/jpeg', quality || 0.85);
+        const b64 = d.split(',')[1] || '';
+        const bin = atob(b64), arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        resolve({ blob: new Blob([arr], { type: 'image/jpeg' }), base64: b64, mime: 'image/jpeg' });
+      } catch (e) { reject(e); }
+    };
+    if (!cv.toBlob) { fromDataUrl(); return; }
+    cv.toBlob((blob) => {
+      if (!blob) { fromDataUrl(); return; }
+      const fr = new FileReader();
+      fr.onload = () => resolve({ blob, base64: String(fr.result).split(',')[1], mime: 'image/jpeg' });
+      fr.onerror = () => fromDataUrl();
+      fr.readAsDataURL(blob);
+    }, 'image/jpeg', quality || 0.85);
+  });
+}
+
+async function downscale(file, maxSide) {
+  return canvasToPhoto(await decodeImage(file, maxSide), 0.82);
+}
+
+/* what to tell the person when a photo cannot be opened */
+function imageErrMsg(e) {
+  const c = e && e.code;
+  if (c === 'heic') return 'This photo is in HEIC format, which this phone cannot open here. Take a new photo with the camera, or choose a JPG.';
+  if (c === 'empty' || c === 'read') return 'Could not open that photo. If it is in the cloud (Google Photos), download it to the phone first.';
+  return 'Could not read that image — try another photo.';
 }
 
 function renderScanCapture() {
@@ -539,8 +613,15 @@ function attachPhoto(side) {
   const go = function (fromGallery) {
     closeModal();
     pickImage(async (file) => {
-      try { S.photos[side] = await downscale(file, 1600); }
-      catch (e) { toast('Could not read that image — try again.', 'err'); return; }
+      let p;
+      if (typeof cropPhotoFile === 'function') {
+        p = await cropPhotoFile(file, side === 'back' ? 'Back side' : 'Front side');   // crop screen; null = cancelled
+        if (!p) return;
+      } else {
+        try { p = await downscale(file, 1600); }
+        catch (e) { toast(imageErrMsg(e), 'err'); return; }
+      }
+      S.photos[side] = p;
       redrawPhotos();
     }, fromGallery);
   };
@@ -554,10 +635,11 @@ function photoSlotHTML(side, savedPath) {
   if (p) {
     const url = URL.createObjectURL(p.blob);
     return '<div class="photo-slot"><div class="ps-label">' + label + '</div>' +
-      '<img class="cardphoto" src="' + url + '" alt="' + label + '">' +
+      '<div class="ps-img"><img class="cardphoto" src="' + url + '" alt="' + label + '">' +
+      '<button type="button" class="ps-x" data-action="remove-photo" data-side="' + side + '" aria-label="Remove photo">✕</button></div>' +
       '<div class="photo-row">' +
+      (p.src && typeof recropPhoto === 'function' ? '<button type="button" class="btn btn-small btn-secondary" data-action="crop-photo" data-side="' + side + '">Crop</button>' : '') +
       '<button type="button" class="btn btn-small btn-secondary" data-action="attach-photo" data-side="' + side + '">Retake</button>' +
-      '<button type="button" class="btn btn-small btn-ghost" data-action="remove-photo" data-side="' + side + '">Remove</button>' +
       '</div></div>';
   }
   return '<div class="photo-slot"><div class="ps-label">' + label + (savedPath ? ' <span class="ps-saved">saved ✓</span>' : '') + '</div>' +
@@ -725,6 +807,11 @@ function renderClientForm(existing, pre, source) {
     '<div class="field"><label>Full address <span class="req">*</span></label><textarea id="f-address" style="min-height:70px" placeholder="Shop no., street, market, city, PIN">' + v('address') + '</textarea></div>' +
     '</div>' +
 
+    (!existing && S.dbv6 ? '<div class="section-label">Note</div>' +
+      '<div class="card"><div class="field" style="margin-bottom:2px">' +
+      '<textarea id="f-note" style="min-height:70px" placeholder="Anything to remember about this client — type it, or tap Speak"></textarea>' +
+      (typeof dictRowHTML === 'function' ? dictRowHTML('f-note') : '') + '</div></div>' : '') +
+
     '<button class="btn btn-primary" data-action="save-client"' + (existing ? ' data-edit-id="' + existing.id + '"' : '') + ' id="save-client-btn">' +
     (existing ? 'Save changes' : 'Save client') + '</button>' +
     '<div style="height:10px"></div>';
@@ -798,6 +885,10 @@ async function saveClient(editId) {
   };
 
   const doSave = async () => {
+    if (typeof stopDict === 'function') await stopDict();   // still listening? keep the last words
+    const noteEl = $('#f-note');
+    const noteText = noteEl ? noteEl.value.trim() : '';
+    let noteFailed = false;
     btn.disabled = true; btn.textContent = 'Saving…';
     let clientId = editId;
     if (editId) {
@@ -808,6 +899,10 @@ async function saveClient(editId) {
       const { data, error } = await db.from('clients').insert(row).select('id').single();
       if (error) { btn.disabled = false; btn.textContent = 'Save client'; toast('Could not save — please try again.', 'err'); return; }
       clientId = data.id;
+      if (noteText) {
+        const { error: nErr } = await db.from('client_notes').insert({ client_id: clientId, body: noteText, created_by: S.me.id });
+        noteFailed = !!nErr;
+      }
     }
 
     for (const pair of [['front', 'card_image_path'], ['back', 'card_image_back_path']]) {
@@ -826,7 +921,8 @@ async function saveClient(editId) {
       S.photos[side] = null;
     }
 
-    toast(editId ? 'Client updated ✓' : 'Client saved ✓', 'ok');
+    if (noteFailed) toast('Client saved — but the note could not be saved. Add it again on the client page.', 'err');
+    else toast(editId ? 'Client updated ✓' : 'Client saved ✓', 'ok');
     if (editId) { openClient(editId, true); return; }
 
     const client = await fetchClient(clientId);
@@ -877,9 +973,16 @@ async function runSearch(qRaw) {
   } else {
     query = query.order('created_at', { ascending: false }).limit(25);
   }
-  const { data, error } = await query;
+  const seq = S.searchSeq = (S.searchSeq || 0) + 1;   // typing fast: only the newest search may draw
+  const { data: found, error } = await query;
+  if (seq !== S.searchSeq) return;
   if (error) { box.innerHTML = '<div class="empty">Search failed — try again.</div>'; return; }
-  if (!data || !data.length) {
+  let data = found || [];
+  if (q && typeof clientsFromNotes === 'function') {
+    data = data.concat(await clientsFromNotes(q, data.map((c) => c.id)));   // also look inside client notes
+    if (seq !== S.searchSeq) return;
+  }
+  if (!data.length) {
     box.innerHTML = '<div class="empty"><div class="big">🔎</div>' + (q ? 'No client matches "' + esc(q) + '".<br>Check the spelling, or add them as a new client.' : 'No clients yet — tap “Scan card” or “Type details” above to add your first.') + '</div>';
     return;
   }
@@ -890,6 +993,8 @@ async function runSearch(qRaw) {
     '<div class="li-sub">' + esc([cl.contact_person, cl.city].filter(Boolean).join(' · ') || cl.company_name || '') + '</div>' +
     '<div class="li-chips">' + chipCat(cl.category) + chipInterest(cl.interest) + '</div>' +
     '</div><div style="color:var(--muted)">›</div></div>').join('');
+  // the newest note under each client (or the one that matched the search)
+  if (typeof fillClientNoteSnippets === 'function') fillClientNoteSnippets(box, data.map((c) => c.id), q, () => seq === S.searchSeq);
 }
 
 /* ============================================================
@@ -909,6 +1014,7 @@ async function openClient(id, replace) {
   showSub(cl.trade_name, () => {
     renderClientPage(cl);
     loadClientHistory(cl);
+    if (typeof loadClientNotes === 'function') loadClientNotes(cl);
     if (typeof loadClientPay === 'function') loadClientPay(cl);
     if (typeof loadClientOrders === 'function') loadClientOrders(cl);
   }, replace);
@@ -945,6 +1051,7 @@ function renderClientPage(cl) {
 
     '<div class="card">' + (rows.join('') || '<div class="empty" style="padding:6px">No details yet</div>') +
     (typeof clientLocRowHTML === 'function' ? clientLocRowHTML(cl) : '') + '</div>' +
+    '<div id="client-notes"></div>' +
     '<div id="client-card-photo"></div>' +
     '<div id="client-followups"></div>' +
     '<div id="client-orders"></div>' +
@@ -1031,7 +1138,7 @@ function renderInteractionForm() {
     '<div class="section-label">What happened in the meeting?</div>' +
     '<div class="card">' +
     '<div class="field"><textarea id="int-notes" placeholder="e.g. Showed the new antique collection. Wants a quotation for 200 gm job work…"></textarea>' +
-    '<div class="mic-hint">' + IC.mic + ' Tip: tap the mic on your keyboard and just speak.</div></div>' +
+    (typeof dictRowHTML === 'function' ? dictRowHTML('int-notes') : '<div class="mic-hint">' + IC.mic + ' Tip: tap the mic on your keyboard and just speak.</div>') + '</div>' +
     '</div>' +
 
     '<div class="section-label">Follow-ups (optional)</div>' +
@@ -1387,7 +1494,8 @@ async function exportAllData() {
       ['orders', 2, typeof exportOrdersData === 'function' ? () => exportOrdersData(pName, cName, today) : null],
       ['catalogue', 1, typeof exportCatalogueData === 'function' ? () => exportCatalogueData(pName, today) : null],
       ['karigars', 1, typeof exportKarigarData === 'function' ? () => exportKarigarData(pName, today) : null],
-      ['production steps', 1, typeof exportStepsData === 'function' ? () => exportStepsData(pName, today) : null],
+      ['vendors', 2, typeof exportVendorData === 'function' && S.dbv6 ? () => exportVendorData(pName, today) : null],
+      ['client notes', 1, typeof exportNotesData === 'function' && S.dbv6 ? () => exportNotesData(pName, cName, today) : null],
       ['payment dates', 1, typeof exportPayData === 'function' ? () => exportPayData(pName, cName, today) : null],
     ];
     for (const x of extra) {
@@ -1436,8 +1544,8 @@ async function renderMore() {
   html += '<div class="section-label">Business tools</div><div class="card more-list">' +
     (isOwner && typeof renderReports === 'function' ? mrow('rep-open', '📊', 'Reports', 'Payment status, orders, items, diamonds, stock — filter and download') : '') +
     (typeof renderPayDues === 'function' ? mrow('dues-open', '💰', 'Payment dues', 'Which party has to pay and by when · reminders') : '') +
+    (typeof renderVendors === 'function' ? mrow('v-list', '🏭', 'Vendors', 'Who makes your orders · diamonds to give them') : '') +
     (typeof renderKarigars === 'function' ? mrow('k-list', '🔨', 'Karigars', 'Metal given and received back') : '') +
-    (isOwner && typeof renderStepTemplates === 'function' ? mrow('stpl-open', '⚙️', 'Production steps', 'The step lists used for orders') : '') +
     (isOwner && typeof renderBizForm === 'function' ? mrow('biz-open', '🏷️', 'Business details', 'Address, GSTIN — printed on PDFs') : '') +
     (typeof renderLangPicker === 'function' ? mrow('lang-open', '🌐', 'Language / भाषा / ભાષા', 'English, हिन्दी, ગુજરાતી') : '') +
     '</div>';

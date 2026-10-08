@@ -243,7 +243,7 @@ function catPhotoAdd() {
     closeModal();
     pickImage(async (file) => {
       try { const p = await downscale(file, 1600); S.catForm.photos.push({ blob: p.blob }); }
-      catch (e) { toast('Could not read that image — try again.', 'err'); return; }
+      catch (e) { toast(imageErrMsg(e), 'err'); return; }
       drawCatFormPhotos();
     }, fromGallery);
   };

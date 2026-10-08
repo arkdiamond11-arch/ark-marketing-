@@ -61,11 +61,11 @@
       window.SEG_HOOKS = window.SEG_HOOKS || [];      // called after a choice button is tapped
       window.INPUT_HOOKS = window.INPUT_HOOKS || [];  // called on every typed input
       window.LOGIN_HOOKS = window.LOGIN_HOOKS || [];  // called once after sign-in
-      var v = '8';
+      var v = '9';
       window.APP_V = v;
-      ['i18n.js', 'jewel.js', 'orders.js', 'util.js', 'docs.js', 'payments.js', 'steps.js',
-       'reports.js', 'catalogue.js', 'karigars.js', 'visits.js', 'targets.js', 'summary.js',
-       'app.js'].forEach(function (f) {
+      ['i18n.js', 'jewel.js', 'orders.js', 'util.js', 'docs.js', 'payments.js', 'vendors.js',
+       'notes.js', 'crop.js', 'reports.js', 'catalogue.js', 'karigars.js', 'visits.js', 'targets.js',
+       'summary.js', 'app.js'].forEach(function (f) {
         var s = document.createElement('script');
         s.src = f + '?v=' + v;
         s.async = false;
