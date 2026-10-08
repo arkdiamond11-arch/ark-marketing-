@@ -1,8 +1,11 @@
 /* ============================================================
-   ORDERS add-on — job work, ready stock and custom orders,
-   quotations, client gold and karigar sections. No prices or
-   payments here — a party's payment status (due / done) is on
-   the party's page (payments.js).
+   ORDERS add-on — job work, ready stock and custom orders.
+   Every order starts as a quotation: Approved → it becomes an order
+   and moves through its stages (CAD done, Wax, In production,
+   Diamond setting, Finished, Delivered); Not approved → declined.
+   Vendor who makes it, diamonds to give the vendor (vendors.js),
+   client gold and karigar sections. No prices or payments here —
+   a party's payment status (due / done) is on the party's page.
    Loaded before app.js. Uses app.js helpers ($, db, S, esc,
    toast, showSub, openModal …) only at call time.
    ============================================================ */
@@ -10,9 +13,13 @@
 
 const OTYPE_LABEL = { job_work: 'Job work', ready_stock: 'Ready stock', custom: 'Custom order' };
 const OTYPE_KEY = { 'Job work': 'job_work', 'Ready stock': 'ready_stock', 'Custom order': 'custom' };
-const OSTATUS_LABEL = { quote: 'Quotation', new: 'New', in_production: 'In production', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' };
-const OPEN_STATUSES = ['new', 'in_production', 'ready'];
-const PURITY = [['24K', 99.5], ['22K', 91.6], ['18K', 75], ['14K', 58.5]];
+const OSTATUS_LABEL = { quote: 'Quotation', declined: 'Not approved', new: 'Approved', cad: 'CAD done', wax: 'Wax', in_production: 'In production',
+  setting: 'Diamond setting', finished: 'Finished', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' };
+/* the stages an approved order moves through (tap any one on the order page) */
+const ORDER_STAGES = ['cad', 'wax', 'in_production', 'setting', 'finished', 'delivered'];
+const OPEN_STATUSES = ['new', 'cad', 'wax', 'in_production', 'setting', 'finished', 'ready'];   // approved, not delivered yet
+const CLOSED_STATUSES = ['declined', 'cancelled'];
+const PURITY = [['24K', 99.5], ['22K', 91.6], ['18K', 75], ['14K', 58.5], ['9K', 37.5]];
 const SILVER_PURITY = [['999', 99.9], ['925', 92.5]];
 const ALL_PURITY = PURITY.concat(SILVER_PURITY);
 const ITEM_CATS = ['Necklace', 'Choker', 'Long haar', 'Earrings', 'Jhumka', 'Bangles', 'Kada', 'Ring', 'Pendant set',
@@ -50,9 +57,6 @@ function purityLabel(p) {
 }
 function purityOptions(metal) { return (metal === 'Silver' ? SILVER_PURITY : PURITY).map((p) => p[0]); }
 function defaultPurity(metal) { return metal === 'Silver' ? '925' : '22K'; }
-function statusFlow(type) {
-  return type === 'ready_stock' ? ['new', 'ready', 'delivered'] : ['new', 'in_production', 'ready', 'delivered'];
-}
 function chipStatus(s) {
   return '<span class="chip chip-st-' + esc(s) + '">' + esc(OSTATUS_LABEL[s] || s) + '</span>';
 }
@@ -60,7 +64,7 @@ function chipOType(t) {
   return '<span class="chip chip-otype">' + esc(OTYPE_LABEL[t] || t) + '</span>';
 }
 function isOpenStatus(s) { return OPEN_STATUSES.indexOf(s) !== -1; }
-function isLive(o) { return o.status !== 'cancelled' && o.status !== 'quote'; }
+function isLive(o) { return o.status !== 'quote' && CLOSED_STATUSES.indexOf(o.status) === -1; }
 function dueHTML(o) {
   if (!o.due_date || !isOpenStatus(o.status)) return o.due_date ? 'Due ' + esc(fmtD(o.due_date)) : '';
   const late = o.due_date < todayStr();
@@ -110,9 +114,9 @@ function karigarHTML(o) {
 
 /* ---------------- catalogue status follows the order ---------------- */
 function catStatusFor(orderStatus) {
-  return orderStatus === 'quote' ? null : orderStatus === 'cancelled' ? 'available' : orderStatus === 'delivered' ? 'sold' : 'reserved';
+  return orderStatus === 'quote' ? null : CLOSED_STATUSES.indexOf(orderStatus) > -1 ? 'available' : orderStatus === 'delivered' ? 'sold' : 'reserved';
 }
-const HOLDING_STATUSES = ['new', 'in_production', 'ready', 'delivered'];   // orders that hold their catalogue pieces
+const HOLDING_STATUSES = OPEN_STATUSES.concat(['delivered']);   // orders that hold their catalogue pieces
 
 /* make pieces available again — unless another open or delivered order still has them */
 async function releaseCatalogue(ids, orderId) {
@@ -168,13 +172,14 @@ async function renderOrders() {
   const L = S.olist;
   const chip = (grp, v, label) => '<button class="' + (L[grp] === v ? 'on' : '') + '" data-action="o-filter" data-g="' + grp + '" data-v="' + v + '">' + label + '</button>';
   $('#content').innerHTML =
-    '<div class="action-row" style="margin-bottom:12px">' +
+    '<div class="action-row o-top-row" style="margin-bottom:12px">' +
     '<button class="btn btn-primary" data-action="o-tab-new">＋ New order</button>' +
+    (typeof renderVendors === 'function' ? '<button class="btn btn-secondary" data-action="v-list">Vendors</button>' : '') +
     '<button class="btn btn-secondary" data-action="dues-open">Payment dues</button>' +
     '</div>' +
     '<div class="search-box"><input type="text" id="o-search" placeholder="Search client or order no…" autocomplete="off" value="' + esc(L.q) + '"></div>' +
-    '<div class="filter-chips">' + chip('status', 'open', 'Open') + chip('status', 'ready', 'Ready') + chip('status', 'quote', 'Quotations') +
-    chip('status', 'delivered', 'Delivered') + chip('status', 'cancelled', 'Cancelled') + chip('status', 'all', 'All') + '</div>' +
+    '<div class="filter-chips">' + chip('status', 'open', 'Open') + chip('status', 'quote', 'Quotations') + chip('status', 'finished', 'Finished') +
+    chip('status', 'delivered', 'Delivered') + chip('status', 'closed', 'Not approved') + chip('status', 'all', 'All') + '</div>' +
     '<div class="filter-chips">' + chip('type', 'all', 'All types') + chip('type', 'job_work', 'Job work') + chip('type', 'ready_stock', 'Ready stock') +
     chip('type', 'custom', 'Custom') + '</div>' +
     '<div id="o-list"><div class="empty">Loading…</div></div>';
@@ -190,8 +195,10 @@ async function loadOrderList() {
   const box = $('#o-list');
   if (!box) return;
   const L = S.olist;
-  let q = db.from('orders').select('id, order_no, order_type, status, order_date, due_date, clients!inner(trade_name, city)');
+  let q = db.from('orders').select('id, order_no, order_type, status, order_date, due_date' + (S.dbv6 ? ', vendor_id' : '') + ', clients!inner(trade_name, city)');
   if (L.status === 'open') q = q.in('status', OPEN_STATUSES);
+  else if (L.status === 'finished') q = q.in('status', ['finished', 'ready']);
+  else if (L.status === 'closed') q = q.in('status', CLOSED_STATUSES);
   else if (L.status !== 'all') q = q.eq('status', L.status);
   if (L.type !== 'all') q = q.eq('order_type', L.type);
   const s = String(L.q || '').trim();
@@ -211,14 +218,12 @@ async function loadOrderList() {
   const quotesOnly = L.status === 'quote';
   const t = todayStr();
   const late = rows.filter((o) => isOpenStatus(o.status) && o.due_date && o.due_date < t).length;
-  const ready = rows.filter((o) => o.status === 'ready').length;
-  S.stepInfo = typeof loadStepInfo === 'function' ? await loadStepInfo(rows.filter((o) => isOpenStatus(o.status)).map((o) => o.id)) : null;
-  if (!$('#o-list')) return;
+  const finished = rows.filter((o) => o.status === 'finished' || o.status === 'ready').length;
   box.innerHTML =
     '<div class="stat-row">' +
     '<div class="stat"><div class="st-num">' + rows.length + (rows.length >= 300 ? '+' : '') + '</div><div class="st-label">' + (quotesOnly ? 'Quotations' : 'Orders') + '</div></div>' +
     (quotesOnly ? '' : '<div class="stat"><div class="st-num' + (late ? ' o-red' : '') + '">' + late + '</div><div class="st-label">Delivery late</div></div>' +
-      '<div class="stat"><div class="st-num">' + ready + '</div><div class="st-label">Ready</div></div>') +
+      '<div class="stat"><div class="st-num">' + finished + '</div><div class="st-label">Finished</div></div>') +
     '</div><div style="height:8px"></div>' +
     rows.map((o) => orderListItemHTML(o, true)).join('');
 }
@@ -231,8 +236,7 @@ function orderListItemHTML(o, showClient) {
     '<div class="li-sub">' + esc(OTYPE_LABEL[o.order_type] || '') + ' · ' + esc(fmtD(o.order_date)) +
     (o.due_date ? ' · ' + dueHTML(o) : '') + '</div>' +
     '<div class="li-chips">' + chipStatus(o.status) +
-    (S.stepInfo && S.stepInfo.get(o.id) && S.stepInfo.get(o.id).total && isOpenStatus(o.status)
-      ? '<span class="chip chip-step">⚙ ' + esc(S.stepInfo.get(o.id).cur || 'All steps done') + ' · ' + S.stepInfo.get(o.id).done + '/' + S.stepInfo.get(o.id).total + '</span>' : '') +
+    (o.vendor_id && typeof vendorName === 'function' && vendorName(o.vendor_id) ? '<span class="chip chip-vendor">' + esc(vendorName(o.vendor_id)) + '</span>' : '') +
     '</div></div><div style="color:var(--muted)">›</div></div>';
 }
 
@@ -289,7 +293,7 @@ function startNewOrder(client, typeKey, replace) {
     id: null, orderNo: null, status: null, oldItemIds: [], oldCatIds: [],
     client: { id: client.id, trade_name: client.trade_name, city: client.city },
     items: [blankItem()],
-    o: { order_date: todayStr(), due_date: '', karigar_id: '' },
+    o: { order_date: todayStr(), due_date: '', karigar_id: '', vendor_id: '' },
   };
   S.formState = { o_type: typeKey ? OTYPE_LABEL[typeKey] : null, o_metal: 'Gold', o_purity: '22K', o_jw_purity: '22K' };
   if (pending && pending.length && typeof addCatItemsToOrder === 'function') addCatItemsToOrder(pending);
@@ -324,7 +328,7 @@ async function startEditOrder(id) {
     }, jewelForm(it))),
     o: {
       order_date: s(o.order_date), due_date: s(o.due_date), wastage_pct: s(o.wastage_pct),
-      client_metal_g: s(o.client_metal_g), client_metal_on: s(o.client_metal_on), karigar_id: s(o.karigar_id),
+      client_metal_g: s(o.client_metal_g), client_metal_on: s(o.client_metal_on), karigar_id: s(o.karigar_id), vendor_id: s(o.vendor_id),
       karigar_issued_g: s(o.karigar_issued_g), karigar_issued_on: s(o.karigar_issued_on),
       karigar_received_g: s(o.karigar_received_g), karigar_received_on: s(o.karigar_received_on),
       notes: s(o.notes), legacy_karigar: o.karigar_id ? '' : s(o.karigar_name),
@@ -391,6 +395,11 @@ function renderOrderForm() {
     '<div class="field"><label>Delivery by</label>' + dateIn('due_date') + '</div>' +
     '</div></div>' +
 
+    (S.dbv6 && typeof vendorOptionsHTML === 'function' ?
+      '<div class="section-label">Vendor</div>' +
+      '<div class="card"><div class="field" style="margin-bottom:2px"><label>Who makes this order</label><select id="o-vendor" data-of="vendor_id">' + vendorOptionsHTML(o.vendor_id) + '</select>' +
+      '<div class="hint">Add the diamonds to give the vendor on the order page, after saving.</div></div></div>' : '') +
+
     '<div class="section-label">Items</div>' +
     '<div id="o-items"></div>' +
     '<div class="action-row" style="margin-bottom:4px">' +
@@ -439,8 +448,9 @@ function renderOrderForm() {
     '<div class="card"><div class="field" style="margin-bottom:0"><textarea data-of="notes" style="min-height:80px" placeholder="Design details, finish, colour of stones, packing, special instructions…">' + fv('notes') + '</textarea></div></div>' +
 
     (isNew
-      ? '<div class="action-row"><button class="btn btn-secondary" data-action="o-save" data-quote="1" id="o-quote-btn">Save as quotation</button>' +
-        '<button class="btn btn-primary" data-action="o-save" id="o-save-btn">Save order</button></div>'
+      ? '<button class="btn btn-primary" data-action="o-save" data-quote="1" id="o-quote-btn">Save quotation</button>' +
+        '<div class="hint" style="text-align:center;margin:6px 0 10px">Approve it — or mark it not approved — on the next screen.</div>' +
+        '<button class="btn btn-secondary" data-action="o-save" id="o-save-btn">Already approved — save as order</button>'
       : '<button class="btn btn-primary" data-action="o-save" id="o-save-btn">' + (isQuote ? 'Save quotation' : 'Save changes') + '</button>') +
     '<div style="height:10px"></div>' +
     '</div>';
@@ -544,6 +554,17 @@ function onOrderInput(e) {
     }
     orderRecalcView();
   } else if (t.dataset.of) {
+    if (t.id === 'o-vendor' && t.value === '__new') {
+      t.value = S.ord.o.vendor_id || '';
+      if (typeof openVendorModal === 'function') {
+        openVendorModal(null, (v) => {
+          S.ord.o.vendor_id = v.id;
+          const sel = $('#o-vendor');
+          if (sel) sel.innerHTML = vendorOptionsHTML(v.id);
+        });
+      }
+      return;
+    }
     if (t.id === 'o-karigar' && t.value === '__new') {
       t.value = S.ord.o.karigar_id || '';
       if (typeof openKarigarModal === 'function') {
@@ -599,7 +620,7 @@ function orderItemPhoto(idx) {
         const it = S.ord && S.ord.items[idx];
         if (!it) return;
         it._photo = await downscale(file, 1600);
-      } catch (e) { toast('Could not read that image — try again.', 'err'); return; }
+      } catch (e) { toast(imageErrMsg(e), 'err'); return; }
       redrawOrderItems();
     }, fromGallery);
   };
@@ -641,6 +662,7 @@ async function saveOrder(asQuote) {
     karigar_received_on: kg ? (o.karigar_received_on || null) : null,
     notes: String(o.notes || '').trim() || null,
   };
+  if (S.dbv6) row.vendor_id = o.vendor_id || null;
 
   const btns = [$('#o-save-btn'), $('#o-quote-btn')].filter(Boolean);
   const labels = btns.map((b) => b.textContent);
@@ -734,7 +756,7 @@ async function openOrder(id, replace) {
       const top = S.sub[S.sub.length - 1];
       if (!x || !top || top.title !== title) return;   // user already moved on
       renderOrderPage(x); loadOrderDetails(x);
-      if (typeof loadOrderSteps === 'function') loadOrderSteps(x);
+      if (typeof loadOrderVendorBox === 'function') loadOrderVendorBox(x);
     };
     if (first) { const x = first; first = null; use(x); }
     else { $('#content').innerHTML = '<div class="empty">Loading…</div>'; fetchOrder(id).then(use); }   // fresh data after Back
@@ -744,11 +766,7 @@ async function openOrder(id, replace) {
 function renderOrderPage(o) {
   const cl = o.clients || {};
   const quote = o.status === 'quote';
-  const flow = statusFlow(o.order_type);
-  const idx = flow.indexOf(o.status);
-  const next = idx >= 0 && idx < flow.length - 1 ? flow[idx + 1] : null;
-  const steps = (o.status === 'cancelled' || quote) ? '' :
-    '<div class="o-steps">' + flow.map((s, i) => '<span class="' + (i <= idx ? 'done' : '') + (i === idx ? ' cur' : '') + '">' + esc(OSTATUS_LABEL[s]) + '</span>').join('<i>›</i>') + '</div>';
+  const approved = isLive(o);
   const docBtn = (kind, label) => '<button class="btn btn-small btn-secondary" data-action="d-order" data-id="' + o.id + '" data-kind="' + kind + '">' + label + '</button>';
 
   $('#content').innerHTML =
@@ -759,11 +777,18 @@ function renderOrderPage(o) {
     '<div class="chips">' + chipOType(o.order_type) + chipStatus(o.status) +
     '<span class="chip">' + esc(fmtD(o.order_date)) + '</span>' +
     (o.due_date ? '<span class="chip">' + (isOpenStatus(o.status) && o.due_date < todayStr() ? '⚠ ' : '') + 'Due ' + esc(fmtD(o.due_date)) + '</span>' : '') +
-    '</div>' + steps + '</div>' +
+    '</div></div>' +
 
-    (quote ? '<button class="btn btn-primary" data-action="o-convert" data-id="' + o.id + '" style="margin-bottom:10px">✓ Client agreed — convert to order</button>' : '') +
-    (next ? '<button class="btn btn-primary" data-action="o-status" data-id="' + o.id + '" data-s="' + next + '" style="margin-bottom:10px">Mark as ' + esc(OSTATUS_LABEL[next]) + '</button>' : '') +
+    (quote ? '<div class="card o-approve"><div class="o-approve-q">Did the client approve this quotation?</div>' +
+      '<div class="action-row" style="margin:0">' +
+      '<button class="btn btn-primary" data-action="o-convert" data-id="' + o.id + '">✓ Approved</button>' +
+      '<button class="btn btn-secondary" data-action="o-status" data-id="' + o.id + '" data-s="declined">✗ Not approved</button>' +
+      '</div></div>' : '') +
+    (o.status === 'declined' ? '<div class="notice">The client did not approve this quotation.</div>' +
+      '<button class="btn btn-secondary" data-action="o-status" data-id="' + o.id + '" data-s="quote" style="margin-bottom:10px">Reopen quotation</button>' : '') +
     (o.status === 'cancelled' ? '<button class="btn btn-primary" data-action="o-status" data-id="' + o.id + '" data-s="new" style="margin-bottom:10px">Reopen order</button>' : '') +
+
+    (approved ? '<div class="section-label">Order status</div><div class="card os-card" id="o-stage-view"><div class="empty" style="padding:6px">Loading…</div></div>' : '') +
 
     '<div class="action-row">' +
     '<button class="btn btn-secondary" data-action="o-edit" data-id="' + o.id + '">Edit</button>' +
@@ -771,12 +796,12 @@ function renderOrderPage(o) {
     '<button class="btn btn-secondary" data-action="o-share" data-id="' + o.id + '">WhatsApp</button>' +
     '</div>' +
 
-    '<div id="o-steps-view"></div>' +
+    '<div id="o-vendor-view"></div>' +
 
     '<div class="section-label">Documents (PDF)</div>' +
     '<div class="doc-row">' +
-    (quote ? docBtn('quote', 'Quotation') : docBtn('slip', 'Order slip')) +
-    (!quote ? docBtn('challan', o.order_type === 'job_work' ? 'Job-work challan' : 'Delivery challan') : '') +
+    (quote || o.status === 'declined' ? docBtn('quote', 'Quotation') : docBtn('slip', 'Order slip')) +
+    (approved ? docBtn('challan', o.order_type === 'job_work' ? 'Job-work challan' : 'Delivery challan') : '') +
     (o.order_type === 'job_work' && numOrNull(o.client_metal_g) != null ? docBtn('receipt', 'Gold receipt') : '') +
     (o.karigar_id && numOrNull(o.karigar_issued_g) != null ? '<button class="btn btn-small btn-secondary" data-action="o-kchallan" data-id="' + o.id + '">Karigar challan</button>' : '') +
     '</div>' +
@@ -789,9 +814,28 @@ function renderOrderPage(o) {
     '<div id="o-timeline"></div>' +
 
     '<div style="display:flex;gap:10px;justify-content:center;margin:18px 0 6px">' +
-    (isOpenStatus(o.status) || quote ? '<button class="btn btn-small btn-ghost" data-action="o-status" data-id="' + o.id + '" data-s="cancelled">' + (quote ? 'Client declined' : 'Cancel order') + '</button>' : '') +
+    (isOpenStatus(o.status) ? '<button class="btn btn-small btn-ghost" data-action="o-status" data-id="' + o.id + '" data-s="cancelled">Cancel order</button>' : '') +
     '<button class="btn btn-small btn-danger-ghost" data-action="o-delete" data-id="' + o.id + '">Delete</button>' +
     '</div>';
+}
+
+/* the stages of an approved order: tap one to set it; each shows the day it was reached */
+function stageCardHTML(o, ups) {
+  const when = {};
+  (ups || []).slice().reverse().forEach((u) => { if (u.status) when[u.status] = u.created_at; });   // newest wins
+  const cur = o.status === 'ready' ? ORDER_STAGES.indexOf('finished') : ORDER_STAGES.indexOf(o.status);
+  const row = (key, label, state, ts, tap) => '<div class="os-row ' + state + (tap ? ' tap' : '') + '"' + (tap ? ' data-action="o-status" data-id="' + o.id + '" data-s="' + key + '"' : '') + '>' +
+    '<span class="os-dot">' + (state === 'pending' ? '' : '✓') + '</span>' +
+    '<span class="os-name">' + esc(label) + '</span>' +
+    '<span class="os-date">' + (ts ? esc(fmtD(ts)) : state === 'pending' && tap ? 'Tap to set' : '') + '</span></div>';
+  if (!S.dbv6) {
+    return '<div class="notice" style="margin:0 0 8px">CAD, wax, diamond setting and the other stages need the database update (ark-update-payments-vendors.sql) — ask the owner to run it.</div>' +
+      row('new', 'Approved', 'done', when.new || o.order_date, false) +
+      row('delivered', 'Delivered', o.status === 'delivered' ? 'cur' : 'pending', o.status === 'delivered' ? (o.delivered_on || when.delivered) : null, o.status !== 'delivered');
+  }
+  return row('new', 'Approved', 'done', when.new || o.order_date, false) +
+    ORDER_STAGES.map((k, i) => row(k, OSTATUS_LABEL[k], i < cur ? 'done' : i === cur ? 'cur' : 'pending',
+      i <= cur ? (k === 'delivered' && o.delivered_on ? o.delivered_on : when[k]) : null, i !== cur)).join('');
 }
 
 async function loadOrderDetails(o) {
@@ -804,6 +848,10 @@ async function loadOrderDetails(o) {
   const c = orderCalc(o, items);
   const row = (k, v, cls) => '<div class="o-lrow' + (cls ? ' ' + cls : '') + '"><span>' + k + '</span><b>' + v + '</b></div>';
   const silver = o.metal === 'Silver';
+
+  // stages
+  const sv = $('#o-stage-view');
+  if (sv) sv.innerHTML = stageCardHTML(o, ups);
 
   // weights
   $('#o-sum').innerHTML =
@@ -858,29 +906,36 @@ async function loadOrderDetails(o) {
 }
 
 /* ---------------- order actions ---------------- */
+function stageIndex(st) { return st === 'ready' ? ORDER_STAGES.indexOf('finished') : ORDER_STAGES.indexOf(st); }
+
 async function setOrderStatus(id, s) {
   const o = await fetchOrder(id);
   if (!o) return;
+  if (s === 'declined' && !S.dbv6) s = 'cancelled';   // before the database update "not approved" is kept as cancelled
   const go = async () => {
-    const patch = { status: s };
-    if (s === 'delivered') patch.delivered_on = todayStr();
-    else patch.delivered_on = null;
+    const patch = { status: s, delivered_on: s === 'delivered' ? todayStr() : null };
     const { error } = await db.from('orders').update(patch).eq('id', id);
-    if (error) { toast('Could not update — try again.', 'err'); return; }
+    if (error) {
+      toast(String(error.code) === '23514' ? 'This needs the database update (ark-update-payments-vendors.sql).' : 'Could not update — try again.', 'err');
+      return;
+    }
     await db.from('order_updates').insert({ order_id: id, status: s, note: null, created_by: S.me.id });
     // a quotation never held its pieces; a cancelled order already let them go
-    if (s !== 'cancelled' || HOLDING_STATUSES.indexOf(o.status) > -1) await syncCatalogueForOrder(id, s);
-    toast('Marked ' + OSTATUS_LABEL[s] + ' ✓', 'ok');
+    if (CLOSED_STATUSES.indexOf(s) === -1 || HOLDING_STATUSES.indexOf(o.status) > -1) await syncCatalogueForOrder(id, s);
+    toast(s === 'quote' ? 'Quotation reopened ✓' : 'Marked ' + OSTATUS_LABEL[s] + ' ✓', 'ok');
     openOrder(id, true);
   };
   if (o.status === 'cancelled' && s === 'new') {
     const taken = await piecesTaken(id);
     if (taken.length) { warnPiecesTaken(taken, 'Reopen anyway', go); return; }
   }
-  if (s === 'cancelled') confirmModal(o.status === 'quote' ? 'Client declined?' : 'Cancel this order?',
-    o.status === 'quote' ? 'The quotation will be marked Cancelled. You can reopen it later.' : 'It stays on record as Cancelled. You can reopen it later.',
-    o.status === 'quote' ? 'Mark declined' : 'Cancel order', go, true);
-  else go();
+  if (s === 'declined' || (s === 'cancelled' && o.status === 'quote')) {
+    confirmModal('Not approved?', 'The quotation will be marked Not approved. You can reopen it later.', 'Not approved', go, true);
+  } else if (s === 'cancelled') {
+    confirmModal('Cancel this order?', 'It stays on record as Cancelled. You can reopen it later.', 'Cancel order', go, true);
+  } else if (ORDER_STAGES.indexOf(s) > -1 && stageIndex(o.status) > ORDER_STAGES.indexOf(s)) {
+    confirmModal('Move back to ' + OSTATUS_LABEL[s] + '?', 'The order is at ' + OSTATUS_LABEL[o.status] + ' now.', 'Move back', go);
+  } else go();
 }
 
 /* a catalogue piece can only be in one order — pieces of this order that were taken meanwhile */
@@ -897,15 +952,16 @@ function warnPiecesTaken(taken, yesLabel, onYes) {
 }
 async function convertQuote(id) {
   const taken = await piecesTaken(id);
-  if (taken.length) { warnPiecesTaken(taken, 'Convert anyway', () => doConvertQuote(id)); return; }
+  if (taken.length) { warnPiecesTaken(taken, 'Approve anyway', () => doConvertQuote(id)); return; }
   doConvertQuote(id);
 }
+/* the client approved the quotation → it becomes an order (dated today) */
 async function doConvertQuote(id) {
   const { error } = await db.from('orders').update({ status: 'new', order_date: todayStr() }).eq('id', id);
   if (error) { toast('Could not update — try again.', 'err'); return; }
-  await db.from('order_updates').insert({ order_id: id, status: 'new', note: 'Converted from quotation', created_by: S.me.id });
+  await db.from('order_updates').insert({ order_id: id, status: 'new', note: 'Quotation approved', created_by: S.me.id });
   await syncCatalogueForOrder(id, 'new');
-  toast('Quotation converted to an order ✓', 'ok');
+  toast('Quotation approved ✓', 'ok');
   openOrder(id, true);
 }
 
@@ -961,8 +1017,10 @@ async function shareOrderWhatsApp(id) {
 async function deleteOrder(id) {
   const o = await fetchOrder(id);
   if (!o) return;
-  confirmModal(o.status === 'quote' ? 'Delete this quotation?' : 'Delete this order?',
-    'It will be removed permanently with its items and history. To keep a record, use “' + (o.status === 'quote' ? 'Client declined' : 'Cancel order') + '” instead.', 'Delete', async () => {
+  const isQuote = o.status === 'quote' || o.status === 'declined';
+  const keep = o.status === 'quote' ? ' To keep a record, use “Not approved” instead.' : isOpenStatus(o.status) ? ' To keep a record, use “Cancel order” instead.' : '';
+  confirmModal(isQuote ? 'Delete this quotation?' : 'Delete this order?',
+    'It will be removed permanently with its items and history.' + keep, 'Delete', async () => {
     if (HOLDING_STATUSES.indexOf(o.status) > -1) await syncCatalogueForOrder(id, 'cancelled');
     await db.from('karigar_txns').delete().eq('order_id', id).eq('auto', true);
     const { error } = await db.from('orders').delete().eq('id', id);
@@ -1055,15 +1113,17 @@ async function loadReportOrders(period) {
   if (r.error) { el.innerHTML = ''; return; }
   const all = r.data || [];
   const rows = all.filter(isLive);
-  const cancelled = all.filter((o) => o.status === 'cancelled').length;
+  const cancelled = all.filter((o) => CLOSED_STATUSES.indexOf(o.status) > -1).length;
   const quotes = all.filter((o) => o.status === 'quote');
   const PG = typeof payDueGroups === 'function' ? payDueGroups(payIndex(payRows)) : { all: [], late: [] };
   const byType = { job_work: 0, ready_stock: 0, custom: 0 };
-  const byStatus = { new: 0, in_production: 0, ready: 0, delivered: 0 };
+  const byStatus = {};
+  ['new'].concat(ORDER_STAGES).forEach((k) => { byStatus[k] = 0; });
   const byExec = new Map();
   rows.forEach((o) => {
     byType[o.order_type] = (byType[o.order_type] || 0) + 1;
-    byStatus[o.status] = (byStatus[o.status] || 0) + 1;
+    const st = o.status === 'ready' ? 'finished' : o.status;
+    byStatus[st] = (byStatus[st] || 0) + 1;
     if (o.created_by) byExec.set(o.created_by, (byExec.get(o.created_by) || 0) + 1);
   });
   const tchip = (k) => '<button class="brk-chip"' + (byType[k] ? ' data-action="o-report-type" data-v="' + k + '"' : ' style="opacity:.45"') + '>' + OTYPE_LABEL[k] + ' <b>' + byType[k] + '</b></button>';
@@ -1071,13 +1131,13 @@ async function loadReportOrders(period) {
     '<div class="section-label">Orders ' + esc(periodLabel(period)) + '</div>' +
     '<div class="stat-row">' +
     '<div class="stat"><div class="st-num">' + rows.length + '</div><div class="st-label">Orders</div></div>' +
-    '<div class="stat"><div class="st-num">' + (byStatus.new + byStatus.in_production + byStatus.ready) + '</div><div class="st-label">Open</div></div>' +
+    '<div class="stat"><div class="st-num">' + rows.filter((o) => isOpenStatus(o.status)).length + '</div><div class="st-label">Open</div></div>' +
     '<div class="stat"><div class="st-num">' + byStatus.delivered + '</div><div class="st-label">Delivered</div></div>' +
     '</div>' +
     '<div class="brk-row">' + tchip('job_work') + tchip('ready_stock') + tchip('custom') + '</div>' +
-    '<div class="brk-row">' + ['new', 'in_production', 'ready', 'delivered'].map((s) =>
-      '<span class="brk-chip" style="cursor:default">' + OSTATUS_LABEL[s] + ' <b>' + byStatus[s] + '</b></span>').join('') +
-    (cancelled ? '<span class="brk-chip" style="cursor:default;opacity:.6">Cancelled <b>' + cancelled + '</b></span>' : '') +
+    '<div class="brk-row">' + ['new'].concat(ORDER_STAGES).map((s) =>
+      '<span class="brk-chip" style="cursor:default' + (byStatus[s] ? '' : ';opacity:.45') + '">' + OSTATUS_LABEL[s] + ' <b>' + byStatus[s] + '</b></span>').join('') +
+    (cancelled ? '<span class="brk-chip" style="cursor:default;opacity:.6">Not approved / cancelled <b>' + cancelled + '</b></span>' : '') +
     (quotes.length ? '<button class="brk-chip" data-action="o-goto" data-s="quote">Quotations <b>' + quotes.length + '</b></button>' : '') + '</div>' +
     (byExec.size ? '<div class="brk-row">' + Array.from(byExec.entries()).sort((a, b) => b[1] - a[1]).map((e) =>
       '<span class="brk-chip" style="cursor:default">' + esc(nameOf(e[0])) + ' <b>' + e[1] + '</b></span>').join('') + '</div>' : '') +
@@ -1096,11 +1156,11 @@ async function exportOrdersData(pName, cName, today) {
   const oClient = new Map(orders.map((o) => [o.id, cName.get(o.client_id) || '']));
   await new Promise((r) => setTimeout(r, 450));
   downloadFile('bj-orders-' + today + '.csv', buildCsv(
-    ['Order no', 'Client', 'Type', 'Status', 'Order date', 'Delivery by', 'Delivered on', 'Metal', 'Purity', 'Wastage %',
+    ['Order no', 'Client', 'Type', 'Status', 'Order date', 'Delivery by', 'Delivered on', 'Vendor', 'Metal', 'Purity', 'Wastage %',
       'Client gold (g)', 'Client gold purity', 'Client gold on',
       'Karigar', 'Issued to karigar (g)', 'Issued on', 'Received from karigar (g)', 'Received on', 'Notes', 'Created by', 'Created on'],
     orders.map((o) => [ordNo(o.order_no), cName.get(o.client_id) || '', OTYPE_LABEL[o.order_type], OSTATUS_LABEL[o.status], o.order_date, o.due_date || '',
-      o.delivered_on || '', o.metal, o.purity, o.wastage_pct,
+      o.delivered_on || '', o.vendor_id && typeof vendorName === 'function' ? vendorName(o.vendor_id) : '', o.metal, o.purity, o.wastage_pct,
       o.client_metal_g, o.client_metal_purity, o.client_metal_on || '', o.karigar_name, o.karigar_issued_g, o.karigar_issued_on || '',
       o.karigar_received_g, o.karigar_received_on || '', o.notes, pName.get(o.created_by) || '', fmtExp(o.created_at)])));
   await new Promise((r) => setTimeout(r, 450));

@@ -1,8 +1,8 @@
 /* Marketing app service worker — network-first, cache as offline fallback for the app shell */
-const CACHE = 'app-shell-v8';
+const CACHE = 'app-shell-v9';
 const SHELL = ['index.html', 'styles.css', 'config.js', 'manifest.json', 'icon-192.png', 'icon.svg',
-  'app.js', 'i18n.js', 'jewel.js', 'orders.js', 'util.js', 'docs.js', 'payments.js', 'steps.js',
-  'reports.js', 'catalogue.js', 'karigars.js', 'visits.js', 'targets.js', 'summary.js'];
+  'app.js', 'i18n.js', 'jewel.js', 'orders.js', 'util.js', 'docs.js', 'payments.js', 'vendors.js',
+  'notes.js', 'crop.js', 'reports.js', 'catalogue.js', 'karigars.js', 'visits.js', 'targets.js', 'summary.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}));
@@ -29,7 +29,7 @@ self.addEventListener('fetch', (e) => {
         caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
         return res;
       })
-      // offline: the scripts are loaded as "file.js?v=8", the shell was cached without the "?v=8"
+      // offline: the scripts are loaded as "file.js?v=9", the shell was cached without the "?v=9"
       .catch(() => caches.match(e.request, { ignoreSearch: true }).then((m) => m || caches.match('index.html')))
   );
 });

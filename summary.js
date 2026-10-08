@@ -24,9 +24,11 @@ async function summaryData() {
     typeof payAllEntries === 'function' ? payAllEntries().then((rows) => ({ data: rows })).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
     owner ? db.from('orders').select('id').eq('status', 'quote').lte('order_date', soon).limit(5000) : Promise.resolve({ data: [] }),
     owner ? db.from('karigar_txns').select('kind, metal, fine_g').in('kind', ['issue', 'receive', 'wastage']).limit(20000) : Promise.resolve({ data: [] }),
+    S.dbv6 ? db.from('order_diamonds').select('id, orders!inner(status)').eq('given', false).in('orders.status', OPEN_STATUSES).limit(5000) : Promise.resolve({ data: [] }),
   ]);
-  const meet = res[0].data || [], newCl = res[1].data || [], yOrders = (res[2].data || []).filter((o) => o.status !== 'quote' && o.status !== 'cancelled'),
-    due = res[3].data || [], rem = res[4].data || [], pays = res[5].data || [], quotes = res[6].data || [], kt = res[7].data || [];
+  const meet = res[0].data || [], newCl = res[1].data || [], yOrders = (res[2].data || []).filter((o) => o.status !== 'quote' && CLOSED_STATUSES.indexOf(o.status) === -1),
+    due = res[3].data || [], rem = res[4].data || [], pays = res[5].data || [], quotes = res[6].data || [], kt = res[7].data || [],
+    dia = res[8].data || [];
   const byExec = new Map();
   meet.forEach((m) => byExec.set(m.exec_id, (byExec.get(m.exec_id) || 0) + 1));
   const PG = typeof payDueGroups === 'function' ? payDueGroups(payIndex(pays)) : { late: [], today: [] };
@@ -38,7 +40,7 @@ async function summaryData() {
     yOrders: myOrders.length,
     dueToday: due.filter((d) => d.due_date === t).length, overdue: due.filter((d) => d.due_date < t).length,
     remToday: rem.filter((r) => r.due_date === t).length, remOverdue: rem.filter((r) => r.due_date < t).length,
-    payLate: PG.late.length, payToday: PG.today.length, quotes: quotes.length, kGold, kSilver,
+    payLate: PG.late.length, payToday: PG.today.length, quotes: quotes.length, kGold, kSilver, diaToGive: dia.length,
   };
 }
 
@@ -61,6 +63,7 @@ async function renderTodaySummary(el) {
   if (D.remToday || D.remOverdue) lines.push(line('⏰', '<b>Reminders:</b> ' + D.remToday + ' today' + (D.remOverdue ? ', <span class="o-red">' + D.remOverdue + ' overdue</span>' : '')));
   if (D.payToday || D.payLate) lines.push(line('💰', '<b>Payments due:</b> ' + D.payToday + ' today' + (D.payLate ? ', <span class="o-red">' + D.payLate + ' overdue</span>' : ''), ' data-action="dues-open"'));
   if (owner && D.quotes) lines.push(line('📝', '<b>Quotations waiting</b> 3+ days: ' + D.quotes, ' data-action="o-goto" data-s="quote"'));
+  if (D.diaToGive) lines.push(line('💎', '<b>Diamonds to give vendors:</b> ' + D.diaToGive, ' data-action="dia-todo"'));
   if (owner && (Math.abs(D.kGold) > 0.0005 || Math.abs(D.kSilver) > 0.0005)) {
     lines.push(line('🔨', '<b>With karigars:</b> ' + [Math.abs(D.kGold) > 0.0005 ? 'gold ' + grams(D.kGold) : '', Math.abs(D.kSilver) > 0.0005 ? 'silver ' + grams(D.kSilver) : ''].filter(Boolean).join(', ') + ' fine', ' data-action="k-list"'));
   }
@@ -84,6 +87,7 @@ function summaryText() {
     'Reminders: ' + D.remToday + ' today' + (D.remOverdue ? ', ' + D.remOverdue + ' overdue' : '')];
   if (D.payToday || D.payLate) L.push('Payments due: ' + D.payToday + ' today' + (D.payLate ? ', ' + D.payLate + ' overdue' : ''));
   if (D.quotes) L.push('Quotations waiting 3+ days: ' + D.quotes);
+  if (D.diaToGive) L.push('Diamonds to give vendors: ' + D.diaToGive);
   if (Math.abs(D.kGold) > 0.0005) L.push('Gold with karigars: ' + grams(D.kGold) + ' fine');
   if (Math.abs(D.kSilver) > 0.0005) L.push('Silver with karigars: ' + grams(D.kSilver) + ' fine');
   return L.join('\n');

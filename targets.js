@@ -33,7 +33,7 @@ async function monthActuals(ms) {
   (ir.data || []).forEach((r) => { if (r.exec_id) get(r.exec_id).meetings++; });
   (cr.data || []).forEach((r) => { if (r.created_by) get(r.created_by).new_clients++; });
   (or.data || []).forEach((r) => {
-    if (!r.created_by || r.status === 'quote' || r.status === 'cancelled') return;
+    if (!r.created_by || r.status === 'quote' || CLOSED_STATUSES.indexOf(r.status) > -1) return;
     get(r.created_by).orders++;
   });
   return a;

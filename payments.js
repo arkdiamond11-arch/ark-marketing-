@@ -17,7 +17,7 @@ function payTableMissing(error) {
   const c = String((error && error.code) || ''), m = String((error && error.message) || '');
   return c === '42P01' || c === 'PGRST205' || /party_pay_log/.test(m);
 }
-const PAY_SETUP_NOTE = 'Payment status needs a one-time database update (05-payment-status-setup.sql). Ask the owner to run it in Supabase.';
+const PAY_SETUP_NOTE = 'Payment status needs a one-time database update (ark-update-payments-vendors.sql). Ask the owner to run it in Supabase.';
 
 /* text for a due date: overdue / today / the date */
 function payDueInfo(d) {

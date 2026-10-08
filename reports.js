@@ -13,15 +13,16 @@ const REP_TYPES = [
   ['pay', 'Payment status'], ['payhist', 'Payment dates'], ['items', 'Order items'], ['orders', 'Orders'],
   ['diamonds', 'Diamonds & stones'], ['summary', 'Month summary'], ['stock', 'Stock (catalogue)'], ['karigars', 'Karigar metal'],
 ];
-const LIVE_STATUSES = ['new', 'in_production', 'ready', 'delivered'];
-const REP_STATUS = [['booked', 'Booked (open + delivered)'], ['open', 'Open'], ['delivered', 'Delivered'], ['quote', 'Quotations'], ['cancelled', 'Cancelled'], ['all', 'All']];
-const REP_STATUS_SET = { booked: LIVE_STATUSES, open: ['new', 'in_production', 'ready'], delivered: ['delivered'], quote: ['quote'], cancelled: ['cancelled'], all: null };
+const LIVE_STATUSES = OPEN_STATUSES.concat(['delivered']);   // approved orders (in work, finished or delivered)
+const REP_STATUS = [['booked', 'Booked (open + delivered)'], ['open', 'Open'], ['finished', 'Finished'], ['delivered', 'Delivered'], ['quote', 'Quotations'],
+  ['cancelled', 'Not approved / cancelled'], ['all', 'All']];
+const REP_STATUS_SET = { booked: LIVE_STATUSES, open: OPEN_STATUSES, finished: ['finished', 'ready'], delivered: ['delivered'], quote: ['quote'], cancelled: CLOSED_STATUSES, all: null };
 const REP_GROUPS = {
   pay: [['', 'No grouping'], ['status', 'Status'], ['city', 'City']],
   payhist: [['', 'No grouping'], ['party', 'Party'], ['kind', 'Entry'], ['month', 'Month'], ['exec', 'Added by']],
-  items: [['', 'No grouping'], ['party', 'Party'], ['metal', 'Metal'], ['purity', 'Purity'], ['color', 'Colour / finish'], ['dtype', 'Diamond type'], ['cat', 'Piece type'], ['otype', 'Order type'], ['exec', 'Executive'], ['city', 'City'], ['month', 'Month']],
-  orders: [['', 'No grouping'], ['party', 'Party'], ['metal', 'Metal'], ['otype', 'Order type'], ['status', 'Status'], ['exec', 'Executive'], ['city', 'City'], ['month', 'Month']],
-  diamonds: [['dtype', 'Diamond type'], ['', 'No grouping'], ['party', 'Party'], ['dcert', 'Certificate'], ['month', 'Month']],
+  items: [['', 'No grouping'], ['party', 'Party'], ['metal', 'Metal'], ['purity', 'Purity'], ['color', 'Colour / finish'], ['dtype', 'Diamond type'], ['cat', 'Piece type'], ['otype', 'Order type'], ['vendor', 'Vendor'], ['exec', 'Executive'], ['city', 'City'], ['month', 'Month']],
+  orders: [['', 'No grouping'], ['party', 'Party'], ['metal', 'Metal'], ['otype', 'Order type'], ['status', 'Status'], ['vendor', 'Vendor'], ['exec', 'Executive'], ['city', 'City'], ['month', 'Month']],
+  diamonds: [['dtype', 'Diamond type'], ['', 'No grouping'], ['party', 'Party'], ['dcert', 'Certificate'], ['vendor', 'Vendor'], ['month', 'Month']],
   stock: [['cat', 'Piece type'], ['', 'No grouping'], ['metal', 'Metal'], ['dtype', 'Diamond type'], ['color', 'Colour / finish'], ['status', 'Status']],
   karigars: [['', 'No grouping']],
   summary: [['', 'No grouping']],
@@ -109,8 +110,10 @@ function repOrderPass(o, f) {
   if (f.otype && o.order_type !== f.otype) return false;
   if (f.exec && o.created_by !== f.exec) return false;
   if (f.city && ((o.clients && o.clients.city) || '') !== f.city) return false;
+  if (f.vendor && (f.vendor === 'none' ? !!o.vendor_id : o.vendor_id !== f.vendor)) return false;
   return true;
 }
+function repVendor(o) { return (o.vendor_id && typeof vendorName === 'function' && vendorName(o.vendor_id)) || 'No vendor yet'; }
 function repItemPass(x, f) {
   const it = x.it;
   if (f.color && (it.metal_color || '') !== f.color) return false;
@@ -256,7 +259,7 @@ function repBuild(D) {
     const g = (x, k) => ({
       party: x.party || '—', metal: x.metal, purity: purityKey(x.o.purity) || (x.o.purity != null ? num(x.o.purity) + '%' : '—'),
       color: x.it.metal_color ? colorLabel(x.metal, x.it.metal_color) : '—', dtype: x.it.diamond_type ? diamondLabel(x.it.diamond_type) : 'No diamonds',
-      cat: x.it.category || '—', otype: OTYPE_LABEL[x.o.order_type] || '—', exec: nameOf(x.o.created_by), city: x.city || '—',
+      cat: x.it.category || '—', otype: OTYPE_LABEL[x.o.order_type] || '—', vendor: repVendor(x.o), exec: nameOf(x.o.created_by), city: x.city || '—',
       month: repMonth(x.o.order_date), dcert: x.it.diamond_cert_lab ? x.it.diamond_cert_lab + ' certified' : 'Not certified',
     }[k]);
     const agg = (list) => ({
@@ -281,11 +284,12 @@ function repBuild(D) {
       amount: (x) => (T === 'diamonds' ? fmtCt(x.it.diamond_ct) + ' ct' : x.net ? fmtG(x.net) + ' g' : ''), open: (x) => x.o.id,
       csvHead: ['Order date', 'Delivered on', 'Order no', 'Party', 'City', 'Order type', 'Status', 'Executive', 'Piece', 'Tag / design', 'Description', 'Qty', 'Metal', 'Purity',
         'Colour / finish', 'Gross wt (g)', 'Net wt (g)', 'Fine wt (g)', 'Diamonds / stones', 'Carats', 'Diamond pcs', 'Diamond quality', 'Diamond certificate',
-        'Diamond cert no', 'Jewellery certificate', 'Jewellery cert / HUID no', 'Other stones'],
+        'Diamond cert no', 'Jewellery certificate', 'Jewellery cert / HUID no', 'Other stones', 'Vendor'],
       csv: (x) => [x.o.order_date, x.o.delivered_on || '', ordNo(x.o.order_no), x.party, x.city, OTYPE_LABEL[x.o.order_type], OSTATUS_LABEL[x.o.status], nameOf(x.o.created_by),
         x.it.category, x.it.design_code, x.it.description, x.it.qty, x.metal, x.o.purity, x.it.metal_color, x.it.gross_wt, x.it.net_wt, round3(x.fine),
         diamondLabel(x.it.diamond_type), x.it.diamond_ct, x.it.diamond_pcs, x.it.diamond_quality,
-        x.it.diamond_type ? (x.it.diamond_cert_lab || 'Not certified') : '', x.it.diamond_cert_no, x.it.jewel_cert_type || '', x.it.jewel_cert_no, x.it.stone_details],
+        x.it.diamond_type ? (x.it.diamond_cert_lab || 'Not certified') : '', x.it.diamond_cert_no, x.it.jewel_cert_type || '', x.it.jewel_cert_no, x.it.stone_details,
+        x.o.vendor_id ? repVendor(x.o) : ''],
       pdfCols: [['Date', 20], ['Order', 18], ['Party', 34], ['Item', 0], ['Net (g)', 18, 'right'], ['Ct', 14, 'right']],
       pdfRow: (x) => [fmtD(x.o.order_date), ordNo(x.o.order_no), x.party, [x.it.category, x.it.design_code, x.it.metal_color ? colorLabel(x.metal, x.it.metal_color) : '',
         x.it.diamond_type ? diamondLabel(x.it.diamond_type) + (x.it.diamond_cert_lab ? ' ' + x.it.diamond_cert_lab : '') : '',
@@ -308,14 +312,14 @@ function repBuild(D) {
       tiles: [['Orders', String(tot.n)], ['Delivered', String(tot.delivered)], ['Delivery late', String(tot.late)], tot.netG ? ['Gold net (g)', fmtG(tot.netG)] : null,
         tot.netS ? ['Silver net (g)', fmtG(tot.netS)] : null, tot.ct ? ['Diamond ct', fmtCt(tot.ct)] : null].filter(Boolean),
       groupKey: (x, k) => ({ party: x.party || '—', metal: x.o.metal || 'Gold', otype: OTYPE_LABEL[x.o.order_type] || '—', status: OSTATUS_LABEL[x.o.status] || x.o.status,
-        exec: nameOf(x.o.created_by), city: x.city || '—', month: repMonth(x.o.order_date) }[k]),
+        vendor: repVendor(x.o), exec: nameOf(x.o.created_by), city: x.city || '—', month: repMonth(x.o.order_date) }[k]),
       gcols: [['Orders', (a) => String(a.n)], ['Pieces', (a) => String(a.pcs)], ['Net (g)', (a) => fmtG(a.netG + a.netS)], ['Late', (a) => String(a.late)]],
-      lines: (x) => [ordNo(x.o.order_no) + ' · ' + x.party, [fmtD(x.o.order_date), OTYPE_LABEL[x.o.order_type], OSTATUS_LABEL[x.o.status],
+      lines: (x) => [ordNo(x.o.order_no) + ' · ' + x.party, [fmtD(x.o.order_date), OTYPE_LABEL[x.o.order_type], OSTATUS_LABEL[x.o.status], x.o.vendor_id ? repVendor(x.o) : '',
         x.o.status === 'delivered' && x.o.delivered_on ? 'Delivered ' + fmtD(x.o.delivered_on) : x.o.due_date ? 'Delivery by ' + fmtD(x.o.due_date) : '', x.late ? 'late' : ''].filter(Boolean).join(' · ')],
       amount: (x) => (x.net ? fmtG(x.net) + ' g' : ''), open: (x) => x.o.id,
-      csvHead: ['Order no', 'Order date', 'Delivery by', 'Delivered on', 'Party', 'City', 'Type', 'Status', 'Metal', 'Purity', 'Pieces', 'Net wt (g)', 'Fine wt (g)', 'Diamond ct', 'Executive'],
+      csvHead: ['Order no', 'Order date', 'Delivery by', 'Delivered on', 'Party', 'City', 'Type', 'Status', 'Metal', 'Purity', 'Pieces', 'Net wt (g)', 'Fine wt (g)', 'Diamond ct', 'Executive', 'Vendor'],
       csv: (x) => [ordNo(x.o.order_no), x.o.order_date, x.o.due_date || '', x.o.delivered_on || '', x.party, x.city, OTYPE_LABEL[x.o.order_type], OSTATUS_LABEL[x.o.status], x.o.metal, x.o.purity,
-        x.pcs, round3(x.net), round3(x.fine), round3(x.ct), nameOf(x.o.created_by)],
+        x.pcs, round3(x.net), round3(x.fine), round3(x.ct), nameOf(x.o.created_by), x.o.vendor_id ? repVendor(x.o) : ''],
       pdfCols: [['Date', 20], ['Order', 18], ['Party', 0], ['Status', 24], ['Delivery by', 24], ['Net (g)', 20, 'right']],
       pdfRow: (x) => [fmtD(x.o.order_date), ordNo(x.o.order_no), x.party, OSTATUS_LABEL[x.o.status] || '', x.o.due_date ? fmtD(x.o.due_date) : '', x.net ? pG(x.net) : ''],
     };
@@ -421,6 +425,7 @@ function repFilterDefs() {
   // items, orders, diamonds
   d.push(['party', 'Party', party], ['city', 'City', cities], ['status', 'Status', REP_STATUS, true], ['metal', 'Metal', metals],
     ['otype', 'Order type', otypes], ['exec', 'Executive (booked by)', team]);
+  if (S.dbv6) d.push(['vendor', 'Vendor', [['none', 'No vendor yet']].concat((S.vendors || []).map((v) => [v.id, v.name]))]);
   if (T === 'items' || T === 'diamonds') itemFilters();
   return d;
 }
