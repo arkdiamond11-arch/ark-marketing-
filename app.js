@@ -945,15 +945,30 @@ async function saveClient(editId) {
 /* ============================================================
    FIND / SEARCH
    ============================================================ */
+/* how the client list is sorted (remembered on this phone) */
+const CLIENT_SORTS = [['new', 'Newest'], ['old', 'Oldest'], ['met', 'Last meeting'], ['az', 'A–Z'], ['city', 'City']];
+const CLIENT_CHUNK = 100;   // rows drawn at a time ("Show more" draws the next lot)
+
+function clientSortKey() {
+  let v = S.clientSort;
+  if (!v) { try { v = localStorage.getItem('clientSort'); } catch (_) { v = null; } }
+  if (!CLIENT_SORTS.some((x) => x[0] === v)) v = 'new';
+  S.clientSort = v;
+  return v;
+}
+
 function renderFind() {
   setHeader('Clients', false);
+  const sortBy = clientSortKey();
   $('#content').innerHTML =
     '<div class="action-row" style="margin-bottom:10px">' +
     '<button class="btn btn-primary" data-action="scan-start">' + IC.camera + ' Scan card</button>' +
     '<button class="btn btn-secondary" data-action="manual-start">' + IC.pen + ' Type details</button>' +
     '</div>' +
     '<div class="search-box"><input type="text" id="search-input" placeholder="Search name, shop, mobile, city…" autocomplete="off"></div>' +
-    '<div id="search-results"><div class="empty">Loading recent clients…</div></div>';
+    '<div class="filter-chips cl-sort"><span class="cl-sort-lbl">Sort</span>' +
+    CLIENT_SORTS.map((x) => '<button class="' + (x[0] === sortBy ? 'on' : '') + '" data-action="cl-sort" data-v="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' +
+    '<div id="search-results"><div class="empty">Loading clients…</div></div>';
   const inp = $('#search-input');
   inp.addEventListener('input', () => {
     clearTimeout(S.searchTimer);
@@ -962,40 +977,138 @@ function renderFind() {
   runSearch('');
 }
 
+/* the newest meeting with each client: client id → time (kept for 2 minutes) */
+async function lastMeetingMap() {
+  if (S.lastMet && Date.now() - S.lastMet.at < 120000) return S.lastMet.map;
+  let rows = [];
+  try {
+    rows = await fetchPaged(() => db.from('interactions').select('client_id, happened_at')
+      .order('happened_at', { ascending: false }).order('id', { ascending: true }));
+  } catch (_) { rows = []; }
+  const map = new Map();
+  rows.forEach((r) => { if (!map.has(r.client_id)) map.set(r.client_id, r.happened_at); });   // newest first
+  S.lastMet = { at: Date.now(), map };
+  return map;
+}
+
+function sortClients(list, how, met) {
+  const ts = (c) => c.created_at || '';
+  const nm = (c) => String(c.trade_name || '').trim().toLowerCase();
+  const ct = (c) => String(c.city || '').trim().toLowerCase();
+  const mt = (c) => met.get(c.id) || '';
+  const newest = (a, b) => (ts(a) < ts(b) ? 1 : ts(a) > ts(b) ? -1 : 0);
+  const cmp = {
+    new: newest,
+    old: (a, b) => -newest(a, b),
+    met: (a, b) => (mt(a) === mt(b) ? newest(a, b) : !mt(a) ? 1 : !mt(b) ? -1 : mt(a) < mt(b) ? 1 : -1),
+    az: (a, b) => nm(a).localeCompare(nm(b)) || newest(a, b),
+    city: (a, b) => (!ct(a) !== !ct(b) ? (!ct(a) ? 1 : -1) : ct(a).localeCompare(ct(b)) || nm(a).localeCompare(nm(b))),
+  }[how] || newest;
+  return list.slice().sort(cmp);
+}
+
+/* the heading a client falls under: the month (date sorts), the city, or none (A–Z) */
+function clientGroup(c, how, met) {
+  const month = (iso) => monthLabel(ymd(new Date(iso)).slice(0, 7) + '-01');
+  if (how === 'new' || how === 'old') return c.created_at ? month(c.created_at) : '—';
+  if (how === 'met') { const m = met.get(c.id); return m ? month(m) : 'No meeting yet'; }
+  if (how === 'city') {
+    const city = String(c.city || '').trim().replace(/\s+/g, ' ');
+    if (!city) return 'No city';
+    return city === city.toLowerCase() ? city.replace(/(^|\s)([a-z])/g, (m, sp, ch) => sp + ch.toUpperCase()) : city;   // "panjim" → "Panjim"
+  }
+  return '';
+}
+
+function clientRowHTML(cl, met) {
+  const who = cl.created_by ? nameOf(cl.created_by) : '';
+  const m = met.get(cl.id);
+  const added = [cl.created_at ? 'Added ' + fmtDT(cl.created_at) : '', who && who !== '—' ? who : ''].filter(Boolean).join(' · ');
+  return '<div class="list-item" data-action="open-client" data-id="' + cl.id + '">' +
+    '<div class="li-main">' +
+    '<div class="li-title">' + esc(cl.trade_name) + '</div>' +
+    '<div class="li-sub">' + esc([cl.contact_person, cl.city].filter(Boolean).join(' · ') || cl.company_name || '') + '</div>' +
+    '<div class="li-chips">' + chipCat(cl.category) + chipInterest(cl.interest) + '</div>' +
+    (added ? '<div class="li-when">' + esc(added) + '</div>' : '') +
+    (m ? '<div class="li-when li-met">' + esc('Last meeting ' + fmtD(m)) + '</div>' : '') +
+    '</div><div style="color:var(--muted)">›</div></div>';
+}
+
+/* draw the next lot of rows (headings continue across lots) */
+function drawClientRows() {
+  const L = S.clist, box = $('#search-results');
+  if (!L || !box) return;
+  const more = box.querySelector('.cl-more');
+  if (more) more.remove();
+  const part = L.list.slice(L.shown, L.shown + CLIENT_CHUNK);
+  let html = '';
+  part.forEach((c) => {
+    const g = L.how === 'az' ? '' : clientGroup(c, L.how, L.met);
+    const key = g.toLowerCase();
+    if (g && key !== L.cur) { L.cur = key; html += '<div class="section-label cl-group">' + esc(g) + ' · ' + (L.counts.get(key) || 0) + '</div>'; }
+    html += clientRowHTML(c, L.met);
+  });
+  L.shown += part.length;
+  const left = L.list.length - L.shown;
+  if (left > 0) html += '<button class="btn btn-secondary cl-more" data-action="cl-more">Show more (' + left + ')</button>';
+  box.insertAdjacentHTML('beforeend', html);
+  // the newest note under each client (or the one that matched the search)
+  if (typeof fillClientNoteSnippets === 'function') fillClientNoteSnippets(box, part.map((c) => c.id), L.q, () => L.seq === S.searchSeq);
+}
+
 async function runSearch(qRaw) {
   const box = $('#search-results');
   if (!box) return;
   const q = String(qRaw || '').trim().replace(/[,%()]/g, ' ').trim();
-  let query = db.from('clients').select('id, trade_name, company_name, contact_person, city, area, category, interest, mobile');
-  if (q) {
-    const pat = '%' + q + '%';
-    query = query.or('trade_name.ilike.' + pat + ',company_name.ilike.' + pat + ',contact_person.ilike.' + pat + ',mobile.ilike.' + pat + ',phone_other.ilike.' + pat + ',city.ilike.' + pat + ',owner_name.ilike.' + pat + ',email.ilike.' + pat).limit(50);
-  } else {
-    query = query.order('created_at', { ascending: false }).limit(25);
-  }
+  const how = clientSortKey();
+  const cols = 'id, trade_name, company_name, contact_person, city, area, category, interest, mobile, created_at, created_by';
   const seq = S.searchSeq = (S.searchSeq || 0) + 1;   // typing fast: only the newest search may draw
-  const { data: found, error } = await query;
+  let data, met;
+  try {
+    const getClients = q
+      ? (async () => {
+        const pat = '%' + q + '%';
+        const r = await db.from('clients').select(cols)
+          .or('trade_name.ilike.' + pat + ',company_name.ilike.' + pat + ',contact_person.ilike.' + pat + ',mobile.ilike.' + pat + ',phone_other.ilike.' + pat + ',city.ilike.' + pat + ',owner_name.ilike.' + pat + ',email.ilike.' + pat)
+          .limit(200);
+        if (r.error) throw r.error;
+        return r.data || [];
+      })()
+      : fetchPaged(() => db.from('clients').select(cols).order('created_at', { ascending: false }).order('id', { ascending: true }));   // every client
+    [data, met] = await Promise.all([getClients, lastMeetingMap()]);
+  } catch (e) {
+    if (seq === S.searchSeq) box.innerHTML = '<div class="empty">Could not load clients — try again.</div>';
+    return;
+  }
   if (seq !== S.searchSeq) return;
-  if (error) { box.innerHTML = '<div class="empty">Search failed — try again.</div>'; return; }
-  let data = found || [];
   if (q && typeof clientsFromNotes === 'function') {
-    data = data.concat(await clientsFromNotes(q, data.map((c) => c.id)));   // also look inside client notes
+    const viaNotes = await clientsFromNotes(q, data.map((c) => c.id));   // also look inside client notes
+    if (viaNotes.length) {
+      const r = await db.from('clients').select(cols).in('id', viaNotes.map((c) => c.id));   // with their dates
+      data = data.concat(r.data || viaNotes);
+    }
     if (seq !== S.searchSeq) return;
   }
   if (!data.length) {
     box.innerHTML = '<div class="empty"><div class="big">🔎</div>' + (q ? 'No client matches "' + esc(q) + '".<br>Check the spelling, or add them as a new client.' : 'No clients yet — tap “Scan card” or “Type details” above to add your first.') + '</div>';
     return;
   }
-  box.innerHTML = (q ? '' : '<div class="section-label">Recently added</div>') + data.map((cl) =>
-    '<div class="list-item" data-action="open-client" data-id="' + cl.id + '">' +
-    '<div class="li-main">' +
-    '<div class="li-title">' + esc(cl.trade_name) + '</div>' +
-    '<div class="li-sub">' + esc([cl.contact_person, cl.city].filter(Boolean).join(' · ') || cl.company_name || '') + '</div>' +
-    '<div class="li-chips">' + chipCat(cl.category) + chipInterest(cl.interest) + '</div>' +
-    '</div><div style="color:var(--muted)">›</div></div>').join('');
-  // the newest note under each client (or the one that matched the search)
-  if (typeof fillClientNoteSnippets === 'function') fillClientNoteSnippets(box, data.map((c) => c.id), q, () => seq === S.searchSeq);
+  const list = sortClients(data, how, met);
+  const counts = new Map();
+  if (how !== 'az') list.forEach((c) => { const k = clientGroup(c, how, met).toLowerCase(); counts.set(k, (counts.get(k) || 0) + 1); });
+  S.clist = { list, how, met, q, seq, counts, shown: 0, cur: null };
+  box.innerHTML = '<div class="cl-count">' + (q ? 'Found (' + list.length + ')' : 'All clients (' + list.length + ')') + '</div>';
+  drawClientRows();
 }
+
+onAct('cl-sort', (el) => {
+  S.clientSort = el.dataset.v;
+  try { localStorage.setItem('clientSort', S.clientSort); } catch (_) { /* private mode */ }
+  document.querySelectorAll('[data-action="cl-sort"]').forEach((b) => b.classList.toggle('on', b === el));
+  const inp = $('#search-input');
+  runSearch(inp ? inp.value : '');
+});
+onAct('cl-more', () => drawClientRows());
 
 /* ============================================================
    CLIENT PAGE
@@ -1209,6 +1322,7 @@ async function saveInteraction() {
     await db.from('clients').update({ interest: interestAfter }).eq('id', cl.id);
   }
 
+  S.lastMet = null;   // the client list shows the newest meeting
   toast('Meeting recorded ✓', 'ok');
   await openClient(cl.id, true);
 
