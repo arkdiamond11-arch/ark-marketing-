@@ -87,7 +87,7 @@ async function renderVendors() {
 async function vendorData(id) {
   const [vr, orr, dr] = await Promise.all([
     db.from('vendors').select('*').eq('id', id).maybeSingle(),
-    db.from('orders').select('id, order_no, order_type, status, order_date, due_date, clients(trade_name, city)')   // no vendor_id: no vendor chip on the vendor's own page
+    db.from('orders').select('id, order_no, order_type, status, order_date, due_date, clients(trade_name, city), ' + ORDER_PHOTO_COLS)   // no vendor_id: no vendor chip on the vendor's own page
       .eq('vendor_id', id).order('order_date', { ascending: false }).limit(300),
     db.from('order_diamonds').select('*, orders!inner(id, order_no, status, vendor_id)').eq('orders.vendor_id', id)
       .order('created_at', { ascending: true }).limit(2000),
@@ -145,6 +145,7 @@ function renderVendorPage(V) {
     '<div style="display:flex;gap:10px;justify-content:center;margin:16px 0 6px">' +
     '<button class="btn btn-small ' + (v.active ? 'btn-danger-ghost' : 'btn-ghost') + '" data-action="v-active">' + (v.active ? 'Switch off' : 'Switch on') + '</button>' +
     '</div>';
+  fillOrderThumbs($('#content'));
 }
 
 /* ---------------- add / edit ---------------- */

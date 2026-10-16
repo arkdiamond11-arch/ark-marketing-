@@ -195,7 +195,7 @@ async function loadOrderList() {
   const box = $('#o-list');
   if (!box) return;
   const L = S.olist;
-  let q = db.from('orders').select('id, order_no, order_type, status, order_date, due_date' + (S.dbv6 ? ', vendor_id' : '') + ', clients!inner(trade_name, city)');
+  let q = db.from('orders').select('id, order_no, order_type, status, order_date, due_date' + (S.dbv6 ? ', vendor_id' : '') + ', clients!inner(trade_name, city), ' + ORDER_PHOTO_COLS);
   if (L.status === 'open') q = q.in('status', OPEN_STATUSES);
   else if (L.status === 'finished') q = q.in('status', ['finished', 'ready']);
   else if (L.status === 'closed') q = q.in('status', CLOSED_STATUSES);
@@ -226,6 +226,7 @@ async function loadOrderList() {
       '<div class="stat"><div class="st-num">' + finished + '</div><div class="st-label">Finished</div></div>') +
     '</div><div style="height:8px"></div>' +
     rows.map((o) => orderListItemHTML(o, true)).join('');
+  fillOrderThumbs(box);
 }
 
 function orderListItemHTML(o, showClient) {
@@ -237,7 +238,118 @@ function orderListItemHTML(o, showClient) {
     (o.due_date ? ' · ' + dueHTML(o) : '') + '</div>' +
     '<div class="li-chips">' + chipStatus(o.status) +
     (o.vendor_id && typeof vendorName === 'function' && vendorName(o.vendor_id) ? '<span class="chip chip-vendor">' + esc(vendorName(o.vendor_id)) + '</span>' : '') +
-    '</div></div><div style="color:var(--muted)">›</div></div>';
+    '</div></div>' + (orderThumbHTML(o) || '<div class="li-go">›</div>') + '</div>';
+}
+
+/* ---------------- order photos in the lists ----------------
+   Each order in a list shows the photo of its first item (the item's own
+   photo, else its catalogue piece's photo). Tapping the photo shows all the
+   order's photos full screen, without opening the order. */
+const ORDER_PHOTO_COLS = 'order_items(sort, photo_path, catalogue_id, category, design_code)';
+const CAT_PHOTO = new Map();   // catalogue piece id → its first photo path ('' = none)
+
+function orderThumbHTML(o) {
+  const all = (o.order_items || []).slice().sort((a, b) => num(a.sort) - num(b.sort));
+  if (!all.some((it) => it.photo_path || it.catalogue_id)) return '';
+  S.oPhotos = S.oPhotos || new Map();
+  S.oPhotos.set(o.id, { o, all });
+  return '<div class="o-thumb" data-action="o-photos" data-id="' + o.id + '" aria-label="Photos">' +
+    '<img alt="" loading="lazy" decoding="async" data-oph="' + esc(o.id) + '"><span class="o-thumb-n"></span></div>';
+}
+
+/* the first photo of each catalogue piece, a few at a time, remembered */
+async function catPhotoPaths(ids) {
+  const need = Array.from(new Set(ids)).filter((id) => id && !CAT_PHOTO.has(id));
+  for (let i = 0; i < need.length; i += 100) {
+    const part = need.slice(i, i + 100);
+    const { data, error } = await db.from('catalogue_items').select('id, photo_paths').in('id', part);
+    if (error) break;
+    part.forEach((id) => CAT_PHOTO.set(id, ''));
+    (data || []).forEach((c) => CAT_PHOTO.set(c.id, (c.photo_paths || [])[0] || ''));
+  }
+  return CAT_PHOTO;
+}
+
+/* [bucket, path] of each item's photo (own photo first, else the catalogue piece's), or null */
+function itemPhotoRef(it) {
+  if (it.photo_path) return ['orders', it.photo_path];
+  const p = it.catalogue_id ? CAT_PHOTO.get(it.catalogue_id) : '';
+  return p ? ['catalogue', p] : null;
+}
+
+/* put the photos into the thumbnails of a list that was just drawn */
+async function fillOrderThumbs(root) {
+  if (!root || !S.oPhotos) return;
+  const imgs = Array.from(root.querySelectorAll('img[data-oph]:not([src])'));
+  if (!imgs.length) return;
+  try {
+    const entries = imgs.map((im) => S.oPhotos.get(im.dataset.oph)).filter(Boolean);
+    await catPhotoPaths([].concat(...entries.map((e) => e.all.filter((it) => !it.photo_path).map((it) => it.catalogue_id))));
+    const firsts = entries.map((e) => e.all.map(itemPhotoRef).find(Boolean)).filter(Boolean);
+    const [own, cat] = await Promise.all([
+      signedUrls('orders', firsts.filter((f) => f[0] === 'orders').map((f) => f[1])),
+      signedUrls('catalogue', firsts.filter((f) => f[0] === 'catalogue').map((f) => f[1])),
+    ]);
+    imgs.forEach((im) => {
+      const e = S.oPhotos.get(im.dataset.oph);
+      const box = im.closest('.o-thumb');
+      if (!box) return;
+      const shots = e ? e.all.map(itemPhotoRef).filter(Boolean) : [];
+      const f = shots[0];
+      const url = f ? (f[0] === 'orders' ? own : cat).get(f[1]) : null;
+      if (!url) { box.outerHTML = '<div class="li-go">›</div>'; return; }   // no photo after all
+      im.src = url;
+      const n = box.querySelector('.o-thumb-n');
+      if (n) n.textContent = shots.length > 1 ? '+' + (shots.length - 1) : '';
+    });
+  } catch (err) { /* the list still works without photos */ }
+}
+
+/* all the photos of one order, full screen; swipe across, tap Open order */
+async function openOrderPhotos(orderId) {
+  const e = S.oPhotos && S.oPhotos.get(orderId);
+  if (!e) { openOrder(orderId); return; }
+  let urls = [];
+  try { urls = await orderItemPhotoUrls(e.all); } catch (err) { urls = []; }
+  const shots = e.all.map((it, i) => ({ it, i, u: urls[i] })).filter((x) => x.u);
+  if (!shots.length) { openOrder(orderId); return; }
+  closeModal();
+  const cl = e.o.clients || {};
+  const many = shots.length > 1;
+  const ov = document.createElement('div');
+  ov.id = 'modal-ov';   // the phone's Back button, or any new box, closes it like the other boxes
+  ov.className = 'ph-view';
+  ov.innerHTML =
+    '<div class="ph-top"><div class="ph-title">' + esc(ordNo(e.o.order_no) + (cl.trade_name ? ' · ' + cl.trade_name : '')) + '</div>' +
+    (many ? '<span class="ph-count noi18n">1 / ' + shots.length + '</span>' : '') +
+    '<button type="button" class="ph-x" aria-label="Close">✕</button></div>' +
+    '<div class="ph-strip">' + shots.map((x) =>
+      '<figure class="ph-slide"><a href="' + esc(x.u) + '" target="_blank" rel="noopener"><img src="' + esc(x.u) + '" alt=""></a>' +
+      '<figcaption>' + esc((x.i + 1) + '. ' + [x.it.category || 'Item', x.it.design_code].filter(Boolean).join(' · ')) + '</figcaption></figure>').join('') + '</div>' +
+    '<div class="ph-bottom">' +
+    (many ? '<button type="button" class="ph-nav" data-d="-1" aria-label="Previous" disabled>‹</button>' : '') +
+    '<button type="button" class="btn btn-primary" data-m="open">Open order ›</button>' +
+    (many ? '<button type="button" class="ph-nav" data-d="1" aria-label="Next">›</button>' : '') + '</div>';
+  document.body.appendChild(ov);
+  const strip = ov.querySelector('.ph-strip');
+  const count = ov.querySelector('.ph-count');
+  const navs = ov.querySelectorAll('.ph-nav');
+  const at = () => Math.round(strip.scrollLeft / Math.max(1, strip.clientWidth));
+  const show = () => {
+    const i = Math.min(shots.length - 1, Math.max(0, at()));
+    if (count) count.textContent = (i + 1) + ' / ' + shots.length;
+    navs.forEach((b) => { b.disabled = +b.dataset.d < 0 ? i === 0 : i === shots.length - 1; });
+  };
+  strip.addEventListener('scroll', () => { clearTimeout(ov._t); ov._t = setTimeout(show, 60); }, { passive: true });
+  navs.forEach((b) => { b.onclick = () => strip.scrollTo({ left: (at() + +b.dataset.d) * strip.clientWidth, behavior: 'smooth' }); });
+  ov.querySelector('.ph-x').onclick = closeModal;
+  ov.querySelector('[data-m=open]').onclick = () => { closeModal(); openOrder(orderId); };
+  const onKey = (k) => {
+    if (!document.body.contains(ov)) { document.removeEventListener('keydown', onKey); return; }
+    if (k.key === 'Escape') closeModal();
+    else if (k.key === 'ArrowRight' || k.key === 'ArrowLeft') strip.scrollBy({ left: (k.key === 'ArrowRight' ? 1 : -1) * strip.clientWidth, behavior: 'smooth' });
+  };
+  document.addEventListener('keydown', onKey);
 }
 
 /* pick a client for a new order */
@@ -1046,6 +1158,7 @@ async function onOrderAction(a, el) {
   else if (a === 'o-pick-client') { const c = await fetchClient(el.dataset.id); if (c) startNewOrder(c, null, true); }
   else if (a === 'o-new') { S.pendingCatItems = null; const c = await fetchClient(el.dataset.id); if (c) startNewOrder(c, el.dataset.type || null); }
   else if (a === 'o-open') openOrder(el.dataset.id);
+  else if (a === 'o-photos') openOrderPhotos(el.dataset.id);
   else if (a === 'o-filter') { S.olist[el.dataset.g] = el.dataset.v; renderOrders(); }
   else if (a === 'o-item-add') {
     const ni = blankItem(S.ord.items[S.ord.items.length - 1]);
@@ -1072,7 +1185,7 @@ async function onOrderAction(a, el) {
 async function loadClientOrders(cl) {
   const el = $('#client-orders');
   if (!el) return;
-  const { data, error } = await db.from('orders').select('id, order_no, order_type, status, order_date, due_date')
+  const { data, error } = await db.from('orders').select('id, order_no, order_type, status, order_date, due_date, ' + ORDER_PHOTO_COLS)
     .eq('client_id', cl.id).order('order_date', { ascending: false }).limit(100);
   if (!$('#client-orders')) return;
   if (error) { el.innerHTML = ''; return; }
@@ -1081,18 +1194,20 @@ async function loadClientOrders(cl) {
   const open = rows.filter((o) => isOpenStatus(o.status)).length;
   el.innerHTML = '<div class="section-label">Orders (' + rows.length + ')' + (open ? ' · ' + open + ' open' : '') + '</div>' +
     rows.map((o) => orderListItemHTML(o, false)).join('');
+  fillOrderThumbs(el);
 }
 
 /* the Today screen's "orders due soon" block */
 async function loadTodayOrders() {
   const el = $('#today-orders');
   if (!el) return;
-  const { data, error } = await db.from('orders').select('id, order_no, order_type, status, order_date, due_date, clients(trade_name)')
+  const { data, error } = await db.from('orders').select('id, order_no, order_type, status, order_date, due_date, clients(trade_name), ' + ORDER_PHOTO_COLS)
     .in('status', OPEN_STATUSES).not('due_date', 'is', null).lte('due_date', todayStr(3))
     .order('due_date', { ascending: true }).limit(30);
   if (!$('#today-orders') || error || !data || !data.length) return;
   el.innerHTML = '<div class="due-group-label overdue">Orders due in the next 3 days (' + data.length + ')</div>' +
     data.map((o) => orderListItemHTML(o, true)).join('');
+  fillOrderThumbs(el);
 }
 
 /* the owner Report's Orders block */

@@ -1378,6 +1378,10 @@ const I18N = {
   'This photo is in HEIC format, which this phone cannot open here. Take a new photo with the camera, or choose a JPG': ['यह फोटो HEIC फॉर्मेट में है, जो यहाँ नहीं खुलती। कैमरा से नई फोटो लें, या JPG फोटो चुनें', 'આ ફોટો HEIC ફોર્મેટમાં છે, જે અહીં ખૂલતો નથી. કેમેરાથી નવો ફોટો લો, અથવા JPG ફોટો પસંદ કરો'],
   'Could not open that photo. If it is in the cloud (Google Photos), download it to the phone first': ['यह फोटो नहीं खुली। अगर यह क्लाउड (Google Photos) में है, तो पहले फोन में डाउनलोड करें', 'આ ફોટો ખૂલ્યો નહીં. જો તે ક્લાઉડ (Google Photos) માં હોય, તો પહેલાં ફોનમાં ડાઉનલોડ કરો'],
   'Could not read that image — try another photo': ['यह फोटो पढ़ी नहीं जा सकी — दूसरी फोटो आज़माएँ', 'આ ફોટો વાંચી ન શકાયો — બીજો ફોટો અજમાવો'],
+  /* ---- v11: order photos in the lists ---- */
+  'Open order': ['ऑर्डर खोलें', 'ઓર્ડર ખોલો'],
+  'Previous': ['पिछला', 'પાછલું'],
+  'Next': ['अगला', 'આગળનું'],
 };
 
 /* Sentences with changing parts (numbers, names, dates).
