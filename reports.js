@@ -30,9 +30,18 @@ const REP_GROUPS = {
 /* reports that are "as on today" (no period) */
 const REP_NO_PERIOD = { pay: 1, stock: 1, karigars: 1 };
 
+/* report types of the sections that are switched on (More → App settings) */
+function repTypeOn(t) {
+  if (t === 'pay' || t === 'payhist') return appOn('payments');
+  if (t === 'stock') return appOn('catalogue');
+  if (t === 'karigars') return appOn('karigars');
+  return true;
+}
+function repTypes() { return REP_TYPES.filter((t) => repTypeOn(t[0])); }
+
 function repState() {
   if (!S.rep) S.rep = { type: 'pay', p: 'month', from: '', to: '', dateBy: 'order', f: {}, group: '', showFilters: false };
-  if (!REP_TYPES.some((t) => t[0] === S.rep.type)) S.rep.type = 'pay';
+  if (!repTypes().some((t) => t[0] === S.rep.type)) S.rep.type = repTypes()[0][0];
   return S.rep;
 }
 function repMonth(d) { return d ? String(d).slice(0, 7) : ''; }
@@ -453,7 +462,7 @@ async function renderReports() {
   const opt = (list, cur) => list.map((x) => '<option value="' + esc(x[0]) + '"' + (String(x[0]) === String(cur) ? ' selected' : '') + '>' + esc(x[1]) + '</option>').join('');
   const c = $('#content');
   c.innerHTML =
-    '<div class="card rep-card"><div class="field" style="margin:0"><label>Report</label><select id="rep-type">' + opt(REP_TYPES, R.type) + '</select></div></div>' +
+    '<div class="card rep-card"><div class="field" style="margin:0"><label>Report</label><select id="rep-type">' + opt(repTypes(), R.type) + '</select></div></div>' +
     (!REP_NO_PERIOD[R.type] ? '<div class="filter-chips">' + ACC_PERIODS.map((x) => '<button class="' + (R.p === x[0] ? 'on' : '') + '" data-action="rep-p" data-p="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' : '') +
     (R.p === 'custom' && !REP_NO_PERIOD[R.type] ? '<div class="card" style="padding:10px 14px"><div class="o-2col"><div class="field" style="margin:0"><label>From</label><input type="date" id="rep-from" value="' + esc(R.from) + '"></div>' +
       '<div class="field" style="margin:0"><label>To</label><input type="date" id="rep-to" value="' + esc(R.to) + '"></div></div></div>' : '') +

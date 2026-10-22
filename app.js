@@ -147,7 +147,9 @@ function openModal(html) {
 }
 function closeModal() {
   const ov = $('#modal-ov');
-  if (ov) ov.remove();
+  if (!ov) return;
+  if (typeof ov._cleanup === 'function') { try { ov._cleanup(); } catch (e) { /* ignore */ } }
+  ov.remove();
 }
 function confirmModal(title, text, yesLabel, onYes, danger) {
   const ov = openModal(
@@ -225,6 +227,15 @@ function renderOwnerSetup() {
 /* ============================================================
    SHELL
    ============================================================ */
+function tabsHTML() {
+  return '<button data-action="tab" data-tab="today">' + IC.today + '<span>Today</span></button>' +
+    '<button data-action="tab" data-tab="find">' + IC.find + '<span>Clients</span></button>' +
+    (typeof renderOrders === 'function' ? '<button data-action="tab" data-tab="orders">' + ORD_ICON + '<span>Orders</span></button>' : '') +
+    (typeof renderCatalogue === 'function' && appOn('catalogue') ? '<button data-action="tab" data-tab="catalogue">' + CAT_ICON + '<span>Catalogue</span></button>'
+      : typeof renderBoard === 'function' ? '<button data-action="tab" data-tab="board">' + BOARD_ICON + '<span>Board</span></button>' : '') +
+    (S.me && S.me.role === 'owner' ? '<button data-action="tab" data-tab="report">' + IC.chart + '<span>Report</span></button>' : '') +
+    '<button data-action="tab" data-tab="more">' + IC.more + '<span>More</span></button>';
+}
 function renderShell() {
   $('#app').innerHTML =
     '<header id="appbar">' +
@@ -233,15 +244,15 @@ function renderShell() {
     '<div class="titles"><div class="app-name">' + esc(BRAND) + '</div><div class="screen-name" id="screen-name">Today</div></div>' +
     '</header>' +
     '<main id="content"></main>' +
-    '<nav id="tabbar">' +
-    '<button data-action="tab" data-tab="today">' + IC.today + '<span>Today</span></button>' +
-    '<button data-action="tab" data-tab="find">' + IC.find + '<span>Clients</span></button>' +
-    (typeof renderOrders === 'function' ? '<button data-action="tab" data-tab="orders">' + ORD_ICON + '<span>Orders</span></button>' : '') +
-    (typeof renderCatalogue === 'function' ? '<button data-action="tab" data-tab="catalogue">' + CAT_ICON + '<span>Catalogue</span></button>' : '') +
-    (S.me && S.me.role === 'owner' ? '<button data-action="tab" data-tab="report">' + IC.chart + '<span>Report</span></button>' : '') +
-    '<button data-action="tab" data-tab="more">' + IC.more + '<span>More</span></button>' +
-    '</nav>';
+    '<nav id="tabbar">' + tabsHTML() + '</nav>';
   bindDelegates();
+}
+/* redraw only the tab buttons (the screen that is open stays) */
+function refreshTabbar() {
+  const t = $('#tabbar');
+  if (!t) return;
+  t.innerHTML = tabsHTML();
+  t.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.tab === S.tab));
 }
 
 function setHeader(title, hasBack) {
@@ -258,6 +269,7 @@ function switchTab(tab) {
   else if (tab === 'find') renderFind();
   else if (tab === 'orders') renderOrders();
   else if (tab === 'catalogue') renderCatalogue();
+  else if (tab === 'board') renderBoard();
   else if (tab === 'report') renderReport();
   else renderMore();
   window.scrollTo(0, 0);
@@ -428,10 +440,10 @@ async function renderToday() {
   if (!overdue.length && !today.length && !upcoming.length && !later.length) {
     html += '<div class="empty"><div class="big">🌤️</div>No pending reminders.<br>Log an interaction and add follow-ups — they will appear here.</div>';
   }
-  c.innerHTML = '<div id="today-summary"></div><div id="today-targets"></div><div id="today-pay"></div><div id="today-orders"></div>' + html;
+  c.innerHTML = '<div id="today-late"></div><div id="today-summary"></div><div id="today-targets"></div><div id="today-pay"></div><div id="today-orders"></div>' + html;
   if (typeof renderTodaySummary === 'function') renderTodaySummary($('#today-summary'));
-  if (typeof renderMyTargets === 'function') renderMyTargets($('#today-targets'));
-  if (typeof loadTodayPay === 'function') loadTodayPay();
+  if (typeof renderMyTargets === 'function' && appOn('targets')) renderMyTargets($('#today-targets'));
+  if (typeof loadTodayPay === 'function' && appOn('payments')) loadTodayPay();
   if (typeof loadTodayOrders === 'function') loadTodayOrders();
 }
 
@@ -922,16 +934,20 @@ async function saveClient(editId) {
     }
 
     if (noteFailed) toast('Client saved — but the note could not be saved. Add it again on the client page.', 'err');
-    else toast(editId ? 'Client updated ✓' : 'Client saved ✓', 'ok');
+    else if (editId || typeof afterNewClient !== 'function') toast(editId ? 'Client updated ✓' : 'Client saved ✓', 'ok');   // a new client gets the "Client saved" box instead
     if (editId) { openClient(editId, true); return; }
 
+    // the client's page comes first (so the form can't be saved twice), then: reminder · first visit · meeting
+    S.lastMet = null; S.leadCache = null;
+    await openClient(clientId, true);
     const client = await fetchClient(clientId);
+    if (client && typeof afterNewClient === 'function') { afterNewClient(client); return; }
     const ov = openModal(
       '<h3>Client saved 🎉</h3><p>Record the meeting now? Reminders and instructions you add will appear on the Today screen.</p>' +
       '<div class="modal-actions">' +
       '<button class="btn btn-secondary" data-m="later">Later</button>' +
       '<button class="btn btn-primary" data-m="now">Record meeting</button></div>');
-    ov.querySelector('[data-m=later]').onclick = () => { closeModal(); openClient(clientId, true); };
+    ov.querySelector('[data-m=later]').onclick = () => { closeModal(); };
     ov.querySelector('[data-m=now]').onclick = () => { closeModal(); if (client) openInteractionForm(client, true); };
   };
 
@@ -957,16 +973,30 @@ function clientSortKey() {
   return v;
 }
 
+/* which clients the list shows: all · no order yet · near me (for this visit to the app only) */
+function clientShows() {
+  return [['all', 'All'], ['lead', 'No order yet'], ['near', '📍 Near me']].filter((x) =>
+    x[0] === 'all' || (x[0] === 'lead' && typeof runLeadList === 'function') || (x[0] === 'near' && typeof runNearList === 'function' && appOn('location')));
+}
+function clientShowKey() {
+  if (!clientShows().some((x) => x[0] === S.clientShow)) S.clientShow = 'all';
+  return S.clientShow;
+}
+
 function renderFind() {
   setHeader('Clients', false);
   const sortBy = clientSortKey();
+  const show = clientShowKey();
+  const shows = clientShows();
   $('#content').innerHTML =
     '<div class="action-row" style="margin-bottom:10px">' +
     '<button class="btn btn-primary" data-action="scan-start">' + IC.camera + ' Scan card</button>' +
     '<button class="btn btn-secondary" data-action="manual-start">' + IC.pen + ' Type details</button>' +
     '</div>' +
     '<div class="search-box"><input type="text" id="search-input" placeholder="Search name, shop, mobile, city…" autocomplete="off"></div>' +
-    '<div class="filter-chips cl-sort"><span class="cl-sort-lbl">Sort</span>' +
+    (shows.length > 1 ? '<div class="filter-chips cl-show"><span class="cl-sort-lbl">Show</span>' +
+      shows.map((x) => '<button class="' + (x[0] === show ? 'on' : '') + '" data-action="cl-show" data-v="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' : '') +
+    '<div class="filter-chips cl-sort cl-sortrow"' + (show === 'all' ? '' : ' style="display:none"') + '><span class="cl-sort-lbl">Sort</span>' +
     CLIENT_SORTS.map((x) => '<button class="' + (x[0] === sortBy ? 'on' : '') + '" data-action="cl-sort" data-v="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' +
     '<div id="search-results"><div class="empty">Loading clients…</div></div>';
   const inp = $('#search-input');
@@ -1059,6 +1089,9 @@ function drawClientRows() {
 async function runSearch(qRaw) {
   const box = $('#search-results');
   if (!box) return;
+  const show = clientShowKey();
+  if (show === 'lead') return runLeadList(qRaw);
+  if (show === 'near') return runNearList(qRaw);
   const q = String(qRaw || '').trim().replace(/[,%()]/g, ' ').trim();
   const how = clientSortKey();
   const cols = 'id, trade_name, company_name, contact_person, city, area, category, interest, mobile, created_at, created_by';
@@ -1109,6 +1142,17 @@ onAct('cl-sort', (el) => {
   runSearch(inp ? inp.value : '');
 });
 onAct('cl-more', () => drawClientRows());
+onAct('cl-show', (el) => {
+  S.clientShow = el.dataset.v;
+  S.leadCache = null;   // fresh lists each time a view is chosen
+  document.querySelectorAll('[data-action="cl-show"]').forEach((b) => b.classList.toggle('on', b === el));
+  const sr = $('.cl-sortrow');
+  if (sr) sr.style.display = S.clientShow === 'all' ? '' : 'none';
+  const box = $('#search-results');
+  if (box) box.innerHTML = '<div class="empty">Loading clients…</div>';
+  const inp = $('#search-input');
+  runSearch(inp ? inp.value : '');
+});
 
 /* ============================================================
    CLIENT PAGE
@@ -1128,7 +1172,7 @@ async function openClient(id, replace) {
     renderClientPage(cl);
     loadClientHistory(cl);
     if (typeof loadClientNotes === 'function') loadClientNotes(cl);
-    if (typeof loadClientPay === 'function') loadClientPay(cl);
+    if (typeof loadClientPay === 'function' && appOn('payments')) loadClientPay(cl);
     if (typeof loadClientOrders === 'function') loadClientOrders(cl);
   }, replace);
 }
@@ -1160,10 +1204,11 @@ function renderClientPage(cl) {
     (typeof renderOrders === 'function' ? '<button class="btn btn-primary" data-action="o-new" data-id="' + cl.id + '">＋ Order</button>' : '') +
     '<button class="btn btn-secondary" data-action="edit-client" data-id="' + cl.id + '">Edit</button>' +
     '</div>' +
+    (typeof quickRemindHTML === 'function' ? quickRemindHTML(cl.id) : '') +
     '<div id="client-pay"></div>' +
 
     '<div class="card">' + (rows.join('') || '<div class="empty" style="padding:6px">No details yet</div>') +
-    (typeof clientLocRowHTML === 'function' ? clientLocRowHTML(cl) : '') + '</div>' +
+    (typeof clientLocRowHTML === 'function' && appOn('location') ? clientLocRowHTML(cl) : '') + '</div>' +
     '<div id="client-notes"></div>' +
     '<div id="client-card-photo"></div>' +
     '<div id="client-followups"></div>' +
@@ -1297,7 +1342,7 @@ async function saveInteraction() {
 
   // visit check-in: where this meeting was recorded (skipped quietly if not allowed)
   let pos = null;
-  if (typeof getPosition === 'function') { btn.textContent = 'Getting location…'; pos = await getPosition(9000); btn.textContent = 'Saving…'; }
+  if (typeof getPosition === 'function' && appOn('location')) { btn.textContent = 'Getting location…'; pos = await getPosition(9000); btn.textContent = 'Saving…'; }
 
   const { data: intRow, error } = await db.from('interactions').insert(Object.assign({
     client_id: cl.id, exec_id: S.me.id,
@@ -1322,7 +1367,7 @@ async function saveInteraction() {
     await db.from('clients').update({ interest: interestAfter }).eq('id', cl.id);
   }
 
-  S.lastMet = null;   // the client list shows the newest meeting
+  S.lastMet = null; S.leadCache = null;   // the client lists show the newest meeting
   toast('Meeting recorded ✓', 'ok');
   await openClient(cl.id, true);
 
@@ -1415,10 +1460,11 @@ async function renderReport() {
 
   c.innerHTML =
     (typeof renderReports === 'function' ? '<div class="action-row rep-shortcuts"><button class="btn btn-primary" data-action="rep-open">📊 Full reports</button>' +
-      (typeof renderPayDues === 'function' ? '<button class="btn btn-secondary" data-action="dues-open">💰 Payment dues</button>' : '') + '</div>' +
+      (typeof renderPayDues === 'function' && appOn('payments') ? '<button class="btn btn-secondary" data-action="dues-open">💰 Payment dues</button>' : '') + '</div>' +
       '<div class="section-label">Reports</div><div class="brk-row rep-books">' +
       [['pay', 'Payment status'], ['payhist', 'Payment dates'], ['items', 'Order items'], ['orders', 'Orders'], ['diamonds', 'Diamonds & stones'],
-        ['stock', 'Stock (catalogue)'], ['karigars', 'Karigar metal'], ['summary', 'Month summary']].map((x) => '<button class="brk-chip" data-action="rep-go" data-type="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' : '') +
+        ['stock', 'Stock (catalogue)'], ['karigars', 'Karigar metal'], ['summary', 'Month summary']].filter((x) => typeof repTypeOn !== 'function' || repTypeOn(x[0]))
+        .map((x) => '<button class="brk-chip" data-action="rep-go" data-type="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' : '') +
     '<div id="report-targets"></div>' +
     '<div class="filter-chips" style="margin-top:14px">' + chip('today', 'Today') + chip('7d', '7 days') + chip('30d', '30 days') + chip('all', 'All') + '</div>' +
 
@@ -1460,7 +1506,7 @@ async function renderReport() {
     ((clients.length >= 1000 || meets.length >= 1000) ? '<div class="notice">Showing the most recent 1000 records of this period.</div>' : '') +
     '<div style="height:6px"></div>';
   if (typeof loadReportOrders === 'function') loadReportOrders(S.report.period);
-  if (typeof renderTargetsSection === 'function') renderTargetsSection($('#report-targets'));
+  if (typeof renderTargetsSection === 'function' && appOn('targets')) renderTargetsSection($('#report-targets'));
 }
 
 async function reportExecView(execId, execName) {
@@ -1474,7 +1520,7 @@ async function reportExecView(execId, execName) {
   const rows = data || [];
   c.innerHTML =
     '<div class="card" style="padding:13px 15px"><b>' + esc(execName) + '</b> <span style="color:var(--muted);font-size:13px">· ' + rows.length + ' meeting' + (rows.length === 1 ? '' : 's') + ' ' + esc(periodLabel(S.report.period)) + '</span></div>' +
-    (typeof renderDayRoute === 'function' ? '<button class="btn btn-secondary" data-action="v-route" data-id="' + execId + '" data-name="' + esc(execName) + '" style="margin-bottom:12px">🗺️ Route for a day</button>' : '') +
+    (typeof renderDayRoute === 'function' && appOn('location') ? '<button class="btn btn-secondary" data-action="v-route" data-id="' + execId + '" data-name="' + esc(execName) + '" style="margin-bottom:12px">🗺️ Route for a day</button>' : '') +
     (rows.length ? rows.map(function (it) {
       const cl = it.clients || {};
       const note = String(it.notes || '');
@@ -1656,10 +1702,12 @@ async function renderMore() {
   }
   const mrow = (action, icon, title, sub) => '<button class="more-row" data-action="' + action + '"><span class="mr-ic">' + icon + '</span><span class="mr-t"><b>' + title + '</b><span>' + sub + '</span></span><span class="mr-go">›</span></button>';
   html += '<div class="section-label">Business tools</div><div class="card more-list">' +
-    (isOwner && typeof renderReports === 'function' ? mrow('rep-open', '📊', 'Reports', 'Payment status, orders, items, diamonds, stock — filter and download') : '') +
-    (typeof renderPayDues === 'function' ? mrow('dues-open', '💰', 'Payment dues', 'Which party has to pay and by when · reminders') : '') +
-    (typeof renderVendors === 'function' ? mrow('v-list', '🏭', 'Vendors', 'Who makes your orders · diamonds to give them') : '') +
-    (typeof renderKarigars === 'function' ? mrow('k-list', '🔨', 'Karigars', 'Metal given and received back') : '') +
+    (isOwner && typeof renderReports === 'function' ? mrow('rep-open', '📊', 'Reports', 'Orders, items, diamonds, delivery — filter and download') : '') +
+    (typeof renderBoard === 'function' && !boardIsTab() ? mrow('bd-open', '🗂️', 'Production board', 'Every open order under its step · one tap to move it on') : '') +
+    (typeof renderPayDues === 'function' && appOn('payments') ? mrow('dues-open', '💰', 'Payment dues', 'Which party has to pay and by when · reminders') : '') +
+    (typeof renderVendors === 'function' && appOn('vendors') ? mrow('v-list', '🏭', 'Vendors', 'Who makes your orders · diamonds to give them') : '') +
+    (typeof renderKarigars === 'function' && appOn('karigars') ? mrow('k-list', '🔨', 'Karigars', 'Metal given and received back') : '') +
+    (isOwner && typeof renderAppSettings === 'function' ? mrow('opt-open', '⚙️', 'App settings', 'Order steps in use · show or hide sections') : '') +
     (isOwner && typeof renderBizForm === 'function' ? mrow('biz-open', '🏷️', 'Business details', 'Address, GSTIN — printed on PDFs') : '') +
     (typeof renderLangPicker === 'function' ? mrow('lang-open', '🌐', 'Language / भाषा / ભાષા', 'English, हिन्दी, ગુજરાતી') : '') +
     '</div>';

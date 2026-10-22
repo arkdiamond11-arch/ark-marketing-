@@ -200,10 +200,41 @@ function stateFromGstin(gstin) {
 /* ============================================================
    BUSINESS DETAILS (owner) — printed on slips, quotations, challans
    ============================================================ */
+/* returns the row, or null when it could not be read — then what was loaded before stays */
 async function loadBiz() {
-  const { data, error } = await db.from('business_settings').select('*').eq('id', 1).maybeSingle();
-  S.biz = (!error && data) || {};
+  const get = () => db.from('business_settings').select('*').eq('id', 1).maybeSingle();
+  let r = await get();
+  if (r.error || !r.data) { await new Promise((ok) => setTimeout(ok, 1200)); r = await get(); }   // a phone waking up often fails its first request
+  if (r.error || !r.data) { if (!S.biz) S.biz = {}; return null; }
+  S.biz = r.data;
+  S.bizAt = Date.now();
+  S.dbv7 = Object.prototype.hasOwnProperty.call(S.biz, 'app_options');   // database update 07 has been run
   return S.biz;
+}
+
+/* ---------------- app settings (owner: More → App settings) ----------------
+   business_settings.app_options = { off: [section keys], steps: [order steps in use] }
+   Nothing set (or before database update 07) = everything on, as before. */
+const APP_SECTIONS = [
+  ['catalogue', 'Catalogue', 'Designs with photos — pick them into orders'],
+  ['vendors', 'Vendors & diamonds', 'Who makes each order · diamonds to give them'],
+  ['karigars', 'Karigars', 'Metal given to karigars and received back'],
+  ['payments', 'Payment dues', 'Which party has to pay and by when'],
+  ['targets', 'Targets', 'Monthly targets for the team'],
+  ['location', 'Visit location', 'Shop location, visit check-in, clients near me'],
+];
+const STEP_CHOICES = ['cad', 'wax', 'in_production', 'setting', 'finished'];   // between Approved and Delivered
+function appOpts() {
+  const o = S.biz && S.biz.app_options;
+  return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
+}
+function appOn(key) {
+  const off = appOpts().off;
+  return !(Array.isArray(off) && off.indexOf(key) > -1);
+}
+function stepsOn() {
+  const s = appOpts().steps;
+  return Array.isArray(s) ? STEP_CHOICES.filter((k) => s.indexOf(k) > -1) : STEP_CHOICES.slice();
 }
 function bizName() { return String((S.biz && S.biz.legal_name) || BRAND).trim(); }
 

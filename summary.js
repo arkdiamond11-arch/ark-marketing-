@@ -21,10 +21,10 @@ async function summaryData() {
     db.from('orders').select('status, created_by').eq('order_date', y).limit(5000),
     db.from('orders').select('due_date').in('status', OPEN_STATUSES).not('due_date', 'is', null).lte('due_date', t).limit(5000),
     meQ(db.from('followups').select('due_date').eq('type', 'reminder').eq('status', 'pending').lte('due_date', t).limit(5000), 'assigned_to'),
-    typeof payAllEntries === 'function' ? payAllEntries().then((rows) => ({ data: rows })).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+    typeof payAllEntries === 'function' && appOn('payments') ? payAllEntries().then((rows) => ({ data: rows })).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
     owner ? db.from('orders').select('id').eq('status', 'quote').lte('order_date', soon).limit(5000) : Promise.resolve({ data: [] }),
-    owner ? db.from('karigar_txns').select('kind, metal, fine_g').in('kind', ['issue', 'receive', 'wastage']).limit(20000) : Promise.resolve({ data: [] }),
-    S.dbv6 ? db.from('order_diamonds').select('id, orders!inner(status)').eq('given', false).in('orders.status', OPEN_STATUSES).limit(5000) : Promise.resolve({ data: [] }),
+    owner && appOn('karigars') ? db.from('karigar_txns').select('kind, metal, fine_g').in('kind', ['issue', 'receive', 'wastage']).limit(20000) : Promise.resolve({ data: [] }),
+    S.dbv6 && appOn('vendors') ? db.from('order_diamonds').select('id, orders!inner(status)').eq('given', false).in('orders.status', OPEN_STATUSES).limit(5000) : Promise.resolve({ data: [] }),
   ]);
   const meet = res[0].data || [], newCl = res[1].data || [], yOrders = (res[2].data || []).filter((o) => o.status !== 'quote' && CLOSED_STATUSES.indexOf(o.status) === -1),
     due = res[3].data || [], rem = res[4].data || [], pays = res[5].data || [], quotes = res[6].data || [], kt = res[7].data || [],

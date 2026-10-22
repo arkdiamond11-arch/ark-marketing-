@@ -70,6 +70,30 @@ function dueHTML(o) {
   const late = o.due_date < todayStr();
   return '<span class="' + (late ? 'o-late' : '') + '">' + (late ? '' : 'Due ') + esc(dueLabel(o.due_date)) + '</span>';
 }
+function isLate(o) { return isOpenStatus(o.status) && !!o.due_date && o.due_date < todayStr(); }
+
+/* the stages this business uses (owner: More → App settings). An order that sits
+   in a stage that was switched off still shows that stage. */
+function activeStages(cur) {
+  if (!S.dbv6) return ['delivered'];   // before database update 06 there is only Approved → Delivered
+  const on = typeof stepsOn === 'function' ? stepsOn() : ORDER_STAGES.slice(0, -1);
+  const c = cur === 'ready' ? 'finished' : cur;
+  return ORDER_STAGES.filter((k) => k === 'delivered' || k === c || on.indexOf(k) > -1);
+}
+/* the stage that comes after the order's current one (null when there is none) */
+function nextStage(o) {
+  if (!isOpenStatus(o.status)) return null;
+  const list = activeStages(o.status);
+  const at = o.status === 'new' ? -1 : list.indexOf(o.status === 'ready' ? 'finished' : o.status);
+  return list[at + 1] || null;
+}
+/* one-tap "next stage" button for an order card */
+function nextBtnHTML(o, cls) {
+  const n = nextStage(o);
+  if (!n) return '';
+  return '<button type="button" class="' + (cls || 'o-next') + (n === 'delivered' ? ' o-next-done' : '') + '" data-action="o-next" data-id="' + o.id + '" data-s="' + n + '">' +
+    (n === 'delivered' ? '✓ ' : '→ ') + esc(OSTATUS_LABEL[n]) + '</button>';
+}
 
 /* ---------------- weights ---------------- */
 function orderCalc(o, items) {
@@ -171,14 +195,17 @@ async function renderOrders() {
   S.olist = S.olist || { status: 'open', type: 'all', q: '' };
   const L = S.olist;
   const chip = (grp, v, label) => '<button class="' + (L[grp] === v ? 'on' : '') + '" data-action="o-filter" data-g="' + grp + '" data-v="' + v + '">' + label + '</button>';
+  const finUsed = !S.dbv6 || activeStages().indexOf('finished') > -1;
+  if (L.status === 'finished' && !finUsed) L.status = 'open';
   $('#content').innerHTML =
     '<div class="action-row o-top-row" style="margin-bottom:12px">' +
     '<button class="btn btn-primary" data-action="o-tab-new">＋ New order</button>' +
-    (typeof renderVendors === 'function' ? '<button class="btn btn-secondary" data-action="v-list">Vendors</button>' : '') +
-    '<button class="btn btn-secondary" data-action="dues-open">Payment dues</button>' +
+    (typeof renderBoard === 'function' && !boardIsTab() ? '<button class="btn btn-secondary" data-action="bd-open">Board</button>' : '') +
+    (typeof renderVendors === 'function' && appOn('vendors') ? '<button class="btn btn-secondary" data-action="v-list">Vendors</button>' : '') +
+    (typeof renderPayDues === 'function' && appOn('payments') ? '<button class="btn btn-secondary" data-action="dues-open">Payment dues</button>' : '') +
     '</div>' +
     '<div class="search-box"><input type="text" id="o-search" placeholder="Search client or order no…" autocomplete="off" value="' + esc(L.q) + '"></div>' +
-    '<div class="filter-chips">' + chip('status', 'open', 'Open') + chip('status', 'quote', 'Quotations') + chip('status', 'finished', 'Finished') +
+    '<div class="filter-chips">' + chip('status', 'open', 'Open') + chip('status', 'quote', 'Quotations') + (finUsed ? chip('status', 'finished', 'Finished') : '') +
     chip('status', 'delivered', 'Delivered') + chip('status', 'closed', 'Not approved') + chip('status', 'all', 'All') + '</div>' +
     '<div class="filter-chips">' + chip('type', 'all', 'All types') + chip('type', 'job_work', 'Job work') + chip('type', 'ready_stock', 'Ready stock') +
     chip('type', 'custom', 'Custom') + '</div>' +
@@ -195,7 +222,7 @@ async function loadOrderList() {
   const box = $('#o-list');
   if (!box) return;
   const L = S.olist;
-  let q = db.from('orders').select('id, order_no, order_type, status, order_date, due_date' + (S.dbv6 ? ', vendor_id' : '') + ', clients!inner(trade_name, city), ' + ORDER_PHOTO_COLS);
+  let q = db.from('orders').select('id, order_no, order_type, status, order_date, due_date' + (S.dbv6 ? ', vendor_id' : '') + finCol() + ', clients!inner(trade_name, city), ' + ORDER_PHOTO_COLS);
   if (L.status === 'open') q = q.in('status', OPEN_STATUSES);
   else if (L.status === 'finished') q = q.in('status', ['finished', 'ready']);
   else if (L.status === 'closed') q = q.in('status', CLOSED_STATUSES);
@@ -229,30 +256,55 @@ async function loadOrderList() {
   fillOrderThumbs(box);
 }
 
-function orderListItemHTML(o, showClient) {
+/* opt.late: also a "New date" button (Today's late orders) */
+function orderListItemHTML(o, showClient, opt) {
   const cl = o.clients || {};
-  return '<div class="list-item" data-action="o-open" data-id="' + o.id + '">' +
+  S.oRows = S.oRows || new Map();
+  S.oRows.set(o.id, o);   // kept so a card can be redrawn after a one-tap stage change
+  const late = opt && opt.late;
+  return '<div class="list-item o-li" data-action="o-open" data-id="' + o.id + '"' + (showClient ? ' data-sc="1"' : '') + (late ? ' data-late="1"' : '') + '>' +
     '<div class="li-main">' +
     '<div class="li-title">' + ordNo(o.order_no) + (showClient ? ' · ' + esc(cl.trade_name || '') : '') + '</div>' +
     '<div class="li-sub">' + esc(OTYPE_LABEL[o.order_type] || '') + ' · ' + esc(fmtD(o.order_date)) +
     (o.due_date ? ' · ' + dueHTML(o) : '') + '</div>' +
     '<div class="li-chips">' + chipStatus(o.status) +
-    (o.vendor_id && typeof vendorName === 'function' && vendorName(o.vendor_id) ? '<span class="chip chip-vendor">' + esc(vendorName(o.vendor_id)) + '</span>' : '') +
-    '</div></div>' + (orderThumbHTML(o) || '<div class="li-go">›</div>') + '</div>';
+    (o.vendor_id && typeof vendorName === 'function' && appOn('vendors') && vendorName(o.vendor_id) ? '<span class="chip chip-vendor">' + esc(vendorName(o.vendor_id)) + '</span>' : '') +
+    '</div>' +
+    (isOpenStatus(o.status) ? '<div class="o-acts">' + nextBtnHTML(o) +
+      (late ? '<button type="button" class="o-next o-date" data-action="o-due" data-id="' + o.id + '">📅 New date</button>' : '') + '</div>' : '') +
+    '</div>' + (orderThumbHTML(o) || '<div class="li-go">›</div>') + '</div>';
 }
+function finCol() { return S.dbv7 ? ', final_photo_paths' : ''; }
 
 /* ---------------- order photos in the lists ----------------
-   Each order in a list shows the photo of its first item (the item's own
-   photo, else its catalogue piece's photo). Tapping the photo shows all the
-   order's photos full screen, without opening the order. */
+   Each order in a list shows a photo: the finished piece if one was added,
+   else its first item's photo (the item's own photo, else its catalogue
+   piece's photo). Tapping the photo shows all the order's photos full
+   screen, without opening the order. */
 const ORDER_PHOTO_COLS = 'order_items(sort, photo_path, catalogue_id, category, design_code)';
 const CAT_PHOTO = new Map();   // catalogue piece id → its first photo path ('' = none)
 
-function orderThumbHTML(o) {
+function orderPhotoEntry(o) {
   const all = (o.order_items || []).slice().sort((a, b) => num(a.sort) - num(b.sort));
-  if (!all.some((it) => it.photo_path || it.catalogue_id)) return '';
+  const fin = (o.final_photo_paths || []).filter(Boolean);
+  if (!fin.length && !all.some((it) => it.photo_path || it.catalogue_id)) return null;
   S.oPhotos = S.oPhotos || new Map();
-  S.oPhotos.set(o.id, { o, all });
+  const e = { o, all, fin };
+  S.oPhotos.set(o.id, e);
+  return e;
+}
+/* [bucket, path, caption] of every photo of an order: finished piece first, then the items */
+function orderShots(e) {
+  const fin = (e.fin || []).map((p, i) => ['orders', p, (e.fin.length > 1 ? 'Finished piece ' + (i + 1) : 'Finished piece')]);
+  const its = [];
+  e.all.forEach((it, i) => {
+    const r = itemPhotoRef(it);
+    if (r) its.push([r[0], r[1], (i + 1) + '. ' + [it.category || 'Item', it.design_code].filter(Boolean).join(' · ')]);
+  });
+  return fin.concat(its);
+}
+function orderThumbHTML(o) {
+  if (!orderPhotoEntry(o)) return '';
   return '<div class="o-thumb" data-action="o-photos" data-id="' + o.id + '" aria-label="Photos">' +
     '<img alt="" loading="lazy" decoding="async" data-oph="' + esc(o.id) + '"><span class="o-thumb-n"></span></div>';
 }
@@ -277,7 +329,18 @@ function itemPhotoRef(it) {
   return p ? ['catalogue', p] : null;
 }
 
-/* put the photos into the thumbnails of a list that was just drawn */
+/* signed links for a list of [bucket, path, …] photo refs → Map 'bucket|path' → url */
+async function shotUrls(refs) {
+  const own = refs.filter((f) => f[0] === 'orders').map((f) => f[1]);
+  const cat = refs.filter((f) => f[0] === 'catalogue').map((f) => f[1]);
+  const [a, b] = await Promise.all([signedUrls('orders', own), signedUrls('catalogue', cat)]);
+  const m = new Map();
+  a.forEach((u, p) => m.set('orders|' + p, u));
+  b.forEach((u, p) => m.set('catalogue|' + p, u));
+  return m;
+}
+
+/* put the photos into the thumbnails of a list (or board) that was just drawn */
 async function fillOrderThumbs(root) {
   if (!root || !S.oPhotos) return;
   const imgs = Array.from(root.querySelectorAll('img[data-oph]:not([src])'));
@@ -285,19 +348,19 @@ async function fillOrderThumbs(root) {
   try {
     const entries = imgs.map((im) => S.oPhotos.get(im.dataset.oph)).filter(Boolean);
     await catPhotoPaths([].concat(...entries.map((e) => e.all.filter((it) => !it.photo_path).map((it) => it.catalogue_id))));
-    const firsts = entries.map((e) => e.all.map(itemPhotoRef).find(Boolean)).filter(Boolean);
-    const [own, cat] = await Promise.all([
-      signedUrls('orders', firsts.filter((f) => f[0] === 'orders').map((f) => f[1])),
-      signedUrls('catalogue', firsts.filter((f) => f[0] === 'catalogue').map((f) => f[1])),
-    ]);
+    const firsts = entries.map((e) => orderShots(e)[0]).filter(Boolean);
+    const urls = await shotUrls(firsts);
     imgs.forEach((im) => {
       const e = S.oPhotos.get(im.dataset.oph);
-      const box = im.closest('.o-thumb');
+      const box = im.closest('.o-thumb, .bd-img');
       if (!box) return;
-      const shots = e ? e.all.map(itemPhotoRef).filter(Boolean) : [];
+      const shots = e ? orderShots(e) : [];
       const f = shots[0];
-      const url = f ? (f[0] === 'orders' ? own : cat).get(f[1]) : null;
-      if (!url) { box.outerHTML = '<div class="li-go">›</div>'; return; }   // no photo after all
+      const url = f ? urls.get(f[0] + '|' + f[1]) : null;
+      if (!url) {   // no photo after all
+        if (box.classList.contains('bd-img')) { box.classList.add('bd-noimg'); im.remove(); } else box.outerHTML = '<div class="li-go">›</div>';
+        return;
+      }
       im.src = url;
       const n = box.querySelector('.o-thumb-n');
       if (n) n.textContent = shots.length > 1 ? '+' + (shots.length - 1) : '';
@@ -309,26 +372,35 @@ async function fillOrderThumbs(root) {
 async function openOrderPhotos(orderId) {
   const e = S.oPhotos && S.oPhotos.get(orderId);
   if (!e) { openOrder(orderId); return; }
-  let urls = [];
-  try { urls = await orderItemPhotoUrls(e.all); } catch (err) { urls = []; }
-  const shots = e.all.map((it, i) => ({ it, i, u: urls[i] })).filter((x) => x.u);
-  if (!shots.length) { openOrder(orderId); return; }
-  closeModal();
+  let slides = [];
+  try {
+    await catPhotoPaths(e.all.filter((it) => !it.photo_path).map((it) => it.catalogue_id));
+    const shots = orderShots(e);
+    const urls = await shotUrls(shots);
+    slides = shots.map((f) => ({ u: urls.get(f[0] + '|' + f[1]), cap: f[2] })).filter((x) => x.u);
+  } catch (err) { slides = []; }
+  if (!slides.length) { openOrder(orderId); return; }
   const cl = e.o.clients || {};
-  const many = shots.length > 1;
+  photoViewer(ordNo(e.o.order_no) + (cl.trade_name ? ' · ' + cl.trade_name : ''), slides, 'Open order ›', () => openOrder(orderId));
+}
+
+/* full-screen photo viewer: slides [{u, cap}]; an optional button at the bottom */
+function photoViewer(title, slides, btnLabel, onBtn, startAt) {
+  closeModal();
+  const many = slides.length > 1;
   const ov = document.createElement('div');
   ov.id = 'modal-ov';   // the phone's Back button, or any new box, closes it like the other boxes
   ov.className = 'ph-view';
   ov.innerHTML =
-    '<div class="ph-top"><div class="ph-title">' + esc(ordNo(e.o.order_no) + (cl.trade_name ? ' · ' + cl.trade_name : '')) + '</div>' +
-    (many ? '<span class="ph-count noi18n">1 / ' + shots.length + '</span>' : '') +
+    '<div class="ph-top"><div class="ph-title">' + esc(title) + '</div>' +
+    (many ? '<span class="ph-count noi18n">1 / ' + slides.length + '</span>' : '') +
     '<button type="button" class="ph-x" aria-label="Close">✕</button></div>' +
-    '<div class="ph-strip">' + shots.map((x) =>
+    '<div class="ph-strip">' + slides.map((x) =>
       '<figure class="ph-slide"><a href="' + esc(x.u) + '" target="_blank" rel="noopener"><img src="' + esc(x.u) + '" alt=""></a>' +
-      '<figcaption>' + esc((x.i + 1) + '. ' + [x.it.category || 'Item', x.it.design_code].filter(Boolean).join(' · ')) + '</figcaption></figure>').join('') + '</div>' +
+      (x.cap ? '<figcaption>' + esc(x.cap) + '</figcaption>' : '') + '</figure>').join('') + '</div>' +
     '<div class="ph-bottom">' +
     (many ? '<button type="button" class="ph-nav" data-d="-1" aria-label="Previous" disabled>‹</button>' : '') +
-    '<button type="button" class="btn btn-primary" data-m="open">Open order ›</button>' +
+    (btnLabel ? '<button type="button" class="btn btn-primary" data-m="open">' + esc(btnLabel) + '</button>' : '<span style="flex:1"></span>') +
     (many ? '<button type="button" class="ph-nav" data-d="1" aria-label="Next">›</button>' : '') + '</div>';
   document.body.appendChild(ov);
   const strip = ov.querySelector('.ph-strip');
@@ -336,20 +408,23 @@ async function openOrderPhotos(orderId) {
   const navs = ov.querySelectorAll('.ph-nav');
   const at = () => Math.round(strip.scrollLeft / Math.max(1, strip.clientWidth));
   const show = () => {
-    const i = Math.min(shots.length - 1, Math.max(0, at()));
-    if (count) count.textContent = (i + 1) + ' / ' + shots.length;
-    navs.forEach((b) => { b.disabled = +b.dataset.d < 0 ? i === 0 : i === shots.length - 1; });
+    const i = Math.min(slides.length - 1, Math.max(0, at()));
+    if (count) count.textContent = (i + 1) + ' / ' + slides.length;
+    navs.forEach((b) => { b.disabled = +b.dataset.d < 0 ? i === 0 : i === slides.length - 1; });
   };
   strip.addEventListener('scroll', () => { clearTimeout(ov._t); ov._t = setTimeout(show, 60); }, { passive: true });
   navs.forEach((b) => { b.onclick = () => strip.scrollTo({ left: (at() + +b.dataset.d) * strip.clientWidth, behavior: 'smooth' }); });
   ov.querySelector('.ph-x').onclick = closeModal;
-  ov.querySelector('[data-m=open]').onclick = () => { closeModal(); openOrder(orderId); };
+  const ob = ov.querySelector('[data-m=open]');
+  if (ob) ob.onclick = () => { closeModal(); onBtn(); };
+  if (startAt > 0) { strip.scrollLeft = startAt * strip.clientWidth; show(); }
   const onKey = (k) => {
     if (!document.body.contains(ov)) { document.removeEventListener('keydown', onKey); return; }
     if (k.key === 'Escape') closeModal();
     else if (k.key === 'ArrowRight' || k.key === 'ArrowLeft') strip.scrollBy({ left: (k.key === 'ArrowRight' ? 1 : -1) * strip.clientWidth, behavior: 'smooth' });
   };
   document.addEventListener('keydown', onKey);
+  ov._cleanup = () => document.removeEventListener('keydown', onKey);   // closeModal (✕, Back, a new box) takes the listener away
 }
 
 /* pick a client for a new order */
@@ -429,7 +504,7 @@ async function startEditOrder(id) {
     (data || []).forEach((c) => catPhoto.set(c.id, (c.photo_paths || [])[0] || null));
   }
   S.ord = {
-    id: o.id, orderNo: o.order_no, status: o.status, oldItemIds: items.map((x) => x.id), oldCatIds: catIds,
+    id: o.id, orderNo: o.order_no, status: o.status, oldItemIds: items.map((x) => x.id), oldCatIds: catIds, origDue: o.due_date || '',
     client: o.clients || { id: o.client_id, trade_name: 'Client' },
     items: items.map((it) => Object.assign({
       category: s(it.category), description: s(it.description), design_code: s(it.design_code), qty: s(it.qty || 1),
@@ -455,7 +530,66 @@ async function startEditOrder(id) {
   showSub('Edit · ' + ordNo(o.order_no), renderOrderForm);
 }
 
+/* Repeat order: a new order for the same client, filled from an earlier one — the same
+   items with their photos (copied), metal, vendor and notes; dated today, with as many
+   days to delivery as last time. A catalogue piece is not taken again (one piece can be
+   in one order) — its photo comes along. Certificate numbers belong to the old piece. */
+async function startRepeatOrder(id) {
+  const [or, ir] = await Promise.all([
+    db.from('orders').select('*, clients(id, trade_name, city)').eq('id', id).maybeSingle(),
+    db.from('order_items').select('*').eq('order_id', id).order('sort', { ascending: true }),
+  ]);
+  if (or.error || !or.data) { toast('Could not open the order.', 'err'); return; }
+  const o = or.data;
+  const s = (v) => (v == null ? '' : String(v));
+  const items = ir.data || [];
+  await catPhotoPaths(items.filter((it) => it.catalogue_id && !it.photo_path).map((it) => it.catalogue_id));
+  const lead = o.order_date && o.due_date ? daysBetween(o.order_date, o.due_date) : null;
+  S.pendingCatItems = null;
+  S.ord = {
+    id: null, orderNo: null, status: null, oldItemIds: [], oldCatIds: [], repeatOf: o.order_no,
+    client: o.clients || { id: o.client_id, trade_name: 'Client' },
+    items: items.map((it) => {
+      const cp = it.photo_path ? ['orders', it.photo_path] : it.catalogue_id && CAT_PHOTO.get(it.catalogue_id) ? ['catalogue', CAT_PHOTO.get(it.catalogue_id)] : null;
+      return Object.assign({
+        category: s(it.category), description: s(it.description), design_code: s(it.design_code), qty: s(it.qty || 1),
+        gross_wt: s(it.gross_wt), net_wt: s(it.net_wt), stone_details: s(it.stone_details), stone_amount: '',
+        size: s(it.size), photo_path: null, _photo: null, _copy: cp, catalogue_id: null, cat_photo: null,
+      }, jewelForm(it), { diamond_rate: '', diamond_cert_no: '', jewel_cert_no: '' });
+    }),
+    o: {
+      order_date: todayStr(), due_date: lead != null && lead >= 0 ? todayStr(lead) : '', wastage_pct: s(o.wastage_pct),
+      karigar_id: s(o.karigar_id), vendor_id: s(o.vendor_id), notes: s(o.notes),
+    },
+  };
+  if (!S.ord.items.length) S.ord.items.push(blankItem());
+  S.formState = {
+    o_type: OTYPE_LABEL[o.order_type], o_metal: o.metal || 'Gold', o_purity: purityKey(o.purity) || defaultPurity(o.metal || 'Gold'),
+    o_jw_purity: purityKey(o.client_metal_purity) || '22K',
+  };
+  S.formState.o_color = commonColor(S.ord.items) || null;
+  showSub('Repeat · ' + ordNo(o.order_no), renderOrderForm);
+}
+
+/* save time: copy a repeated item's photo into the new order's folder (null if it could not be copied) */
+async function copyItemPhoto(src, orderId, i) {
+  const dst = orderId + '/item-' + Date.now() + '-' + i + '.jpg';
+  try {
+    if (src[0] === 'orders' && typeof db.storage.from('orders').copy === 'function') {
+      const { error } = await db.storage.from('orders').copy(src[1], dst);
+      if (!error) return dst;
+    }
+    const { data: blob, error: dErr } = await db.storage.from(src[0]).download(src[1]);
+    if (dErr || !blob) return src[0] === 'orders' ? src[1] : null;   // keep using the old order's photo
+    const { error: uErr } = await db.storage.from('orders').upload(dst, blob, { contentType: 'image/jpeg' });
+    if (!uErr) return dst;
+  } catch (e) { /* below */ }
+  return src[0] === 'orders' ? src[1] : null;
+}
+
 function curOType() { return OTYPE_KEY[S.formState.o_type] || null; }
+/* an approved order's delivery date is a promise: it changes only with a reason (📅 Change date) */
+function dueLocked() { return !!(S.ord && S.ord.id && isOpenStatus(S.ord.status) && typeof openDueModal === 'function'); }
 
 /* gold colour / silver finish for the whole order — kept in step with the items */
 function orderColorSegHTML() { return segHTML('o_color', colorOptions(S.formState.o_metal || 'Gold'), S.formState.o_color || null); }
@@ -495,7 +629,8 @@ function renderOrderForm() {
     '<div id="order-form">' +
     '<div class="card" style="padding:13px 15px"><b>' + esc(S.ord.client.trade_name) + '</b>' +
     (S.ord.client.city ? ' <span style="color:var(--muted);font-size:13px">· ' + esc(S.ord.client.city) + '</span>' : '') +
-    (S.ord.orderNo ? ' <span style="color:var(--muted);font-size:13px">· ' + ordNo(S.ord.orderNo) + (isQuote ? ' · Quotation' : '') + '</span>' : '') + '</div>' +
+    (S.ord.orderNo ? ' <span style="color:var(--muted);font-size:13px">· ' + ordNo(S.ord.orderNo) + (isQuote ? ' · Quotation' : '') + '</span>' : '') +
+    (S.ord.repeatOf ? '<div class="hint" style="margin-top:4px">Repeat of ' + ordNo(S.ord.repeatOf) + ' — check the items and the delivery date, then save.</div>' : '') + '</div>' +
 
     '<div class="section-label">Order type <span class="req-dot">*</span></div>' +
     '<div class="card"><div class="field" style="margin-bottom:2px">' + segHTML('o_type', ['Job work', 'Ready stock', 'Custom order'], S.formState.o_type) +
@@ -504,10 +639,13 @@ function renderOrderForm() {
     '<div class="section-label">Dates</div>' +
     '<div class="card"><div class="o-2col">' +
     '<div class="field"><label>Order date</label>' + dateIn('order_date') + '</div>' +
-    '<div class="field"><label>Delivery by</label>' + dateIn('due_date') + '</div>' +
+    '<div class="field"><label>Delivery by</label>' + (dueLocked()
+      ? '<input type="date" id="o-due-locked" value="' + fv('due_date') + '" disabled>' +
+        '<button type="button" class="btn btn-small btn-secondary o-due-change" data-action="o-due-form">📅 Change date</button>'
+      : dateIn('due_date')) + '</div>' +
     '</div></div>' +
 
-    (S.dbv6 && typeof vendorOptionsHTML === 'function' ?
+    (S.dbv6 && typeof vendorOptionsHTML === 'function' && appOn('vendors') ?
       '<div class="section-label">Vendor</div>' +
       '<div class="card"><div class="field" style="margin-bottom:2px"><label>Who makes this order</label><select id="o-vendor" data-of="vendor_id">' + vendorOptionsHTML(o.vendor_id) + '</select>' +
       '<div class="hint">Add the diamonds to give the vendor on the order page, after saving.</div></div></div>' : '') +
@@ -516,7 +654,7 @@ function renderOrderForm() {
     '<div id="o-items"></div>' +
     '<div class="action-row" style="margin-bottom:4px">' +
     '<button class="btn btn-secondary" data-action="o-item-add">＋ Add item</button>' +
-    '<button class="btn btn-secondary" data-action="o-cat-pick">Pick from catalogue</button>' +
+    (typeof openCatPicker === 'function' && appOn('catalogue') ? '<button class="btn btn-secondary" data-action="o-cat-pick">Pick from catalogue</button>' : '') +
     '</div>' +
 
     '<div class="section-label">Metal</div>' +
@@ -592,6 +730,10 @@ function redrawOrderItems() {
     } else if (it.cat_photo) {
       photo = '<img class="oi-thumb" data-catphoto="' + esc(it.cat_photo) + '" alt="Catalogue photo">' +
         '<div class="photo-row"><button type="button" class="btn btn-small btn-secondary" data-action="o-item-photo" data-idx="' + i + '">Use another photo</button></div>';
+    } else if (it._copy) {   // repeat order: the photo of the earlier order's item
+      photo = '<img class="oi-thumb" data-copyphoto="' + esc(it._copy[0] + '|' + it._copy[1]) + '" alt="Design photo">' +
+        '<div class="photo-row"><button type="button" class="btn btn-small btn-secondary" data-action="o-item-photo" data-idx="' + i + '">Use another photo</button>' +
+        '<button type="button" class="btn btn-small btn-ghost" data-action="o-item-photo-del" data-idx="' + i + '">Remove</button></div>';
     } else {
       photo = '<button type="button" class="btn btn-small btn-secondary" data-action="o-item-photo" data-idx="' + i + '">📷 Add design photo</button>';
     }
@@ -621,13 +763,19 @@ function redrawOrderItems() {
       imgs.forEach((im) => { const u = m.get(im.dataset.catphoto); if (u) im.src = u; });
     });
   }
+  const cps = box.querySelectorAll('img[data-copyphoto]');
+  if (cps.length) {
+    shotUrls(Array.from(cps).map((im) => im.dataset.copyphoto.split('|'))).then((m) => {
+      cps.forEach((im) => { const u = m.get(im.dataset.copyphoto); if (u) im.src = u; });
+    }).catch(() => {});
+  }
 }
 
 function applyOTypeVisibility() {
   const t = curOType();
   const show = (sel, on) => { const e = $(sel); if (e) e.style.display = on ? '' : 'none'; };
   show('#o-sec-jw', t === 'job_work');
-  show('#o-sec-karigar', t === 'job_work' || t === 'custom');
+  show('#o-sec-karigar', appOn('karigars') && (t === 'job_work' || t === 'custom'));
   const hint = $('#o-type-hint');
   if (hint) hint.textContent =
     t === 'job_work' ? 'The client gives the gold. Record their gold below so the balance is tracked.'
@@ -742,7 +890,7 @@ function orderItemPhoto(idx) {
 
 function itemHasContent(it) {
   return !!(String(it.category || '').trim() || String(it.description || '').trim() || String(it.design_code || '').trim() ||
-    num(it.net_wt) || num(it.gross_wt) || it._photo || it.photo_path || it.catalogue_id || it.diamond_type);
+    num(it.net_wt) || num(it.gross_wt) || it._photo || it.photo_path || it._copy || it.catalogue_id || it.diamond_type);
 }
 
 async function saveOrder(asQuote) {
@@ -803,10 +951,16 @@ async function saveOrder(asQuote) {
   let photoFail = false;
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
-    if (!it._photo) continue;
+    if (!it._photo) {
+      if (it._copy && !it.photo_path) {   // repeat order: copy the earlier order's photo
+        const p = await copyItemPhoto(it._copy, id, i);
+        if (p) { it.photo_path = p; it._copy = null; } else photoFail = true;
+      }
+      continue;
+    }
     const path = id + '/item-' + Date.now() + '-' + i + '.jpg';
     const { error: upErr } = await db.storage.from('orders').upload(path, it._photo.blob, { contentType: 'image/jpeg' });
-    if (upErr) photoFail = true; else { it.photo_path = path; it._photo = null; }
+    if (upErr) photoFail = true; else { it.photo_path = path; it._photo = null; it._copy = null; }
   }
 
   // items: add the new set first, then remove the old one (so nothing is lost if a step fails)
@@ -835,9 +989,12 @@ async function saveOrder(asQuote) {
   // karigar account entries
   if (row.karigar_id || !isNew) await syncOrderKarigarTxns(id, row, ordNo(orderNo) + ' · ' + (S.ord.client.trade_name || ''));
 
+  const dueMoved = !isNew && (S.ord.origDue || '') !== (row.due_date || '');
   await db.from('order_updates').insert({
     order_id: id, status: isNew ? status : null,
-    note: isNew ? (asQuote ? 'Quotation created' : 'Order created') : 'Details edited', created_by: S.me.id,
+    note: isNew ? (asQuote ? 'Quotation created' : 'Order created') + (S.ord.repeatOf ? ' · ' + ordNo(S.ord.repeatOf) + ' repeated' : '')
+      : 'Details edited' + (dueMoved ? ' · ' + (typeof dueChangeText === 'function' ? dueChangeText(S.ord.origDue, row.due_date) : 'Delivery date changed') : ''),
+    created_by: S.me.id,
   });
 
   if (!itErr) {
@@ -868,7 +1025,7 @@ async function openOrder(id, replace) {
       const top = S.sub[S.sub.length - 1];
       if (!x || !top || top.title !== title) return;   // user already moved on
       renderOrderPage(x); loadOrderDetails(x);
-      if (typeof loadOrderVendorBox === 'function') loadOrderVendorBox(x);
+      if (typeof loadOrderVendorBox === 'function' && appOn('vendors')) loadOrderVendorBox(x);
     };
     if (first) { const x = first; first = null; use(x); }
     else { $('#content').innerHTML = '<div class="empty">Loading…</div>'; fetchOrder(id).then(use); }   // fresh data after Back
@@ -889,6 +1046,7 @@ function renderOrderPage(o) {
     '<div class="chips">' + chipOType(o.order_type) + chipStatus(o.status) +
     '<span class="chip">' + esc(fmtD(o.order_date)) + '</span>' +
     (o.due_date ? '<span class="chip">' + (isOpenStatus(o.status) && o.due_date < todayStr() ? '⚠ ' : '') + 'Due ' + esc(fmtD(o.due_date)) + '</span>' : '') +
+    (o.due_date && o.first_due_date && o.first_due_date !== o.due_date ? '<span class="chip">' + esc('First promised ' + fmtD(o.first_due_date)) + '</span>' : '') +
     '</div></div>' +
 
     (quote ? '<div class="card o-approve"><div class="o-approve-q">Did the client approve this quotation?</div>' +
@@ -907,7 +1065,12 @@ function renderOrderPage(o) {
     '<button class="btn btn-secondary" data-action="o-note" data-id="' + o.id + '">＋ Note</button>' +
     '<button class="btn btn-secondary" data-action="o-share" data-id="' + o.id + '">WhatsApp</button>' +
     '</div>' +
+    '<div class="o-more-acts">' +
+    (isOpenStatus(o.status) ? '<button class="btn btn-small btn-secondary" data-action="o-due" data-id="' + o.id + '">📅 Change delivery date</button>' : '') +
+    '<button class="btn btn-small btn-secondary" data-action="o-repeat" data-id="' + o.id + '">↻ Repeat order</button>' +
+    '</div>' +
 
+    '<div id="o-final-view"></div>' +
     '<div id="o-vendor-view"></div>' +
 
     '<div class="section-label">Documents (PDF)</div>' +
@@ -915,7 +1078,7 @@ function renderOrderPage(o) {
     (quote || o.status === 'declined' ? docBtn('quote', 'Quotation') : docBtn('slip', 'Order slip')) +
     (approved ? docBtn('challan', o.order_type === 'job_work' ? 'Job-work challan' : 'Delivery challan') : '') +
     (o.order_type === 'job_work' && numOrNull(o.client_metal_g) != null ? docBtn('receipt', 'Gold receipt') : '') +
-    (o.karigar_id && numOrNull(o.karigar_issued_g) != null ? '<button class="btn btn-small btn-secondary" data-action="o-kchallan" data-id="' + o.id + '">Karigar challan</button>' : '') +
+    (o.karigar_id && numOrNull(o.karigar_issued_g) != null && appOn('karigars') ? '<button class="btn btn-small btn-secondary" data-action="o-kchallan" data-id="' + o.id + '">Karigar challan</button>' : '') +
     '</div>' +
 
     '<div class="section-label">Weight</div>' +
@@ -945,9 +1108,13 @@ function stageCardHTML(o, ups) {
       row('new', 'Approved', 'done', when.new || o.order_date, false) +
       row('delivered', 'Delivered', o.status === 'delivered' ? 'cur' : 'pending', o.status === 'delivered' ? (o.delivered_on || when.delivered) : null, o.status !== 'delivered');
   }
+  // only the stages in use (More → App settings); the order's own stage always shows
   return row('new', 'Approved', 'done', when.new || o.order_date, false) +
-    ORDER_STAGES.map((k, i) => row(k, OSTATUS_LABEL[k], i < cur ? 'done' : i === cur ? 'cur' : 'pending',
-      i <= cur ? (k === 'delivered' && o.delivered_on ? o.delivered_on : when[k]) : null, i !== cur)).join('');
+    activeStages(o.status).map((k) => {
+      const i = ORDER_STAGES.indexOf(k);
+      return row(k, OSTATUS_LABEL[k], i < cur ? 'done' : i === cur ? 'cur' : 'pending',
+        i <= cur ? (k === 'delivered' && o.delivered_on ? o.delivered_on : when[k]) : null, i !== cur);
+    }).join('');
 }
 
 async function loadOrderDetails(o) {
@@ -999,9 +1166,12 @@ async function loadOrderDetails(o) {
         '</div></div>';
     }).join('') : '<div class="empty" style="padding:10px">No items — tap Edit to add them.</div>');
 
+  // the finished piece next to the design
+  if (typeof drawFinalBox === 'function') drawFinalBox(o, items, urls);
+
   // gold ledgers
   const led = jwLedger(o, c.net);
-  const kgH = karigarHTML(o);
+  const kgH = appOn('karigars') ? karigarHTML(o) : '';
   const lg = $('#o-ledgers');
   if (lg) lg.innerHTML =
     (o.order_type === 'job_work' ? '<div class="section-label">Client\'s gold</div><div class="card">' +
@@ -1020,22 +1190,37 @@ async function loadOrderDetails(o) {
 /* ---------------- order actions ---------------- */
 function stageIndex(st) { return st === 'ready' ? ORDER_STAGES.indexOf('finished') : ORDER_STAGES.indexOf(st); }
 
+/* change an order's status, write it in the history and keep its catalogue pieces in step.
+   Returns the history line's id (for Undo; null if that line could not be written),
+   or false when the status could not be changed. */
+async function applyStatus(o, s) {
+  const patch = { status: s, delivered_on: s === 'delivered' ? todayStr() : null };
+  // only if nobody changed it meanwhile (another phone, or a box left open)
+  const { data, error } = await db.from('orders').update(patch).eq('id', o.id).eq('status', o.status).select('id');
+  if (error) {
+    toast(String(error.code) === '23514' ? 'This needs the database update (ark-update-payments-vendors.sql).' : 'Could not update — try again.', 'err');
+    return false;
+  }
+  if (!data || !data.length) {
+    toast(ordNo(o.order_no) + ' was just changed on another phone — check it again.', 'err');
+    if (typeof refreshOrderViews === 'function') refreshOrderViews(o, { reload: true });
+    return false;
+  }
+  const { data: up } = await db.from('order_updates').insert({ order_id: o.id, status: s, note: null, created_by: S.me.id }).select('id').single();
+  // a quotation never held its pieces; a cancelled order already let them go
+  if (CLOSED_STATUSES.indexOf(s) === -1 || HOLDING_STATUSES.indexOf(o.status) > -1) await syncCatalogueForOrder(o.id, s);
+  return (up && up.id) || null;
+}
+
 async function setOrderStatus(id, s) {
   const o = await fetchOrder(id);
   if (!o) return;
   if (s === 'declined' && !S.dbv6) s = 'cancelled';   // before the database update "not approved" is kept as cancelled
   const go = async () => {
-    const patch = { status: s, delivered_on: s === 'delivered' ? todayStr() : null };
-    const { error } = await db.from('orders').update(patch).eq('id', id);
-    if (error) {
-      toast(String(error.code) === '23514' ? 'This needs the database update (ark-update-payments-vendors.sql).' : 'Could not update — try again.', 'err');
-      return;
-    }
-    await db.from('order_updates').insert({ order_id: id, status: s, note: null, created_by: S.me.id });
-    // a quotation never held its pieces; a cancelled order already let them go
-    if (CLOSED_STATUSES.indexOf(s) === -1 || HOLDING_STATUSES.indexOf(o.status) > -1) await syncCatalogueForOrder(id, s);
-    toast(s === 'quote' ? 'Quotation reopened ✓' : 'Marked ' + OSTATUS_LABEL[s] + ' ✓', 'ok');
+    if (await applyStatus(o, s) === false) return;
     openOrder(id, true);
+    if (s === 'finished' && typeof offerFinalPhoto === 'function' && S.dbv7) offerFinalPhoto(o, null);   // a photo of the finished piece?
+    else toast(s === 'quote' ? 'Quotation reopened ✓' : 'Marked ' + OSTATUS_LABEL[s] + ' ✓', 'ok');
   };
   if (o.status === 'cancelled' && s === 'new') {
     const taken = await piecesTaken(id);
@@ -1167,7 +1352,13 @@ async function onOrderAction(a, el) {
   }
   else if (a === 'o-item-del') { S.ord.items.splice(+el.dataset.idx, 1); if (!S.ord.items.length) S.ord.items.push(blankItem()); redrawOrderItems(); syncOrderColor(); orderRecalcView(); }
   else if (a === 'o-item-photo') orderItemPhoto(+el.dataset.idx);
-  else if (a === 'o-item-photo-del') { const it = S.ord.items[+el.dataset.idx]; if (it) { it._photo = null; it.photo_path = null; } redrawOrderItems(); }
+  else if (a === 'o-item-photo-del') { const it = S.ord.items[+el.dataset.idx]; if (it) { it._photo = null; it.photo_path = null; it._copy = null; } redrawOrderItems(); }
+  else if (a === 'o-next') { if (typeof quickMove === 'function') quickMove(el.dataset.id, el.dataset.s, el); }
+  else if (a === 'o-due') { if (typeof openDueModal === 'function') openDueModal(el.dataset.id); }
+  else if (a === 'o-due-form' && S.ord && S.ord.id) {   // from the Edit form: saved at once, the form keeps the new date
+    openDueModal(S.ord.id, (d) => { S.ord.o.due_date = d; S.ord.origDue = d; const inp = $('#o-due-locked'); if (inp) inp.value = d; });
+  }
+  else if (a === 'o-repeat') startRepeatOrder(el.dataset.id);
   else if (a === 'o-save') saveOrder(el.dataset.quote === '1');
   else if (a === 'o-status') setOrderStatus(el.dataset.id, el.dataset.s);
   else if (a === 'o-convert') convertQuote(el.dataset.id);
@@ -1185,7 +1376,7 @@ async function onOrderAction(a, el) {
 async function loadClientOrders(cl) {
   const el = $('#client-orders');
   if (!el) return;
-  const { data, error } = await db.from('orders').select('id, order_no, order_type, status, order_date, due_date, ' + ORDER_PHOTO_COLS)
+  const { data, error } = await db.from('orders').select('id, order_no, order_type, status, order_date, due_date' + finCol() + ', ' + ORDER_PHOTO_COLS)
     .eq('client_id', cl.id).order('order_date', { ascending: false }).limit(100);
   if (!$('#client-orders')) return;
   if (error) { el.innerHTML = ''; return; }
@@ -1197,16 +1388,25 @@ async function loadClientOrders(cl) {
   fillOrderThumbs(el);
 }
 
-/* the Today screen's "orders due soon" block */
+/* the Today screen: late orders at the very top, orders due in the next 3 days further down */
 async function loadTodayOrders() {
   const el = $('#today-orders');
   if (!el) return;
-  const { data, error } = await db.from('orders').select('id, order_no, order_type, status, order_date, due_date, clients(trade_name), ' + ORDER_PHOTO_COLS)
+  const t = todayStr();
+  const { data, error } = await db.from('orders').select('id, order_no, order_type, status, order_date, due_date' + finCol() + ', clients(trade_name), ' + ORDER_PHOTO_COLS)
     .in('status', OPEN_STATUSES).not('due_date', 'is', null).lte('due_date', todayStr(3))
-    .order('due_date', { ascending: true }).limit(30);
-  if (!$('#today-orders') || error || !data || !data.length) return;
-  el.innerHTML = '<div class="due-group-label overdue">Orders due in the next 3 days (' + data.length + ')</div>' +
-    data.map((o) => orderListItemHTML(o, true)).join('');
+    .order('due_date', { ascending: true }).order('order_no', { ascending: true }).limit(200);
+  if (!$('#today-orders') || error || !data) return;
+  const late = data.filter((o) => o.due_date < t), soon = data.filter((o) => o.due_date >= t);
+  const lateEl = $('#today-late');
+  if (lateEl) {
+    lateEl.innerHTML = late.length ? '<div class="due-group-label overdue sl-row"><span>⚠ Late orders (' + late.length + ')</span>' +
+      (typeof renderBoard === 'function' ? '<a href="#" data-action="bd-late">See on the board ›</a>' : '') + '</div>' +
+      late.map((o) => orderListItemHTML(o, true, { late: true })).join('') : '';
+    fillOrderThumbs(lateEl);
+  }
+  el.innerHTML = soon.length ? '<div class="due-group-label due-soon">Orders due in the next 3 days (' + soon.length + ')</div>' +
+    soon.map((o) => orderListItemHTML(o, true)).join('') : '';
   fillOrderThumbs(el);
 }
 
@@ -1220,9 +1420,15 @@ async function loadReportOrders(period) {
   const start = periodStartDate(period);
   let q = db.from('orders').select('order_type, status, created_by').limit(5000);
   if (start) q = q.gte('order_date', start);
-  const [r, payRows] = await Promise.all([
+  // deliveries in the period: on time (by the first promised date) and how many days they took
+  let dq = db.from('orders').select('order_date, due_date, delivered_on' + (S.dbv7 ? ', first_due_date' : '')).eq('status', 'delivered').not('delivered_on', 'is', null).limit(5000);
+  if (start) dq = dq.gte('delivered_on', start);
+  const pays = typeof payAllEntries === 'function' && appOn('payments');
+  const [r, payRows, dr, lr] = await Promise.all([
     q,
-    typeof payAllEntries === 'function' ? payAllEntries().catch(() => []) : Promise.resolve([]),
+    pays ? payAllEntries().catch(() => []) : Promise.resolve([]),
+    dq,
+    db.from('orders').select('id', { count: 'exact', head: true }).in('status', OPEN_STATUSES).lt('due_date', todayStr()),
   ]);
   if (!$('#report-orders')) return;
   if (r.error) { el.innerHTML = ''; return; }
@@ -1230,7 +1436,13 @@ async function loadReportOrders(period) {
   const rows = all.filter(isLive);
   const cancelled = all.filter((o) => CLOSED_STATUSES.indexOf(o.status) > -1).length;
   const quotes = all.filter((o) => o.status === 'quote');
-  const PG = typeof payDueGroups === 'function' ? payDueGroups(payIndex(payRows)) : { all: [], late: [] };
+  const PG = pays && typeof payDueGroups === 'function' ? payDueGroups(payIndex(payRows)) : { all: [], late: [] };
+  const del = (dr && !dr.error && dr.data) || [];
+  const promised = del.filter((o) => o.first_due_date || o.due_date);
+  const onTime = promised.filter((o) => o.delivered_on <= (o.first_due_date || o.due_date)).length;
+  const took = del.filter((o) => o.order_date && o.delivered_on >= o.order_date).map((o) => daysBetween(o.order_date, o.delivered_on));
+  const avgDays = took.length ? Math.round(took.reduce((a, b) => a + b, 0) / took.length) : null;
+  const lateNow = (lr && !lr.error && lr.count) || 0;
   const byType = { job_work: 0, ready_stock: 0, custom: 0 };
   const byStatus = {};
   ['new'].concat(ORDER_STAGES).forEach((k) => { byStatus[k] = 0; });
@@ -1250,14 +1462,23 @@ async function loadReportOrders(period) {
     '<div class="stat"><div class="st-num">' + byStatus.delivered + '</div><div class="st-label">Delivered</div></div>' +
     '</div>' +
     '<div class="brk-row">' + tchip('job_work') + tchip('ready_stock') + tchip('custom') + '</div>' +
-    '<div class="brk-row">' + ['new'].concat(ORDER_STAGES).map((s) =>
+    '<div class="brk-row">' + ['new'].concat(ORDER_STAGES).filter((s) => byStatus[s] || s === 'new' || activeStages().indexOf(s) > -1).map((s) =>
       '<span class="brk-chip" style="cursor:default' + (byStatus[s] ? '' : ';opacity:.45') + '">' + OSTATUS_LABEL[s] + ' <b>' + byStatus[s] + '</b></span>').join('') +
     (cancelled ? '<span class="brk-chip" style="cursor:default;opacity:.6">Not approved / cancelled <b>' + cancelled + '</b></span>' : '') +
     (quotes.length ? '<button class="brk-chip" data-action="o-goto" data-s="quote">Quotations <b>' + quotes.length + '</b></button>' : '') + '</div>' +
     (byExec.size ? '<div class="brk-row">' + Array.from(byExec.entries()).sort((a, b) => b[1] - a[1]).map((e) =>
       '<span class="brk-chip" style="cursor:default">' + esc(nameOf(e[0])) + ' <b>' + e[1] + '</b></span>').join('') + '</div>' : '') +
     (PG.all.length ? '<div class="notice" style="margin-top:8px">Payments due: <b>' + PG.all.length + '</b>' +
-      (PG.late.length ? ' · <span class="o-red">' + PG.late.length + ' overdue</span>' : '') + ' · <a href="#" data-action="dues-open">See who ›</a></div>' : '');
+      (PG.late.length ? ' · <span class="o-red">' + PG.late.length + ' overdue</span>' : '') + ' · <a href="#" data-action="dues-open">See who ›</a></div>' : '') +
+    '<div class="section-label">Delivery ' + esc(periodLabel(period)) + '</div>' +
+    '<div class="stat-row">' +
+    '<div class="stat"><div class="st-num' + (promised.length && onTime / promised.length < 0.7 ? ' o-red' : '') + '">' + (promised.length ? Math.round(onTime / promised.length * 100) + '%' : '—') + '</div><div class="st-label">On time</div></div>' +
+    '<div class="stat"><div class="st-num">' + (avgDays != null ? avgDays : '—') + '</div><div class="st-label">Average days</div></div>' +
+    '<div class="stat"' + (lateNow && typeof renderBoard === 'function' ? ' data-action="bd-late" style="cursor:pointer"' : '') + '><div class="st-num' + (lateNow ? ' o-red' : '') + '">' + lateNow + '</div><div class="st-label">Late now</div></div>' +
+    '</div>' +
+    '<div class="hint" style="margin:2px 2px 10px">' + (del.length
+      ? esc(onTime + ' of ' + promised.length + ' delivered on or before the date first promised') + (avgDays != null ? esc(' · order to delivery ' + avgDays + ' days on average') : '')
+      : 'No order delivered ' + esc(periodLabel(period)) + '.') + '</div>';
 }
 
 /* extra CSV files for Export */
@@ -1271,13 +1492,13 @@ async function exportOrdersData(pName, cName, today) {
   const oClient = new Map(orders.map((o) => [o.id, cName.get(o.client_id) || '']));
   await new Promise((r) => setTimeout(r, 450));
   downloadFile('bj-orders-' + today + '.csv', buildCsv(
-    ['Order no', 'Client', 'Type', 'Status', 'Order date', 'Delivery by', 'Delivered on', 'Vendor', 'Metal', 'Purity', 'Wastage %',
+    ['Order no', 'Client', 'Type', 'Status', 'Order date', 'Delivery by', 'First promised date', 'Delivered on', 'Vendor', 'Metal', 'Purity', 'Wastage %',
       'Client gold (g)', 'Client gold purity', 'Client gold on',
-      'Karigar', 'Issued to karigar (g)', 'Issued on', 'Received from karigar (g)', 'Received on', 'Notes', 'Created by', 'Created on'],
+      'Karigar', 'Issued to karigar (g)', 'Issued on', 'Received from karigar (g)', 'Received on', 'Notes', 'Finished piece photos', 'Created by', 'Created on'],
     orders.map((o) => [ordNo(o.order_no), cName.get(o.client_id) || '', OTYPE_LABEL[o.order_type], OSTATUS_LABEL[o.status], o.order_date, o.due_date || '',
-      o.delivered_on || '', o.vendor_id && typeof vendorName === 'function' ? vendorName(o.vendor_id) : '', o.metal, o.purity, o.wastage_pct,
+      o.first_due_date || '', o.delivered_on || '', o.vendor_id && typeof vendorName === 'function' ? vendorName(o.vendor_id) : '', o.metal, o.purity, o.wastage_pct,
       o.client_metal_g, o.client_metal_purity, o.client_metal_on || '', o.karigar_name, o.karigar_issued_g, o.karigar_issued_on || '',
-      o.karigar_received_g, o.karigar_received_on || '', o.notes, pName.get(o.created_by) || '', fmtExp(o.created_at)])));
+      o.karigar_received_g, o.karigar_received_on || '', o.notes, (o.final_photo_paths || []).length || '', pName.get(o.created_by) || '', fmtExp(o.created_at)])));
   await new Promise((r) => setTimeout(r, 450));
   downloadFile('bj-order-items-' + today + '.csv', buildCsv(
     ['Order no', 'Client', '#', 'Piece', 'Tag / design no', 'Description', 'Qty', 'Gross wt (g)', 'Net wt (g)', 'Colour / finish',
