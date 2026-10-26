@@ -1756,11 +1756,24 @@ const I18N = {
   'New designs or an offer, sent to many shops on WhatsApp': ['नए डिज़ाइन या ऑफ़र, कई दुकानों को WhatsApp पर', 'નવી ડિઝાઇન કે ઑફર, ઘણી દુકાનોને WhatsApp પર'],
   'Birthdays and anniversaries': ['जन्मदिन और सालगिरह', 'જન્મદિવસ અને વર્ષગાંઠ'],
   'Reminders on Today to wish your clients': ['“आज” पर क्लाइंट को शुभकामना देने की याद', '“આજે” પર ક્લાયન્ટને શુભેચ્છા આપવાની યાદ'],
+  /* ---------- v17: works without internet ---------- */
+  'No internet — showing what was loaded before': ['इंटरनेट नहीं — पहले खोली गई जानकारी दिख रही है', 'ઇન્ટરનેટ નથી — પહેલાં ખોલેલી માહિતી દેખાય છે'],
+  'Sending what was saved without internet': ['बिना इंटरनेट सेव हुआ भेजा जा रहा है', 'ઇન્ટરનેટ વગર સેવ થયેલું મોકલાઈ રહ્યું છે'],
+  'waiting to be sent': ['भेजना बाकी', 'મોકલવાના બાકી'],
+  'Sent what was saved without internet': ['बिना इंटरनेट सेव हुआ भेज दिया', 'ઇન્ટરનેટ વગર સેવ થયેલું મોકલી દીધું'],
+  'saved entries could not be sent': ['सेव की हुई एंट्री नहीं भेजी जा सकीं', 'સેવ કરેલી એન્ટ્રી મોકલી ન શકાઈ'],
+  'enter them again': ['उन्हें फिर से दर्ज करें', 'તેમને ફરી નોંધો'],
+  'A saved entry could not be sent': ['सेव की हुई एक एंट्री नहीं भेजी जा सकी', 'સેવ કરેલી એક એન્ટ્રી મોકલી ન શકાઈ'],
+  'enter it again': ['उसे फिर से दर्ज करें', 'તેને ફરી નોંધો'],
+  'Meeting saved on this phone': ['मीटिंग इस फोन में सेव हो गई', 'મીટિંગ આ ફોનમાં સેવ થઈ'],
+  'it will be sent when the internet is back': ['इंटरनेट आने पर भेज दी जाएगी', 'ઇન્ટરનેટ આવે ત્યારે મોકલાશે'],
 };
 
 /* Sentences with changing parts (numbers, names, dates).
    $1 = kept as it is · %1 = translated too */
 const I18N_RX = [
+  /* v17 */
+  [/^Sent (\d+) entries saved without internet$/, 'बिना इंटरनेट सेव हुई $1 एंट्री भेज दी गईं', 'ઇન્ટરનેટ વગર સેવ થયેલી $1 એન્ટ્રી મોકલી દીધી'],
   /* v16 */
   [/^Received by (.+)$/, '$1 ने लिया', '$1 એ લીધું'],
   [/^(.+) can open this link to see (ORD-\d+)'s step, photos and delivery date — no login needed\. Turn it off any time$/, '%1 इस लिंक से $2 का स्टेप, फोटो और डिलीवरी तारीख देख सकते हैं — लॉगिन की ज़रूरत नहीं। इसे कभी भी बंद कर सकते हैं', '%1 આ લિંકથી $2 નું સ્ટેપ, ફોટા અને ડિલિવરી તારીખ જોઈ શકે છે — લૉગિનની જરૂર નથી. તેને ગમે ત્યારે બંધ કરી શકો છો'],

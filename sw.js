@@ -1,24 +1,35 @@
-/* Marketing app service worker — network-first, cache as offline fallback for the app shell */
-const CACHE = 'app-shell-v16';
+/* Marketing app service worker — network-first, cache as offline fallback for the app shell.
+   The database library (from the CDN) is kept too, so the app opens without internet.
+   The app's own copies of lists and pages (offline.js, cache 'ark-data-…') are left alone. */
+const CACHE = 'app-shell-v17';
+const LIBS = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js'];
 const SHELL = ['index.html', 'styles.css', 'config.js', 'manifest.json', 'icon-192.png', 'icon.svg',
   'app.js', 'i18n.js', 'jewel.js', 'orders.js', 'util.js', 'docs.js', 'payments.js', 'vendors.js',
   'notes.js', 'crop.js', 'reports.js', 'catalogue.js', 'karigars.js', 'visits.js', 'targets.js', 'summary.js', 'flow.js', 'leads.js',
-  'delivery.js', 'wishes.js', 'campaigns.js', 'repairs.js', 'approvals.js'];
+  'delivery.js', 'wishes.js', 'campaigns.js', 'repairs.js', 'approvals.js', 'offline.js'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL).then(() => c.addAll(LIBS).catch(() => {}))).catch(() => {}));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k.indexOf('app-shell-') === 0 && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
+  if (e.request.method === 'GET' && LIBS.indexOf(url.href) > -1) {   // the library never changes at this address: the kept copy first
+    e.respondWith(caches.match(e.request).then((m) => m || fetch(e.request).then((res) => {
+      const copy = res.clone();
+      if (res.ok || res.type === 'opaque') caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
+      return res;
+    })));
+    return;
+  }
   // Never intercept API traffic — only same-origin GETs inside the app's own folder
   const appDir = new URL('./', self.location.href).pathname;
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;

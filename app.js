@@ -9,7 +9,8 @@
 const CFG = window.APP_CONFIG || {};
 const BRAND = CFG.BUSINESS_NAME || 'Marketing';
 const BRAND_SHORT = CFG.BUSINESS_SHORT || 'ME';
-const db = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY);
+// offlineFetch (offline.js): pages kept on the phone, meetings saved without internet
+const db = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY, typeof offlineFetch === 'function' ? { global: { fetch: offlineFetch } } : undefined);
 
 /* ---------------- state ---------------- */
 const S = {
@@ -246,6 +247,7 @@ function renderShell() {
     '<main id="content"></main>' +
     '<nav id="tabbar">' + tabsHTML() + '</nav>';
   bindDelegates();
+  if (typeof offBar === 'function') offBar();
 }
 /* redraw only the tab buttons (the screen that is open stays) */
 function refreshTabbar() {
@@ -361,7 +363,10 @@ async function onDelegatedClick(e) {
     else { toast('Moved to tomorrow', 'ok'); renderToday(); }
   }
   else if (a === 'today-scope') { S.todayScope = el.dataset.scope; renderToday(); }
-  else if (a === 'logout') confirmModal('Sign out?', 'You will need your email and password to sign in again.', 'Sign out', async () => { await db.auth.signOut(); location.reload(); });
+  else if (a === 'logout') confirmModal('Sign out?', 'You will need your email and password to sign in again.', 'Sign out', async () => {
+    if (typeof offClear === 'function') await offClear();   // nothing of this person stays on the phone
+    await db.auth.signOut(); location.reload();
+  });
   else if (a === 'team-add') renderTeamAddModal();
   else if (a === 'member-toggle') toggleMember(el.dataset.id, el.dataset.active === 'true');
   else if (a === 'member-resetpw') renderResetPwModal(el.dataset.id);
@@ -1369,7 +1374,9 @@ async function saveInteraction() {
   let pos = null;
   if (typeof getPosition === 'function' && appOn('location')) { btn.textContent = 'Getting location…'; pos = await getPosition(9000); btn.textContent = 'Saving…'; }
 
+  const t0 = Date.now();
   const { data: intRow, error } = await db.from('interactions').insert(Object.assign({
+    id: typeof offNewId === 'function' ? offNewId() : undefined,   // chosen here, so it can also be saved without internet
     client_id: cl.id, exec_id: S.me.id,
     notes: notes || (outcomeVal ? '(' + outcomeVal + ')' : '(follow-ups only)'),
     outcome: outcomeVal || null,
@@ -1393,7 +1400,7 @@ async function saveInteraction() {
   }
 
   S.lastMet = null; S.leadCache = null;   // the client lists show the newest meeting
-  toast('Meeting recorded ✓', 'ok');
+  toast(typeof offQueuedSince === 'function' && offQueuedSince(t0) ? 'Meeting saved on this phone — it will be sent when the internet is back' : 'Meeting recorded ✓', 'ok');
   await openClient(cl.id, true);
 
   // An order was taken in this meeting → offer to record it straight away.
