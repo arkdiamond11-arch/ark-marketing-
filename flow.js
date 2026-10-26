@@ -271,8 +271,8 @@ function busyOverlay(text) {
 function addFinalPhoto(orderId, fromGallery) {
   if (!S.dbv7) { toast('Finished-piece photos need the database update (ark-update-07.sql).', 'err'); return; }
   pickImage(async (file) => {
-    let p;
-    try { p = await downscale(file, 1600); } catch (e) { toast(imageErrMsg(e), 'err'); return; }
+    const p = await photoFromFile(file, 'Finished piece');   // the crop screen; null = cancelled
+    if (!p) return;
     const ov = busyOverlay('Saving the photo…');
     const path = orderId + '/final-' + Date.now() + '.jpg';
     const { error: upErr } = await db.storage.from('orders').upload(path, p.blob, { contentType: 'image/jpeg' });

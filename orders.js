@@ -722,7 +722,9 @@ function redrawOrderItems() {
     let photo;
     if (it._photo) {
       photo = '<img class="oi-thumb" src="' + URL.createObjectURL(it._photo.blob) + '" alt="Design photo">' +
-        '<div class="photo-row"><button type="button" class="btn btn-small btn-secondary" data-action="o-item-photo" data-idx="' + i + '">Retake</button>' +
+        '<div class="photo-row">' +
+        (it._photo.src && typeof cropPhotoFile === 'function' ? '<button type="button" class="btn btn-small btn-secondary" data-action="o-item-crop" data-idx="' + i + '">Crop</button>' : '') +
+        '<button type="button" class="btn btn-small btn-secondary" data-action="o-item-photo" data-idx="' + i + '">Retake</button>' +
         '<button type="button" class="btn btn-small btn-ghost" data-action="o-item-photo-del" data-idx="' + i + '">Remove</button></div>';
     } else if (it.photo_path) {
       photo = '<div class="photo-row" style="align-items:center"><span class="ps-saved" style="font-size:13px;font-weight:650">Photo saved ✓</span>' +
@@ -877,16 +879,25 @@ function orderItemPhoto(idx) {
   const go = (fromGallery) => {
     closeModal();
     pickImage(async (file) => {
-      try {
-        const it = S.ord && S.ord.items[idx];
-        if (!it) return;
-        it._photo = await downscale(file, 1600);
-      } catch (e) { toast(imageErrMsg(e), 'err'); return; }
+      const p = await photoFromFile(file, 'Design photo');   // the crop screen; null = cancelled
+      const it = p && S.ord && S.ord.items[idx];
+      if (!it) return;
+      it._photo = p;
       redrawOrderItems();
     }, fromGallery);
   };
   ov.querySelector('[data-m=cam]').onclick = () => go(false);
   ov.querySelector('[data-m=gal]').onclick = () => go(true);
+}
+
+/* "Crop" under a design photo that was just added (not saved yet) */
+async function recropItemPhoto(idx) {
+  const it = S.ord && S.ord.items[idx];
+  if (!it || !it._photo || !it._photo.src || typeof cropPhotoFile !== 'function') return;
+  const p = await cropPhotoFile(it._photo.src.file, 'Design photo', it._photo.src);
+  if (!p || !S.ord || S.ord.items[idx] !== it) return;
+  it._photo = p;
+  redrawOrderItems();
 }
 
 function itemHasContent(it) {
@@ -1363,6 +1374,7 @@ async function onOrderAction(a, el) {
   }
   else if (a === 'o-item-del') { S.ord.items.splice(+el.dataset.idx, 1); if (!S.ord.items.length) S.ord.items.push(blankItem()); redrawOrderItems(); syncOrderColor(); orderRecalcView(); }
   else if (a === 'o-item-photo') orderItemPhoto(+el.dataset.idx);
+  else if (a === 'o-item-crop') recropItemPhoto(+el.dataset.idx);
   else if (a === 'o-item-photo-del') { const it = S.ord.items[+el.dataset.idx]; if (it) { it._photo = null; it.photo_path = null; it._copy = null; } redrawOrderItems(); }
   else if (a === 'o-next') { if (typeof quickMove === 'function') quickMove(el.dataset.id, el.dataset.s, el); }
   else if (a === 'o-due') { if (typeof openDueModal === 'function') openDueModal(el.dataset.id); }

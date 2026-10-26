@@ -1,5 +1,5 @@
 /* Marketing app service worker — network-first, cache as offline fallback for the app shell */
-const CACHE = 'app-shell-v13';
+const CACHE = 'app-shell-v14';
 const SHELL = ['index.html', 'styles.css', 'config.js', 'manifest.json', 'icon-192.png', 'icon.svg',
   'app.js', 'i18n.js', 'jewel.js', 'orders.js', 'util.js', 'docs.js', 'payments.js', 'vendors.js',
   'notes.js', 'crop.js', 'reports.js', 'catalogue.js', 'karigars.js', 'visits.js', 'targets.js', 'summary.js', 'flow.js', 'leads.js'];

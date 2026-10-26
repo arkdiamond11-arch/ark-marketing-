@@ -625,20 +625,22 @@ function attachPhoto(side) {
   const go = function (fromGallery) {
     closeModal();
     pickImage(async (file) => {
-      let p;
-      if (typeof cropPhotoFile === 'function') {
-        p = await cropPhotoFile(file, side === 'back' ? 'Back side' : 'Front side');   // crop screen; null = cancelled
-        if (!p) return;
-      } else {
-        try { p = await downscale(file, 1600); }
-        catch (e) { toast(imageErrMsg(e), 'err'); return; }
-      }
+      const p = await photoFromFile(file, side === 'back' ? 'Back side' : 'Front side', { card: true });
+      if (!p) return;
       S.photos[side] = p;
       redrawPhotos();
     }, fromGallery);
   };
   ov.querySelector('[data-m=cam]').onclick = function () { go(false); };
   ov.querySelector('[data-m=gal]').onclick = function () { go(true); };
+}
+
+/* a photo from the camera or the gallery → the crop screen (crop.js) → the photo to keep, or null (cancelled / unreadable).
+   opt.card: a visiting card (the crop box starts on the card) */
+async function photoFromFile(file, title, opt) {
+  if (typeof cropPhotoFile === 'function') return cropPhotoFile(file, title, null, opt);
+  try { return await downscale(file, 1600); }
+  catch (e) { toast(imageErrMsg(e), 'err'); return null; }
 }
 
 function photoSlotHTML(side, savedPath) {

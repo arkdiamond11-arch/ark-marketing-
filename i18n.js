@@ -1374,6 +1374,11 @@ const I18N = {
   'Full photo': ['पूरी फोटो', 'આખો ફોટો'],
   'Use photo': ['यह फोटो लें', 'આ ફોટો લો'],
   'Crop': ['क्रॉप', 'ક્રોપ'],
+  /* ---- v14: the card found by itself, crop for every photo ---- */
+  'Card found — drag the corners if needed': ['कार्ड मिल गया — ज़रूरत हो तो कोने खींचें', 'કાર્ડ મળી ગયું — જરૂર હોય તો ખૂણા ખેંચો'],
+  'Drag the corners to keep just the part you want': ['कोने खींचकर फोटो का उतना हिस्सा चुनें जितना रखना है', 'ખૂણા ખેંચીને ફોટાનો જેટલો ભાગ રાખવો હોય તેટલો પસંદ કરો'],
+  'Card': ['कार्ड', 'કાર્ડ'],
+  'Catalogue photo': ['कैटलॉग फोटो', 'કેટલોગ ફોટો'],
   'Could not save the photo — try again': ['फोटो सेव नहीं हुई — फिर कोशिश करें', 'ફોટો સેવ ન થયો — ફરી પ્રયત્ન કરો'],
   'This photo is in HEIC format, which this phone cannot open here. Take a new photo with the camera, or choose a JPG': ['यह फोटो HEIC फॉर्मेट में है, जो यहाँ नहीं खुलती। कैमरा से नई फोटो लें, या JPG फोटो चुनें', 'આ ફોટો HEIC ફોર્મેટમાં છે, જે અહીં ખૂલતો નથી. કેમેરાથી નવો ફોટો લો, અથવા JPG ફોટો પસંદ કરો'],
   'Could not open that photo. If it is in the cloud (Google Photos), download it to the phone first': ['यह फोटो नहीं खुली। अगर यह क्लाउड (Google Photos) में है, तो पहले फोन में डाउनलोड करें', 'આ ફોટો ખૂલ્યો નહીં. જો તે ક્લાઉડ (Google Photos) માં હોય, તો પહેલાં ફોનમાં ડાઉનલોડ કરો'],

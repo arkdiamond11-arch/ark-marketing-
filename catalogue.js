@@ -242,8 +242,9 @@ function catPhotoAdd() {
   const go = (fromGallery) => {
     closeModal();
     pickImage(async (file) => {
-      try { const p = await downscale(file, 1600); S.catForm.photos.push({ blob: p.blob }); }
-      catch (e) { toast(imageErrMsg(e), 'err'); return; }
+      const p = await photoFromFile(file, 'Catalogue photo');   // the crop screen; null = cancelled
+      if (!p || !S.catForm) return;
+      S.catForm.photos.push({ blob: p.blob });
       drawCatFormPhotos();
     }, fromGallery);
   };
