@@ -203,13 +203,25 @@ function stateFromGstin(gstin) {
 /* returns the row, or null when it could not be read — then what was loaded before stays */
 async function loadBiz() {
   const get = () => db.from('business_settings').select('*').eq('id', 1).maybeSingle();
+  const v8 = probeDbV8();
   let r = await get();
   if (r.error || !r.data) { await new Promise((ok) => setTimeout(ok, 1200)); r = await get(); }   // a phone waking up often fails its first request
+  const has8 = await v8;
+  if (has8 !== null) S.dbv8 = has8;
   if (r.error || !r.data) { if (!S.biz) S.biz = {}; return null; }
   S.biz = r.data;
   S.bizAt = Date.now();
   S.dbv7 = Object.prototype.hasOwnProperty.call(S.biz, 'app_options');   // database update 07 has been run
   return S.biz;
+}
+/* database update 08 (repairs, pieces on approval, messages, wishes, IGI files, hand-over) has been run?
+   true / false, or null when it could not be checked (no internet) */
+async function probeDbV8() {
+  const q = () => db.from('repairs').select('id').limit(1);
+  let r = await q();
+  if (r.error && !dbObjMissing(r.error)) { await new Promise((ok) => setTimeout(ok, 1200)); r = await q(); }
+  if (!r.error) return true;
+  return dbObjMissing(r.error) ? false : null;
 }
 
 /* ---------------- app settings (owner: More → App settings) ----------------
@@ -222,7 +234,13 @@ const APP_SECTIONS = [
   ['payments', 'Payment dues', 'Which party has to pay and by when'],
   ['targets', 'Targets', 'Monthly targets for the team'],
   ['location', 'Visit location', 'Shop location, visit check-in, clients near me'],
+  // these need database update 08
+  ['repairs', 'Repairs', 'Pieces shops send back for resizing, polish or repair', 8],
+  ['approvals', 'Pieces on approval', 'Pieces given to shops to show their customers', 8],
+  ['messages', 'Messages to shops', 'New designs or an offer, sent to many shops on WhatsApp', 8],
+  ['wishes', 'Birthdays and anniversaries', 'Reminders on Today to wish your clients', 8],
 ];
+function appSectionsShown() { return APP_SECTIONS.filter((s) => s[3] !== 8 || S.dbv8); }
 const STEP_CHOICES = ['cad', 'wax', 'in_production', 'setting', 'finished', 'igi'];   // between Approved and Delivered
 function appOpts() {
   const o = S.biz && S.biz.app_options;

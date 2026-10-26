@@ -374,6 +374,41 @@ async function pPhotos(d, items, urls) {
   }
 }
 
+/* the hand-over recorded when the order was delivered (database update 08): who received it,
+   when, their signature and the parcel photo. Returns true when their signature is printed. */
+async function pHandover(d, o) {
+  const pics = (o.delivery_photo_paths || []).filter(Boolean).slice(0, 2);
+  if (!o.delivered_to && !o.delivery_sign_path && !pics.length) return false;
+  const paths = [o.delivery_sign_path].concat(pics).filter(Boolean);
+  const urls = await signedUrls('orders', paths);
+  const imgs = await Promise.all(paths.map((p) => (urls.get(p) ? pdfImage(urls.get(p), 640) : null)));
+  const sign = o.delivery_sign_path ? imgs[0] : null;
+  const photos = (o.delivery_sign_path ? imgs.slice(1) : imgs).filter(Boolean);
+  const boxH = 28;
+  d.ensure(boxH + 22);
+  pHeading(d, 'Handed over');
+  const when = o.delivered_at ? fmtDLong(o.delivered_at) + ', ' + fmtTime(o.delivered_at) : (o.delivered_on ? pDate(o.delivered_on) : '');
+  d.y = d.para(PM, d.y, (o.delivered_to ? 'Received by ' + o.delivered_to : 'Received') + (when ? ' on ' + when : ''), PG_W - PM * 2, { size: 9.4, bold: true }) + 2;
+  if (!sign && !photos.length) return false;
+  const top = d.y;
+  let x = PM;
+  if (sign) {
+    const r = Math.min(62 / sign.w, boxH / sign.h), w = sign.w * r, h = sign.h * r;
+    d.rect(x, top, 62, boxH, [0.985, 0.98, 0.975]);
+    d.image(sign, x + (62 - w) / 2, top + (boxH - h) / 2, w, h);
+    d.text(x, top + boxH + 3.8, 'Receiver\'s signature', { size: 7.6, color: C_MUTED });
+    x += 68;
+  }
+  photos.forEach((im, i) => {
+    const r = Math.min(46 / im.w, boxH / im.h), w = im.w * r, h = im.h * r;
+    d.image(im, x, top + (boxH - h) / 2, w, h);
+    if (i === 0) d.text(x, top + boxH + 3.8, 'Parcel', { size: 7.6, color: C_MUTED });
+    x += w + 6;
+  });
+  d.y = top + boxH + 7;
+  return !!sign;
+}
+
 /* photos for order lines: own photo, else the catalogue piece's photo */
 async function orderItemPhotoUrls(items) {
   const own = items.map((it) => it.photo_path).filter(Boolean);
@@ -495,7 +530,8 @@ async function orderChallanPdf(o, cl, items) {
   }
   if (o.order_type === 'job_work') pNote(d, '', 'Job-work (making) charges are billed separately on a tax invoice.', 8.2);
   pNote(d, 'TERMS', S.biz && S.biz.terms, 7.8);
-  pSignatures(d, 'Received the above goods in good condition - receiver\'s signature, name and date');
+  const signed = await pHandover(d, o);
+  pSignatures(d, signed ? '' : 'Received the above goods in good condition - receiver\'s signature, name and date');
   return { pdf: d, name: safeFileName(dcNo(no) + ' ' + (cl.trade_name || '') + ' - Challan') + '.pdf', text: 'Delivery challan ' + dcNo(no) + ' from ' + bizName() };
 }
 

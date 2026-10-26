@@ -86,6 +86,7 @@ function jewelPdfBits(it, metal) {
     b.push(d.join(' '));
   }
   if (it.jewel_cert_type) b.push(it.jewel_cert_type + (it.jewel_cert_no ? ' ' + it.jewel_cert_no : ''));
+  if (it.igi_no && !(it.jewel_cert_type === 'IGI' && String(it.jewel_cert_no || '').trim().toUpperCase() === String(it.igi_no).trim().toUpperCase())) b.push('IGI report ' + it.igi_no);
   return b;
 }
 

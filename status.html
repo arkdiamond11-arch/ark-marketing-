@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#7b1e3c">
+  <meta name="robots" content="noindex">
+  <title>Your order</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <style>
+    :root { --maroon: #7b1e3c; --gold: #c9973c; --bg: #f6f4f1; --card: #fff; --ink: #27222b; --muted: #857e8c; --line: #eae6e2; --green: #1a7f4e; --red: #b3372f; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", "Noto Sans Gujarati", sans-serif; font-size: 15px; line-height: 1.45; }
+    header { background: var(--maroon); color: #fff; padding: calc(14px + env(safe-area-inset-top)) 16px 14px; }
+    header .biz { font-size: 13px; letter-spacing: .6px; text-transform: uppercase; opacity: .85; }
+    header h1 { margin: 2px 0 0; font-size: 21px; }
+    header .shop { font-size: 14px; opacity: .9; }
+    main { max-width: 560px; margin: 0 auto; padding: 14px 16px 30px; }
+    .langs { display: flex; gap: 6px; justify-content: flex-end; margin: 0 0 10px; }
+    .langs button { border: 1.5px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink); }
+    .langs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 3px rgba(40,20,30,.08), 0 4px 14px rgba(40,20,30,.05); padding: 14px 15px; margin: 0 0 14px; }
+    .now { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; font-weight: 700; }
+    .now-step { font-size: 22px; font-weight: 800; color: var(--maroon); margin: 2px 0 4px; }
+    .due { font-size: 14.5px; font-weight: 650; }
+    .due.late { color: var(--red); }
+    .bar { display: flex; gap: 4px; margin: 12px 0 2px; }
+    .bar i { flex: 1; height: 7px; border-radius: 4px; background: #e8e1db; }
+    .bar i.done { background: var(--green); }
+    .bar i.cur { background: var(--gold); }
+    .steps { list-style: none; margin: 0; padding: 0; }
+    .steps li { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+    .steps li:first-child { border-top: 0; }
+    .steps .dot { width: 26px; height: 26px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800;
+      background: #eee8e3; color: #fff; }
+    .steps li.done .dot { background: var(--green); }
+    .steps li.cur .dot { background: var(--gold); }
+    .steps .nm { flex: 1; font-weight: 650; }
+    .steps li.pending .nm { color: var(--muted); font-weight: 500; }
+    .steps .when { font-size: 12.5px; color: var(--muted); text-align: right; }
+    h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); margin: 18px 2px 8px; }
+    .photos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .photos figure { margin: 0; background: #f3efe9; border-radius: 12px; overflow: hidden; }
+    .photos img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; display: block; cursor: zoom-in; }
+    .photos figcaption { font-size: 12.5px; color: var(--muted); padding: 6px 9px 8px; background: #fff; }
+    .item { padding: 9px 0; border-top: 1px solid var(--line); }
+    .item:first-child { border-top: 0; }
+    .item b { display: block; }
+    .item span { font-size: 13px; color: var(--muted); }
+    .igi { display: inline-block; margin-top: 4px; background: #eef3ea; color: #22663f; font-size: 12.5px; font-weight: 700; border-radius: 999px; padding: 2px 10px; }
+    .files a { display: inline-block; margin: 4px 8px 4px 0; padding: 8px 14px; border-radius: 999px; background: #f7e9ee; color: var(--maroon); font-weight: 700; text-decoration: none; }
+    .contact { text-align: center; color: var(--muted); font-size: 13.5px; }
+    .contact a { color: var(--maroon); font-weight: 700; text-decoration: none; }
+    .msg { text-align: center; padding: 40px 10px; color: var(--muted); }
+    .msg .big { font-size: 40px; }
+    .zoom { position: fixed; inset: 0; background: rgba(10, 8, 12, .92); display: flex; align-items: center; justify-content: center; z-index: 9; }
+    .zoom img { max-width: 100%; max-height: 100%; }
+  </style>
+</head>
+<body>
+  <header><div class="biz" id="biz">&nbsp;</div><h1 id="title">Your order</h1><div class="shop" id="shop"></div></header>
+  <main id="main"><div class="msg">Loading…</div></main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+  /* The page a shop opens from the order status link: no login, only this
+     order — its steps with their dates, delivery date, photos, IGI numbers. */
+  (function () {
+    'use strict';
+    var T = {
+      hi: {
+        'Your order': 'आपका ऑर्डर', 'Now': 'अभी', 'Delivery by': 'डिलीवरी', 'Delivered on': 'डिलीवर हुआ', 'Running late — new date soon': 'थोड़ी देरी — नई तारीख जल्द',
+        'Steps': 'स्टेप', 'Photos': 'फोटो', 'Finished piece': 'तैयार पीस', 'Design': 'डिज़ाइन', 'Items': 'आइटम', 'IGI certificate': 'IGI सर्टिफिकेट',
+        'Order confirmed': 'ऑर्डर पक्का', 'CAD design': 'CAD डिज़ाइन', 'Wax model': 'वैक्स मॉडल', 'Being made': 'बन रहा है', 'Diamond setting': 'डायमंड सेटिंग',
+        'Finished': 'तैयार', 'IGI certification': 'IGI सर्टिफिकेशन', 'Delivered': 'डिलीवर हो गया', 'Questions? Call or WhatsApp': 'कोई सवाल? कॉल या WhatsApp करें',
+        'This link is not active any more.': 'यह लिंक अब चालू नहीं है।', 'Please ask us for a new link.': 'कृपया हमसे नया लिंक मांगें।',
+        'Could not load — check the internet and open the link again.': 'लोड नहीं हुआ — इंटरनेट देखें और लिंक फिर से खोलें।', 'Loading…': 'लोड हो रहा है…', 'for': 'के लिए',
+        'Certificate': 'सर्टिफिकेट', 'Open the PDF': 'PDF खोलें'
+      },
+      gu: {
+        'Your order': 'તમારો ઓર્ડર', 'Now': 'હમણાં', 'Delivery by': 'ડિલિવરી', 'Delivered on': 'ડિલિવર થયો', 'Running late — new date soon': 'થોડું મોડું — નવી તારીખ જલ્દી',
+        'Steps': 'સ્ટેપ', 'Photos': 'ફોટા', 'Finished piece': 'તૈયાર પીસ', 'Design': 'ડિઝાઇન', 'Items': 'આઇટમ', 'IGI certificate': 'IGI સર્ટિફિકેટ',
+        'Order confirmed': 'ઓર્ડર પાકો', 'CAD design': 'CAD ડિઝાઇન', 'Wax model': 'વેક્સ મોડલ', 'Being made': 'બની રહ્યું છે', 'Diamond setting': 'ડાયમંડ સેટિંગ',
+        'Finished': 'તૈયાર', 'IGI certification': 'IGI સર્ટિફિકેશન', 'Delivered': 'ડિલિવર થઈ ગયો', 'Questions? Call or WhatsApp': 'કોઈ પ્રશ્ન? કૉલ અથવા WhatsApp કરો',
+        'This link is not active any more.': 'આ લિંક હવે ચાલુ નથી.', 'Please ask us for a new link.': 'કૃપા કરીને અમારી પાસે નવી લિંક માંગો.',
+        'Could not load — check the internet and open the link again.': 'લોડ ન થયું — ઇન્ટરનેટ તપાસો અને લિંક ફરી ખોલો.', 'Loading…': 'લોડ થાય છે…', 'for': 'માટે',
+        'Certificate': 'સર્ટિફિકેટ', 'Open the PDF': 'PDF ખોલો'
+      }
+    };
+    var lang = 'en';
+    var stored = null;
+    try { stored = localStorage.getItem('statusLang') || localStorage.getItem('lang'); } catch (e) { /* private mode */ }
+    if (stored === 'hi' || stored === 'gu' || stored === 'en') lang = stored;
+    else { var nl = String(navigator.language || '').slice(0, 2); if (nl === 'hi' || nl === 'gu') lang = nl; }   // first visit: the phone's own language
+    function t(s) { return (T[lang] && T[lang][s]) || s; }
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    var MONTHS = { en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+      hi: ['जन', 'फ़र', 'मार्च', 'अप्रै', 'मई', 'जून', 'जुला', 'अग', 'सित', 'अक्टू', 'नव', 'दिस'],
+      gu: ['જાન્યુ', 'ફેબ્રુ', 'માર્ચ', 'એપ્રિ', 'મે', 'જૂન', 'જુલા', 'ઑગ', 'સપ્ટે', 'ઑક્ટો', 'નવે', 'ડિસે'] };
+    function day(iso) {
+      if (!iso) return '';
+      var d = new Date(String(iso).length === 10 ? iso + 'T00:00:00' : iso);
+      return d.getDate() + ' ' + MONTHS[lang][d.getMonth()];
+    }
+    var STEP = { 'new': 'Order confirmed', cad: 'CAD design', wax: 'Wax model', in_production: 'Being made', setting: 'Diamond setting',
+      finished: 'Finished', ready: 'Finished', igi: 'IGI certification', delivered: 'Delivered' };
+    var ALL = ['cad', 'wax', 'in_production', 'setting', 'finished', 'igi'];
+
+    var c = window.APP_CONFIG || {};
+    var token = (location.hash || '').replace(/^#/, '').trim();
+    var main = document.getElementById('main');
+    var data = null, urls = {};
+    if (c.BUSINESS_NAME) document.getElementById('biz').textContent = c.BUSINESS_NAME;
+    function message(big, lines) {
+      main.innerHTML = '<div class="msg"><div class="big">' + big + '</div>' + lines.map(function (x) { return '<p>' + esc(t(x)) + '</p>'; }).join('') + '</div>';
+    }
+    if (!window.supabase || !c.SUPABASE_URL || !/^[0-9a-f-]{36}$/i.test(token)) { message('🔗', ['This link is not active any more.', 'Please ask us for a new link.']); return; }
+    var db = window.supabase.createClient(c.SUPABASE_URL, c.SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+
+    function langBar() {
+      return '<div class="langs">' + [['en', 'English'], ['hi', 'हिन्दी'], ['gu', 'ગુજરાતી']].map(function (x) {
+        return '<button data-l="' + x[0] + '" class="' + (lang === x[0] ? 'on' : '') + '">' + x[1] + '</button>';
+      }).join('') + '</div>';
+    }
+
+    function draw() {
+      var d = data, b = d.business || {};
+      document.getElementById('biz').textContent = b.name || c.BUSINESS_NAME || '';
+      document.getElementById('title').textContent = t('Your order') + ' ORD-' + String(d.order_no).padStart(4, '0');
+      document.getElementById('shop').textContent = d.shop ? (lang === 'en' ? 'for ' + d.shop : d.shop + ' ' + t('for')) : '';
+      document.title = 'ORD-' + String(d.order_no).padStart(4, '0') + ' — ' + (b.name || '');
+      var used = Array.isArray(b.steps) ? ALL.filter(function (k) { return b.steps.indexOf(k) > -1; }) : ALL.slice();
+      var st = d.status === 'ready' ? 'finished' : d.status;
+      if (st !== 'new' && st !== 'delivered' && used.indexOf(st) === -1) used.push(st);
+      used.sort(function (a, z) { return ALL.indexOf(a) - ALL.indexOf(z); });
+      var list = ['new'].concat(used).concat(['delivered']);
+      var cur = list.indexOf(st);
+      var tick = {};
+      (d.ticks || []).forEach(function (x) { tick[x.status === 'ready' ? 'finished' : x.status] = x.at; });
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      var late = st !== 'delivered' && d.due_date && new Date(d.due_date + 'T00:00:00') < today;
+      var h = langBar() +
+        '<div class="card"><div class="now">' + esc(t('Now')) + '</div>' +
+        '<div class="now-step">' + esc(t(STEP[st] || st)) + '</div>' +
+        (st === 'delivered' ? '<div class="due">' + esc(t('Delivered on') + ' ' + day(d.delivered_on || tick.delivered)) + '</div>'
+          : late ? '<div class="due late">' + esc(t('Running late — new date soon')) + '</div>'
+          : d.due_date ? '<div class="due">' + esc(t('Delivery by') + ' ' + day(d.due_date)) + '</div>' : '') +
+        '<div class="bar">' + list.map(function (k, i) { return '<i class="' + (i < cur || st === 'delivered' ? 'done' : i === cur ? 'cur' : '') + '"></i>'; }).join('') + '</div></div>' +
+        '<h2>' + esc(t('Steps')) + '</h2><div class="card"><ul class="steps">' + list.map(function (k, i) {
+          var state = i < cur || (st === 'delivered' && i === cur) ? 'done' : i === cur ? 'cur' : 'pending';
+          var when = tick[k] ? day(tick[k]) : (k === 'new' ? day(d.order_date) : '');
+          return '<li class="' + state + '"><span class="dot">' + (state === 'pending' ? '' : '✓') + '</span><span class="nm">' + esc(t(STEP[k])) + '</span>' +
+            '<span class="when">' + (state === 'pending' ? '' : esc(when)) + '</span></li>';
+        }).join('') + '</ul></div>';
+      var pics = [];
+      (d.final_photos || []).forEach(function (p) { if (p) pics.push({ p: 'o:' + p, cap: t('Finished piece') }); });
+      (d.items || []).forEach(function (it) {
+        var k = it.photo ? 'o:' + it.photo : it.cat_photo ? 'c:' + it.cat_photo : '';
+        if (k) pics.push({ p: k, cap: t('Design') + ' · ' + [it.category, it.design_code].filter(Boolean).join(' · ') });
+      });
+      if (pics.length) {
+        h += '<h2>' + esc(t('Photos')) + '</h2><div class="photos">' + pics.map(function (x) {
+          return '<figure><img data-p="' + esc(x.p) + '" alt=""' + (urls[x.p] ? ' src="' + esc(urls[x.p]) + '"' : '') + '><figcaption>' + esc(x.cap) + '</figcaption></figure>';
+        }).join('') + '</div>';
+      }
+      if ((d.items || []).length) {
+        h += '<h2>' + esc(t('Items')) + '</h2><div class="card">' + d.items.map(function (it, i) {
+          var igi = it.igi_no || (it.cert_type === 'IGI' ? it.cert_no : '');
+          return '<div class="item"><b>' + esc((i + 1) + '. ' + [it.category || '', it.design_code || ''].filter(Boolean).join(' · ')) + (it.qty > 1 ? ' × ' + it.qty : '') + '</b>' +
+            (it.description ? '<span>' + esc(it.description) + '</span>' : '') + (igi ? '<div><span class="igi">IGI ' + esc(igi) + '</span></div>' : '') + '</div>';
+        }).join('') + '</div>';
+      }
+      var files = (d.cert_files || []).filter(Boolean);
+      if (files.length) {
+        h += '<h2>' + esc(t('IGI certificate')) + '</h2><div class="card files">' + files.map(function (p, i) {
+          return '<a href="' + esc(urls['o:' + p] || '#') + '" target="_blank" rel="noopener">' + esc(/\.pdf$/i.test(p) ? t('Open the PDF') : t('Certificate') + ' ' + (i + 1)) + '</a>';
+        }).join('') + '</div>';
+      }
+      if (b.phone) {
+        var ph = String(b.phone).replace(/[^\d+]/g, '');
+        var wa = ph.replace(/\D/g, ''); if (wa.length === 10) wa = '91' + wa;
+        h += '<p class="contact">' + esc(t('Questions? Call or WhatsApp')) + '<br><a href="tel:' + esc(ph) + '">' + esc(b.phone) + '</a> · <a href="https://wa.me/' + esc(wa) + '" target="_blank" rel="noopener">WhatsApp</a></p>';
+      }
+      main.innerHTML = h;
+      main.querySelectorAll('.langs button').forEach(function (bt) {
+        bt.onclick = function () { lang = bt.dataset.l; try { localStorage.setItem('statusLang', lang); } catch (e) { /* ignore */ } draw(); };
+      });
+      main.querySelectorAll('.photos img').forEach(function (im) {
+        im.onclick = function () {
+          if (!im.src) return;
+          var z = document.createElement('div'); z.className = 'zoom';
+          z.innerHTML = '<img alt="">'; z.firstChild.src = im.src;
+          z.onclick = function () { z.remove(); };
+          document.body.appendChild(z);
+        };
+      });
+    }
+
+    db.rpc('order_status_public', { p_token: token }).then(function (r) {
+      if (r.error) { message('⚠️', ['Could not load — check the internet and open the link again.']); return; }
+      if (!r.data) { message('🔗', ['This link is not active any more.', 'Please ask us for a new link.']); return; }
+      data = r.data;
+      draw();
+      var paths = [], cat = [];
+      (data.final_photos || []).forEach(function (p) { if (p) paths.push(p); });
+      (data.items || []).forEach(function (it) { if (it.photo) paths.push(it.photo); else if (it.cat_photo) cat.push(it.cat_photo); });
+      (data.cert_files || []).forEach(function (p) { if (p) paths.push(p); });
+      function sign(bucket, list, pre) {
+        if (!list.length) return Promise.resolve();
+        return db.storage.from(bucket).createSignedUrls(list, 3600).then(function (s) {
+          (s.data || []).forEach(function (x) { if (x && x.signedUrl) urls[pre + x.path] = x.signedUrl; });
+        }, function () { /* the photos stay blank */ });
+      }
+      if (paths.length || cat.length) Promise.all([sign('orders', paths, 'o:'), sign('catalogue', cat, 'c:')]).then(draw);
+    }, function () { message('⚠️', ['Could not load — check the internet and open the link again.']); });
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#7b1e3c">
+  <meta name="robots" content="noindex">
+  <title>New designs</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <style>
+    :root { --maroon: #7b1e3c; --gold: #c9973c; --bg: #f6f4f1; --ink: #27222b; --muted: #857e8c; --line: #eae6e2; --green: #1a7f4e; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", "Noto Sans Gujarati", sans-serif; font-size: 15px; line-height: 1.45; }
+    header { background: var(--maroon); color: #fff; padding: calc(16px + env(safe-area-inset-top)) 16px 16px; text-align: center; }
+    header .biz { font-size: 13px; letter-spacing: .8px; text-transform: uppercase; color: #e8be5a; font-weight: 700; }
+    header h1 { margin: 4px 0 0; font-size: 22px; }
+    main { max-width: 640px; margin: 0 auto; padding: 14px 12px 40px; }
+    .langs { display: flex; gap: 6px; justify-content: flex-end; margin: 0 0 10px; }
+    .langs button { border: 1.5px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink); }
+    .langs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .grid img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; display: block; border-radius: 12px; background: #eee6df; cursor: zoom-in; }
+    .grid img.wide { grid-column: 1 / -1; aspect-ratio: auto; max-height: 520px; object-fit: contain; background: #fff; }
+    .ask { display: block; margin: 18px auto 6px; max-width: 420px; text-align: center; background: var(--green); color: #fff; text-decoration: none; font-weight: 800;
+      padding: 14px 18px; border-radius: 14px; font-size: 16px; }
+    .contact { text-align: center; color: var(--muted); font-size: 13.5px; margin-top: 10px; }
+    .contact a { color: var(--maroon); font-weight: 700; text-decoration: none; }
+    .msg { text-align: center; padding: 40px 10px; color: var(--muted); }
+    .msg .big { font-size: 40px; }
+    .zoom { position: fixed; inset: 0; background: rgba(10, 8, 12, .94); display: flex; align-items: center; justify-content: center; z-index: 9; }
+    .zoom img { max-width: 100%; max-height: 100%; }
+  </style>
+</head>
+<body>
+  <header><div class="biz" id="biz">&nbsp;</div><h1 id="title">New designs</h1></header>
+  <main id="main"><div class="msg">Loading…</div></main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+  /* The page shops open from a message: the photos of the designs (no login). */
+  (function () {
+    'use strict';
+    var T = {
+      hi: { 'New designs': 'नए डिज़ाइन', 'This link does not work any more.': 'यह लिंक अब काम नहीं करता।',
+        'Could not load — check the internet and open the link again.': 'लोड नहीं हुआ — इंटरनेट देखें और लिंक फिर से खोलें।',
+        'Ask about these designs on WhatsApp': 'इन डिज़ाइनों के बारे में WhatsApp पर पूछें', 'Loading…': 'लोड हो रहा है…' },
+      gu: { 'New designs': 'નવી ડિઝાઇન', 'This link does not work any more.': 'આ લિંક હવે કામ કરતી નથી.',
+        'Could not load — check the internet and open the link again.': 'લોડ ન થયું — ઇન્ટરનેટ તપાસો અને લિંક ફરી ખોલો.',
+        'Ask about these designs on WhatsApp': 'આ ડિઝાઇન વિશે WhatsApp પર પૂછો', 'Loading…': 'લોડ થાય છે…' }
+    };
+    var lang = 'en';
+    var stored = null;
+    try { stored = localStorage.getItem('statusLang') || localStorage.getItem('lang'); } catch (e) { /* private mode */ }
+    if (stored === 'hi' || stored === 'gu' || stored === 'en') lang = stored;
+    else { var nl = String(navigator.language || '').slice(0, 2); if (nl === 'hi' || nl === 'gu') lang = nl; }   // first visit: the phone's own language
+    function t(s) { return (T[lang] && T[lang][s]) || s; }
+    var c = window.APP_CONFIG || {};
+    var id = (location.hash || '').replace(/^#/, '').trim();
+    var main = document.getElementById('main');
+    var data = null;
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    if (c.BUSINESS_NAME) document.getElementById('biz').textContent = c.BUSINESS_NAME;
+    if (lang !== 'en') { document.getElementById('title').textContent = t('New designs'); main.innerHTML = '<div class="msg">' + esc(t('Loading…')) + '</div>'; }
+    function message(big, text) { main.innerHTML = '<div class="msg"><div class="big">' + big + '</div><p>' + esc(t(text)) + '</p></div>'; }
+    function langBar() {
+      return '<div class="langs">' + [['en', 'English'], ['hi', 'हिन्दी'], ['gu', 'ગુજરાતી']].map(function (x) {
+        return '<button data-l="' + x[0] + '" class="' + (lang === x[0] ? 'on' : '') + '">' + x[1] + '</button>';
+      }).join('') + '</div>';
+    }
+    if (!window.supabase || !c.SUPABASE_URL || !/^[0-9a-f-]{36}$/i.test(id)) { message('🔗', 'This link does not work any more.'); return; }
+    var db = window.supabase.createClient(c.SUPABASE_URL, c.SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+    var base = String(c.SUPABASE_URL).replace(/\/$/, '') + '/storage/v1/object/public/promo/';
+    function draw() {
+      var d = data, b = d.business || {};
+      document.getElementById('biz').textContent = b.name || c.BUSINESS_NAME || '';
+      document.getElementById('title').textContent = d.title || '';
+      document.title = (d.title || 'New designs') + ' — ' + (b.name || '');
+      var photos = (d.photos || []).filter(Boolean);
+      var h = photos.length ? '<div class="grid">' + photos.map(function (p, i) {
+        return '<img src="' + esc(base + p.split('/').map(encodeURIComponent).join('/')) + '" alt="Design ' + (i + 1) + '"' + (photos.length % 2 === 1 && i === 0 ? ' class="wide"' : '') + '>';
+      }).join('') + '</div>' : '';
+      if (b.phone) {
+        var wa = String(b.phone).replace(/\D/g, ''); if (wa.length === 10) wa = '91' + wa;
+        var txt = 'Namaste, I saw your "' + (d.title || 'new designs') + '". Please send me the details.';
+        h += '<a class="ask" href="https://wa.me/' + esc(wa) + '?text=' + encodeURIComponent(txt) + '" target="_blank" rel="noopener">' + esc(t('Ask about these designs on WhatsApp')) + '</a>' +
+          '<p class="contact"><a href="tel:' + esc(String(b.phone).replace(/[^\d+]/g, '')) + '">' + esc(b.phone) + '</a>' + (b.city ? ' · ' + esc(b.city) : '') + '</p>';
+      }
+      main.innerHTML = langBar() + (h || '<div class="msg"><div class="big">✨</div></div>');
+      main.querySelectorAll('.langs button').forEach(function (bt) {
+        bt.onclick = function () { lang = bt.dataset.l; try { localStorage.setItem('statusLang', lang); } catch (e) { /* ignore */ } draw(); };
+      });
+      main.querySelectorAll('.grid img').forEach(function (im) {
+        im.onclick = function () {
+          var z = document.createElement('div'); z.className = 'zoom';
+          z.innerHTML = '<img alt="">'; z.firstChild.src = im.src;
+          z.onclick = function () { z.remove(); };
+          document.body.appendChild(z);
+        };
+      });
+    }
+    db.rpc('campaign_public', { p_id: id }).then(function (r) {
+      if (r.error) { message('⚠️', 'Could not load — check the internet and open the link again.'); return; }
+      if (!r.data) { message('🔗', 'This link does not work any more.'); return; }
+      data = r.data;
+      draw();
+    }, function () { message('⚠️', 'Could not load — check the internet and open the link again.'); });
+  })();
+  </script>
+</body>
+</html>

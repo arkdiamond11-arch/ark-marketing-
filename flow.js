@@ -162,6 +162,7 @@ async function quickMove(id, s, btn) {
     refreshOrderViews(moved);
     const undo = () => undoMove(moved, prev, upId);
     if (s === 'finished' && S.dbv7) offerFinalPhoto(moved, undo);
+    else if (s === 'delivered' && S.dbv8 && typeof offerHandover === 'function') offerHandover(Object.assign({}, moved, { prev_status: o.status }), undo);   // who received it
     else showUndo(ordNo(o.order_no) + ' → ' + OSTATUS_LABEL[s], undo);
   } finally {
     S.moving = false;
@@ -490,7 +491,7 @@ function renderAppSettings() {
     '<div class="card sd-card"><p class="hint" style="margin:0 0 8px">Days an order can stay in one step before it shows as stuck on Today and on the Board. 0 = never.</p>' +
     ['new'].concat(STEP_CHOICES).map(sd).join('') + '</div>' +
     '<div class="section-label">Sections of the app</div>' +
-    '<div class="card sw-card">' + APP_SECTIONS.map((s) => sw('sw-' + s[0], !off.has(s[0]), s[1], s[2])).join('') + '</div>' +
+    '<div class="card sw-card">' + appSectionsShown().map((s) => sw('sw-' + s[0], !off.has(s[0]), s[1], s[2])).join('') + '</div>' +
     '<button class="btn btn-primary" data-action="opt-save" id="opt-save">Save settings</button><div style="height:10px"></div>';
   STEP_CHOICES.forEach((k) => {   // a step switched on or off: its "stuck" days show or hide with it
     const t = $('#sw-st-' + k), r = $('#sdr-' + k);
@@ -499,7 +500,8 @@ function renderAppSettings() {
 }
 
 async function saveAppSettings() {
-  const off = APP_SECTIONS.map((s) => s[0]).filter((k) => { const el = $('#sw-' + k); return el && !el.checked; });
+  const was = appOpts().off || [];   // a section not shown here keeps its setting
+  const off = APP_SECTIONS.map((s) => s[0]).filter((k) => { const el = $('#sw-' + k); return el ? !el.checked : was.indexOf(k) > -1; });
   const steps = STEP_CHOICES.filter((k) => { const el = $('#sw-st-' + k); return el && el.checked; });
   const stuck = {};
   ['new'].concat(STEP_CHOICES).forEach((k) => {

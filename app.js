@@ -440,13 +440,17 @@ async function renderToday() {
   if (!overdue.length && !today.length && !upcoming.length && !later.length) {
     html += '<div class="empty"><div class="big">🌤️</div>No pending reminders.<br>Log an interaction and add follow-ups — they will appear here.</div>';
   }
-  c.innerHTML = '<div id="today-late"></div><div id="today-stuck"></div><div id="today-summary"></div><div id="today-targets"></div><div id="today-pay"></div><div id="today-orders"></div>' + html +
+  c.innerHTML = '<div id="today-late"></div><div id="today-stuck"></div><div id="today-summary"></div><div id="today-targets"></div><div id="today-wishes"></div>' +
+    '<div id="today-pay"></div><div id="today-orders"></div><div id="today-repairs"></div><div id="today-approvals"></div>' + html +
     '<div id="today-sleep"></div>';
   if (typeof renderTodaySummary === 'function') renderTodaySummary($('#today-summary'));
   if (typeof renderMyTargets === 'function' && appOn('targets')) renderMyTargets($('#today-targets'));
   if (typeof loadTodayPay === 'function' && appOn('payments')) loadTodayPay();
   if (typeof loadTodayOrders === 'function') loadTodayOrders();
   if (typeof loadTodaySleep === 'function') loadTodaySleep();
+  if (typeof loadTodayWishes === 'function') loadTodayWishes();
+  if (typeof loadTodayRepairs === 'function') loadTodayRepairs();
+  if (typeof loadTodayApprovals === 'function') loadTodayApprovals();
 }
 
 /* ============================================================
@@ -822,6 +826,7 @@ function renderClientForm(existing, pre, source) {
     '<div class="field"><label>Area / locality</label><input type="text" id="f-area" value="' + v('area') + '" placeholder="Market / locality"></div>' +
     '<div class="field"><label>Full address <span class="req">*</span></label><textarea id="f-address" style="min-height:70px" placeholder="Shop no., street, market, city, PIN">' + v('address') + '</textarea></div>' +
     '</div>' +
+    (typeof wishFieldsHTML === 'function' ? wishFieldsHTML(e) : '') +
 
     (!existing && S.dbv6 ? '<div class="section-label">Note</div>' +
       '<div class="card"><div class="field" style="margin-bottom:2px">' +
@@ -899,6 +904,11 @@ async function saveClient(editId) {
     area: $('#f-area').value.trim() || null,
     entry_source: S.formState.entry_source,
   };
+  if (typeof readWishFields === 'function' && $('#wd-birthday')) {   // birthday / anniversaries (day and month)
+    const w = readWishFields();
+    if (w.error) { toast(w.error, 'err'); return; }
+    Object.assign(row, w);
+  }
 
   const doSave = async () => {
     if (typeof stopDict === 'function') await stopDict();   // still listening? keep the last words
@@ -1180,6 +1190,8 @@ async function openClient(id, replace) {
     if (typeof loadClientNotes === 'function') loadClientNotes(cl);
     if (typeof loadClientPay === 'function' && appOn('payments')) loadClientPay(cl);
     if (typeof loadClientOrders === 'function') loadClientOrders(cl);
+    if (typeof loadClientRepairs === 'function') loadClientRepairs(cl);
+    if (typeof loadClientApprovals === 'function') loadClientApprovals(cl);
   }, replace);
 }
 
@@ -1197,7 +1209,11 @@ function renderClientPage(cl) {
   add('Address', esc(cl.address));
   add('Polki jewellery', cl.is_polki_buyer === true ? 'Yes' : cl.is_polki_buyer === false ? 'No' : '');
   add('Order type', esc(cl.order_type));
+  if (typeof wishRowsHTML === 'function') wishRowsHTML(cl).forEach((w) => add(w[0], esc(w[1])));
   add('Added by', esc(nameOf(cl.created_by)) + ' · ' + fmtD(cl.created_at));
+  const more = [];   // repair job · pieces on approval, for this client
+  if (typeof repairsOn === 'function' && repairsOn()) more.push('<button class="btn btn-small btn-secondary" data-action="rp-new-for" data-id="' + cl.id + '">🔧 Repair job</button>');
+  if (typeof approvalsOn === 'function' && approvalsOn()) more.push('<button class="btn btn-small btn-secondary" data-action="ap-new-for" data-id="' + cl.id + '">💎 Give on approval</button>');
 
   $('#content').innerHTML =
     '<div class="client-head"><h2>' + esc(cl.trade_name) + '</h2>' +
@@ -1210,6 +1226,7 @@ function renderClientPage(cl) {
     (typeof renderOrders === 'function' ? '<button class="btn btn-primary" data-action="o-new" data-id="' + cl.id + '">＋ Order</button>' : '') +
     '<button class="btn btn-secondary" data-action="edit-client" data-id="' + cl.id + '">Edit</button>' +
     '</div>' +
+    (more.length ? '<div class="o-more-acts">' + more.join('') + '</div>' : '') +
     (typeof quickRemindHTML === 'function' ? quickRemindHTML(cl.id) : '') +
     '<div id="client-pay"></div>' +
 
@@ -1219,6 +1236,8 @@ function renderClientPage(cl) {
     '<div id="client-card-photo"></div>' +
     '<div id="client-followups"></div>' +
     '<div id="client-orders"></div>' +
+    '<div id="client-repairs"></div>' +
+    '<div id="client-approvals"></div>' +
     '<div id="client-history"><div class="empty">Loading history…</div></div>';
 
   const sides = [['Front', cl.card_image_path], ['Back', cl.card_image_back_path]].filter((s) => s[1]);
@@ -1713,6 +1732,9 @@ async function renderMore() {
     (typeof renderPayDues === 'function' && appOn('payments') ? mrow('dues-open', '💰', 'Payment dues', 'Which party has to pay and by when · reminders') : '') +
     (typeof renderVendors === 'function' && appOn('vendors') ? mrow('v-list', '🏭', 'Vendors', 'Who makes your orders · diamonds to give them') : '') +
     (typeof renderKarigars === 'function' && appOn('karigars') ? mrow('k-list', '🔨', 'Karigars', 'Metal given and received back') : '') +
+    (typeof repairsOn === 'function' && repairsOn() ? mrow('rp-list', '🔧', 'Repairs', 'Pieces shops send back — resize, polish, repair') : '') +
+    (typeof approvalsOn === 'function' && approvalsOn() ? mrow('ap-list', '💎', 'Pieces on approval', 'Given to shops to show their customers · sold or returned') : '') +
+    (typeof campaignsOn === 'function' && campaignsOn() ? mrow('camp-open-list', '📣', 'Messages to shops', 'New designs or an offer to many shops on WhatsApp') : '') +
     (isOwner && typeof renderAppSettings === 'function' ? mrow('opt-open', '⚙️', 'App settings', 'Order steps in use · show or hide sections') : '') +
     (isOwner && typeof renderBizForm === 'function' ? mrow('biz-open', '🏷️', 'Business details', 'Address, GSTIN — printed on PDFs') : '') +
     (typeof renderLangPicker === 'function' ? mrow('lang-open', '🌐', 'Language / भाषा / ભાષા', 'English, हिन्दी, ગુજરાતી') : '') +

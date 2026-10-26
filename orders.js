@@ -1085,9 +1085,12 @@ function renderOrderPage(o) {
     '<div class="o-more-acts">' +
     (isOpenStatus(o.status) ? '<button class="btn btn-small btn-secondary" data-action="o-due" data-id="' + o.id + '">📅 Change delivery date</button>' : '') +
     '<button class="btn btn-small btn-secondary" data-action="o-repeat" data-id="' + o.id + '">↻ Repeat order</button>' +
+    (S.dbv8 && approved && typeof openStatusLink === 'function' ? '<button class="btn btn-small btn-secondary" data-action="o-link" data-id="' + o.id + '">🔗 Status link for the shop</button>' : '') +
     '</div>' +
 
     '<div id="o-final-view"></div>' +
+    '<div id="o-igi-view"></div>' +
+    '<div id="o-delivery-view"></div>' +
     '<div id="o-vendor-view"></div>' +
 
     '<div class="section-label">Documents (PDF)</div>' +
@@ -1195,6 +1198,9 @@ async function loadOrderDetails(o) {
 
   // the finished piece next to the design
   if (typeof drawFinalBox === 'function') drawFinalBox(o, items, urls);
+  // IGI certificate · who received it
+  if (typeof drawIgiBox === 'function') drawIgiBox(o, items, ups);
+  if (typeof drawDeliveryBox === 'function') drawDeliveryBox(o);
 
   // gold ledgers
   const led = jwLedger(o, c.net);
@@ -1247,6 +1253,7 @@ async function setOrderStatus(id, s) {
     if (await applyStatus(o, s) === false) return;
     openOrder(id, true);
     if (s === 'finished' && typeof offerFinalPhoto === 'function' && S.dbv7) offerFinalPhoto(o, null);   // a photo of the finished piece?
+    else if (s === 'delivered' && typeof offerHandover === 'function' && S.dbv8) offerHandover(Object.assign({}, o, { status: s, prev_status: o.status }), null);   // who received it
     else toast(s === 'quote' ? 'Quotation reopened ✓' : 'Marked ' + OSTATUS_LABEL[s] + ' ✓', 'ok');
   };
   if (o.status === 'cancelled' && s === 'new') {
