@@ -223,7 +223,7 @@ async function loadOrderList() {
   const box = $('#o-list');
   if (!box) return;
   const L = S.olist;
-  let q = db.from('orders').select('id, order_no, order_type, status, order_date, due_date' + (S.dbv6 ? ', vendor_id' : '') + finCol() + ', clients!inner(trade_name, city), ' + ORDER_PHOTO_COLS);
+  let q = db.from('orders').select('id, order_no, order_type, status, order_date, due_date' + (S.dbv6 ? ', vendor_id' : '') + finCol() + ', clients!inner(trade_name, city), ' + ORDER_PHOTO_COLS + stepTickCols());
   if (L.status === 'open') q = q.in('status', OPEN_STATUSES);
   else if (L.status === 'finished') q = q.in('status', FINISHED_STATUSES);
   else if (L.status === 'closed') q = q.in('status', CLOSED_STATUSES);
@@ -235,7 +235,7 @@ async function loadOrderList() {
   else if (s) q = q.ilike('clients.trade_name', '%' + s.replace(/[%,()]/g, ' ') + '%');
   if (L.status === 'open') q = q.order('due_date', { ascending: true, nullsFirst: false }).order('order_no', { ascending: true });
   else q = q.order('order_date', { ascending: false }).order('order_no', { ascending: false });
-  const { data, error } = await q.limit(300);
+  const { data, error } = await stepTicked(q).limit(300);
   if (!$('#o-list')) return;
   if (error) { box.innerHTML = '<div class="empty">Could not load orders.<br>If you just installed an add-on, check its database step was run.</div>'; return; }
   const rows = data || [];
@@ -263,6 +263,7 @@ function orderListItemHTML(o, showClient, opt) {
   S.oRows = S.oRows || new Map();
   S.oRows.set(o.id, o);   // kept so a card can be redrawn after a one-tap stage change
   const late = opt && opt.late;
+  const st = typeof stuckInfo === 'function' ? stuckInfo(o) : null;
   return '<div class="list-item o-li" data-action="o-open" data-id="' + o.id + '"' + (showClient ? ' data-sc="1"' : '') + (late ? ' data-late="1"' : '') + '>' +
     '<div class="li-main">' +
     '<div class="li-title">' + ordNo(o.order_no) + (showClient ? ' · ' + esc(cl.trade_name || '') : '') + '</div>' +
@@ -271,11 +272,15 @@ function orderListItemHTML(o, showClient, opt) {
     '<div class="li-chips">' + chipStatus(o.status) +
     (o.vendor_id && typeof vendorName === 'function' && appOn('vendors') && vendorName(o.vendor_id) ? '<span class="chip chip-vendor">' + esc(vendorName(o.vendor_id)) + '</span>' : '') +
     '</div>' +
+    (st ? '<div class="o-stuck">' + esc('⏳ ' + stuckText(st)) + '</div>' : '') +
     (isOpenStatus(o.status) ? '<div class="o-acts">' + nextBtnHTML(o) +
       (late ? '<button type="button" class="o-next o-date" data-action="o-due" data-id="' + o.id + '">📅 New date</button>' : '') + '</div>' : '') +
     '</div>' + (orderThumbHTML(o) || '<div class="li-go">›</div>') + '</div>';
 }
 function finCol() { return S.dbv7 ? ', final_photo_paths' : ''; }
+/* each order's newest step tick, for "stuck" (flow.js) */
+function stepTickCols() { return typeof STEP_TICK_COLS === 'string' ? ', ' + STEP_TICK_COLS : ''; }
+function stepTicked(q) { return typeof withStepTick === 'function' ? withStepTick(q) : q; }
 
 /* ---------------- order photos in the lists ----------------
    Each order in a list shows a photo: the finished piece if one was added,
@@ -1399,8 +1404,8 @@ async function onOrderAction(a, el) {
 async function loadClientOrders(cl) {
   const el = $('#client-orders');
   if (!el) return;
-  const { data, error } = await db.from('orders').select('id, order_no, order_type, status, order_date, due_date' + finCol() + ', ' + ORDER_PHOTO_COLS)
-    .eq('client_id', cl.id).order('order_date', { ascending: false }).limit(100);
+  const { data, error } = await stepTicked(db.from('orders').select('id, order_no, order_type, status, order_date, due_date' + finCol() + ', ' + ORDER_PHOTO_COLS + stepTickCols())
+    .eq('client_id', cl.id).order('order_date', { ascending: false })).limit(100);
   if (!$('#client-orders')) return;
   if (error) { el.innerHTML = ''; return; }
   const rows = data || [];
@@ -1411,22 +1416,31 @@ async function loadClientOrders(cl) {
   fillOrderThumbs(el);
 }
 
-/* the Today screen: late orders at the very top, orders due in the next 3 days further down */
+/* the Today screen: late orders at the very top, then orders stuck too long in one step,
+   orders due in the next 3 days further down */
 async function loadTodayOrders() {
   const el = $('#today-orders');
   if (!el) return;
-  const t = todayStr();
-  const { data, error } = await db.from('orders').select('id, order_no, order_type, status, order_date, due_date' + finCol() + ', clients(trade_name), ' + ORDER_PHOTO_COLS)
-    .in('status', OPEN_STATUSES).not('due_date', 'is', null).lte('due_date', todayStr(3))
-    .order('due_date', { ascending: true }).order('order_no', { ascending: true }).limit(200);
+  const t = todayStr(), t3 = todayStr(3);
+  const { data, error } = await stepTicked(db.from('orders').select('id, order_no, order_type, status, order_date, due_date' + finCol() + ', clients(trade_name), ' + ORDER_PHOTO_COLS + stepTickCols())
+    .in('status', OPEN_STATUSES).order('due_date', { ascending: true, nullsFirst: false }).order('order_no', { ascending: true })).limit(500);
   if (!$('#today-orders') || error || !data) return;
-  const late = data.filter((o) => o.due_date < t), soon = data.filter((o) => o.due_date >= t);
+  const late = data.filter((o) => o.due_date && o.due_date < t), soon = data.filter((o) => o.due_date && o.due_date >= t && o.due_date <= t3);
+  const over = (o) => { const x = stuckInfo(o); return x ? x.days - stuckLimit(o.status) : -1; };
+  const stuck = typeof stuckInfo === 'function' ? data.filter((o) => !(o.due_date && o.due_date < t) && stuckInfo(o)).sort((a, b) => over(b) - over(a)) : [];
   const lateEl = $('#today-late');
   if (lateEl) {
     lateEl.innerHTML = late.length ? '<div class="due-group-label overdue sl-row"><span>⚠ Late orders (' + late.length + ')</span>' +
       (typeof renderBoard === 'function' ? '<a href="#" data-action="bd-late">See on the board ›</a>' : '') + '</div>' +
       late.map((o) => orderListItemHTML(o, true, { late: true })).join('') : '';
     fillOrderThumbs(lateEl);
+  }
+  const stEl = $('#today-stuck');
+  if (stEl) {
+    stEl.innerHTML = stuck.length ? '<div class="due-group-label stuck sl-row"><span>⏳ Stuck orders (' + stuck.length + ')</span>' +
+      (typeof renderBoard === 'function' ? '<a href="#" data-action="bd-stuck">See on the board ›</a>' : '') + '</div>' +
+      stuck.map((o) => orderListItemHTML(o, true)).join('') : '';
+    fillOrderThumbs(stEl);
   }
   el.innerHTML = soon.length ? '<div class="due-group-label due-soon">Orders due in the next 3 days (' + soon.length + ')</div>' +
     soon.map((o) => orderListItemHTML(o, true)).join('') : '';
@@ -1447,11 +1461,12 @@ async function loadReportOrders(period) {
   let dq = db.from('orders').select('order_date, due_date, delivered_on' + (S.dbv7 ? ', first_due_date' : '')).eq('status', 'delivered').not('delivered_on', 'is', null).limit(5000);
   if (start) dq = dq.gte('delivered_on', start);
   const pays = typeof payAllEntries === 'function' && appOn('payments');
-  const [r, payRows, dr, lr] = await Promise.all([
+  const [r, payRows, dr, lr, sr] = await Promise.all([
     q,
     pays ? payAllEntries().catch(() => []) : Promise.resolve([]),
     dq,
     db.from('orders').select('id', { count: 'exact', head: true }).in('status', OPEN_STATUSES).lt('due_date', todayStr()),
+    typeof stuckInfo === 'function' ? stepTicked(db.from('orders').select('id, status, order_date' + stepTickCols()).in('status', OPEN_STATUSES)).limit(1000) : Promise.resolve({ data: [] }),
   ]);
   if (!$('#report-orders')) return;
   if (r.error) { el.innerHTML = ''; return; }
@@ -1466,6 +1481,7 @@ async function loadReportOrders(period) {
   const took = del.filter((o) => o.order_date && o.delivered_on >= o.order_date).map((o) => daysBetween(o.order_date, o.delivered_on));
   const avgDays = took.length ? Math.round(took.reduce((a, b) => a + b, 0) / took.length) : null;
   const lateNow = (lr && !lr.error && lr.count) || 0;
+  const stuckNow = sr && !sr.error && sr.data ? sr.data.filter(stuckInfo).length : 0;
   const byType = { job_work: 0, ready_stock: 0, custom: 0 };
   const byStatus = {};
   ['new'].concat(ORDER_STAGES).forEach((k) => { byStatus[k] = 0; });
@@ -1501,7 +1517,10 @@ async function loadReportOrders(period) {
     '</div>' +
     '<div class="hint" style="margin:2px 2px 10px">' + (del.length
       ? esc(onTime + ' of ' + promised.length + ' delivered on or before the date first promised') + (avgDays != null ? esc(' · order to delivery ' + avgDays + ' days on average') : '')
-      : 'No order delivered ' + esc(periodLabel(period)) + '.') + '</div>';
+      : 'No order delivered ' + esc(periodLabel(period)) + '.') + '</div>' +
+    (stuckNow ? '<div class="notice">' + esc('⏳ ' + (stuckNow === 1 ? '1 order is' : stuckNow + ' orders are') + ' stuck in one step right now.') +
+      (typeof renderBoard === 'function' ? ' <a href="#" data-action="bd-stuck">See them ›</a>' : '') +
+      (typeof renderReports === 'function' ? ' · <a href="#" data-action="rep-go" data-type="steps">Step times ›</a>' : '') + '</div>' : '');
 }
 
 /* extra CSV files for Export */

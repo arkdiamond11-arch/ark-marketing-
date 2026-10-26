@@ -440,11 +440,13 @@ async function renderToday() {
   if (!overdue.length && !today.length && !upcoming.length && !later.length) {
     html += '<div class="empty"><div class="big">🌤️</div>No pending reminders.<br>Log an interaction and add follow-ups — they will appear here.</div>';
   }
-  c.innerHTML = '<div id="today-late"></div><div id="today-summary"></div><div id="today-targets"></div><div id="today-pay"></div><div id="today-orders"></div>' + html;
+  c.innerHTML = '<div id="today-late"></div><div id="today-stuck"></div><div id="today-summary"></div><div id="today-targets"></div><div id="today-pay"></div><div id="today-orders"></div>' + html +
+    '<div id="today-sleep"></div>';
   if (typeof renderTodaySummary === 'function') renderTodaySummary($('#today-summary'));
   if (typeof renderMyTargets === 'function' && appOn('targets')) renderMyTargets($('#today-targets'));
   if (typeof loadTodayPay === 'function' && appOn('payments')) loadTodayPay();
   if (typeof loadTodayOrders === 'function') loadTodayOrders();
+  if (typeof loadTodaySleep === 'function') loadTodaySleep();
 }
 
 /* ============================================================
@@ -977,8 +979,9 @@ function clientSortKey() {
 
 /* which clients the list shows: all · no order yet · near me (for this visit to the app only) */
 function clientShows() {
-  return [['all', 'All'], ['lead', 'No order yet'], ['near', '📍 Near me']].filter((x) =>
-    x[0] === 'all' || (x[0] === 'lead' && typeof runLeadList === 'function') || (x[0] === 'near' && typeof runNearList === 'function' && appOn('location')));
+  return [['all', 'All'], ['lead', 'No order yet'], ['sleep', '😴 Sleeping'], ['near', '📍 Near me']].filter((x) =>
+    x[0] === 'all' || (x[0] === 'lead' && typeof runLeadList === 'function') || (x[0] === 'sleep' && typeof runSleepList === 'function') ||
+    (x[0] === 'near' && typeof runNearList === 'function' && appOn('location')));
 }
 function clientShowKey() {
   if (!clientShows().some((x) => x[0] === S.clientShow)) S.clientShow = 'all';
@@ -1093,6 +1096,7 @@ async function runSearch(qRaw) {
   if (!box) return;
   const show = clientShowKey();
   if (show === 'lead') return runLeadList(qRaw);
+  if (show === 'sleep') return runSleepList(qRaw);
   if (show === 'near') return runNearList(qRaw);
   const q = String(qRaw || '').trim().replace(/[,%()]/g, ' ').trim();
   const how = clientSortKey();
@@ -1464,7 +1468,7 @@ async function renderReport() {
     (typeof renderReports === 'function' ? '<div class="action-row rep-shortcuts"><button class="btn btn-primary" data-action="rep-open">📊 Full reports</button>' +
       (typeof renderPayDues === 'function' && appOn('payments') ? '<button class="btn btn-secondary" data-action="dues-open">💰 Payment dues</button>' : '') + '</div>' +
       '<div class="section-label">Reports</div><div class="brk-row rep-books">' +
-      [['pay', 'Payment status'], ['payhist', 'Payment dates'], ['items', 'Order items'], ['orders', 'Orders'], ['diamonds', 'Diamonds & stones'],
+      [['pay', 'Payment status'], ['payhist', 'Payment dates'], ['items', 'Order items'], ['orders', 'Orders'], ['steps', 'Step times'], ['diamonds', 'Diamonds & stones'],
         ['stock', 'Stock (catalogue)'], ['karigars', 'Karigar metal'], ['summary', 'Month summary']].filter((x) => typeof repTypeOn !== 'function' || repTypeOn(x[0]))
         .map((x) => '<button class="brk-chip" data-action="rep-go" data-type="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' : '') +
     '<div id="report-targets"></div>' +

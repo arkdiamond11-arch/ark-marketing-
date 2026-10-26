@@ -106,11 +106,14 @@ function leadWaText(c) {
     'Shall I send you our latest designs, or a quotation for your next order?';
 }
 
+/* x: { km, dir } near me · { quoted } no order yet · { sleep: { n, last } } sleeping */
 function leadRowHTML(c, met, x) {
   const m = met && met.get(c.id);
-  const when = m ? 'Last meeting ' + fmtD(m) : (c.created_at ? 'Added ' + fmtD(c.created_at) + ' · no meeting yet' : 'No meeting yet');
+  const sl = x && x.sleep;
+  const when = sl ? 'Last order ' + fmtD(sl.last) + ' · ' + daysBetween(sl.last, todayStr()) + ' days ago' + (m ? ' · last meeting ' + fmtD(m) : '')
+    : m ? 'Last meeting ' + fmtD(m) : (c.created_at ? 'Added ' + fmtD(c.created_at) + ' · no meeting yet' : 'No meeting yet');
   const ext = '" target="_blank" rel="noopener" data-action="call">';   // data-action="call": the link opens, not the client
-  const acts = (c.mobile ? '<a class="la la-wa" href="' + esc(waUrl(c.mobile, leadWaText(c))) + ext + WA_SVG + '<span>WhatsApp</span></a>' +
+  const acts = (c.mobile ? '<a class="la la-wa" href="' + esc(waUrl(c.mobile, sl ? sleepWaText(c) : leadWaText(c))) + ext + WA_SVG + '<span>WhatsApp</span></a>' +
       '<a class="la la-call" href="' + esc(telHref(c.mobile)) + '" data-action="call">' + CALL_SVG + '<span>Call</span></a>' : '') +
     (x && x.dir && c.lat != null ? '<a class="la la-map" href="' + esc(mapsDirUrl(c.lat, c.lng)) + ext + MAP_SVG + '<span>Directions</span></a>' : '');
   return '<div class="list-item lead-item" data-action="open-client" data-id="' + c.id + '">' +
@@ -118,6 +121,7 @@ function leadRowHTML(c, met, x) {
     '<div class="li-title">' + esc(c.trade_name) + '</div>' +
     '<div class="li-sub">' + esc([c.contact_person, c.area, c.city].filter(Boolean).join(' · ') || c.company_name || '') + '</div>' +
     '<div class="li-chips">' + (x && x.km != null ? '<span class="chip chip-dist">' + esc(fmtDist(x.km)) + '</span>' : '') +
+    (sl ? '<span class="chip chip-orders">' + esc(sl.n === 1 ? '1 order before' : sl.n + ' orders before') + '</span>' : '') +
     chipCat(c.category) + chipInterest(c.interest) + (x && x.quoted ? '<span class="chip chip-st-quote">Quotation sent</span>' : '') + '</div>' +
     '<div class="li-when">' + esc(when) + '</div>' +
     (acts ? '<div class="lead-acts">' + acts + '</div>' : '') +
@@ -172,6 +176,96 @@ async function runLeadList(qRaw) {
   });
   box.innerHTML = html;
 }
+
+/* ---------------- Clients → Sleeping ----------------
+   Clients who ordered before, have no order in work now and no new order
+   for 2 (or 3, 6) months — so repeat business is not lost. */
+const SLEEP_CHOICES = [[2, '2 months'], [3, '3 months'], [6, '6 months']];
+function sleepMonths() { const m = +S.sleepM; return SLEEP_CHOICES.some((x) => x[0] === m) ? m : 2; }
+function sleepWaText(c) {
+  const who = String(c.contact_person || '').trim().split(/\s+/)[0];
+  const me = String((S.me && S.me.full_name) || '').trim().split(/\s+/)[0];
+  return 'Namaste' + (who ? ' ' + who + ' ji' : '') + ' 🙏\n' +
+    (me ? me + ' from ' : '') + bizName() + ' here. It has been a while!\n' +
+    'We have new designs ready — shall I send you photos?';
+}
+/* → [{ c, x: { n, last } }], the longest asleep first */
+function sleepingClients(clients, orders, months) {
+  const d = new Date(); d.setMonth(d.getMonth() - months);
+  const cut = ymd(d);
+  const info = new Map();
+  orders.forEach((o) => {
+    if (!isLive(o)) return;
+    const x = info.get(o.client_id) || { n: 0, last: '', open: false };
+    x.n++;
+    if (o.order_date && o.order_date > x.last) x.last = o.order_date;
+    if (isOpenStatus(o.status)) x.open = true;
+    info.set(o.client_id, x);
+  });
+  return clients.map((c) => ({ c, x: info.get(c.id) }))
+    .filter((r) => r.x && !r.x.open && r.x.last && r.x.last < cut)
+    .sort((a, b) => (a.x.last < b.x.last ? -1 : a.x.last > b.x.last ? 1 : b.x.n - a.x.n));
+}
+async function sleepData() {
+  const C = leadCache('sleep');
+  if (C) return C;
+  const [clients, orders, met] = await Promise.all([
+    fetchPaged(() => db.from('clients').select(LEAD_COLS).order('created_at', { ascending: false }).order('id', { ascending: true })),
+    fetchPaged(() => db.from('orders').select('client_id, status, order_date').order('id', { ascending: true })),
+    lastMeetingMap(),
+  ]);
+  S.leadCache = { kind: 'sleep', at: Date.now(), clients, orders, met };
+  return S.leadCache;
+}
+
+async function runSleepList(qRaw) {
+  const box = $('#search-results');
+  if (!box) return;
+  const q = String(qRaw || '').trim();
+  const seq = S.searchSeq = (S.searchSeq || 0) + 1;
+  let D;
+  try { D = await sleepData(); } catch (e) {
+    if (seq === S.searchSeq) box.innerHTML = '<div class="empty">Could not load clients — try again.</div>';
+    return;
+  }
+  if (seq !== S.searchSeq || !$('#search-results')) return;
+  const months = sleepMonths();
+  const all = sleepingClients(D.clients, D.orders, months);
+  const list = all.filter((r) => textMatch(r.c, q));
+  const pick = '<div class="filter-chips sl-pick"><span class="cl-sort-lbl">No order for</span>' +
+    SLEEP_CHOICES.map((x) => '<button class="' + (x[0] === months ? 'on' : '') + '" data-action="sleep-m" data-m="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>';
+  if (!list.length) {
+    box.innerHTML = pick + '<div class="empty"><div class="big">😊</div>' + (q && all.length ? 'No sleeping client matches <b class="noi18n">"' + esc(q) + '"</b>'
+      : 'No sleeping clients right now.') + '</div>';
+    return;
+  }
+  box.innerHTML = pick + '<div class="cl-count">Sleeping (' + list.length + ')</div>' +
+    '<div class="hint" style="margin:-4px 2px 8px">Ordered before, nothing in work now. The longest without an order are on top.</div>' +
+    list.slice(0, 200).map((r) => leadRowHTML(r.c, D.met, { sleep: r.x })).join('') +
+    (list.length > 200 ? '<div class="hint" style="text-align:center;margin:0 0 12px">' + esc('+ ' + (list.length - 200) + ' more — search by name or city') + '</div>' : '');
+}
+onAct('sleep-m', (el) => { S.sleepM = +el.dataset.m; const inp = $('#search-input'); runSearch(inp ? inp.value : ''); });
+
+/* Today: one line about the sleeping clients (worked out at most every 10 minutes) */
+async function loadTodaySleep() {
+  const el = $('#today-sleep');
+  if (!el) return;
+  let n = S.sleepToday && Date.now() - S.sleepToday.at < 600000 ? S.sleepToday.n : null;
+  if (n == null) {
+    try {
+      const [clients, orders] = await Promise.all([
+        fetchPaged(() => db.from('clients').select('id').order('id', { ascending: true })),
+        fetchPaged(() => db.from('orders').select('client_id, status, order_date').order('id', { ascending: true })),
+      ]);
+      n = sleepingClients(clients, orders, 2).length;
+      S.sleepToday = { at: Date.now(), n };
+    } catch (e) { return; }
+  }
+  if (!$('#today-sleep')) return;
+  el.innerHTML = n ? '<button class="sleep-line" data-action="sleep-open"><span class="sl-ic">😴</span><span class="sl-t"><b>' + esc(n === 1 ? '1 sleeping client' : n + ' sleeping clients') + '</b>' +
+    '<span>Ordered before, no order for 2 months — say hello</span></span><span class="mr-go">›</span></button>' : '';
+}
+onAct('sleep-open', () => { S.clientShow = 'sleep'; S.sleepM = 2; S.leadCache = null; switchTab('find'); });
 
 /* ---------------- Clients → Near me ---------------- */
 async function runNearList(qRaw) {

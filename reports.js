@@ -10,7 +10,7 @@
 'use strict';
 
 const REP_TYPES = [
-  ['pay', 'Payment status'], ['payhist', 'Payment dates'], ['items', 'Order items'], ['orders', 'Orders'],
+  ['pay', 'Payment status'], ['payhist', 'Payment dates'], ['items', 'Order items'], ['orders', 'Orders'], ['steps', 'Step times'],
   ['diamonds', 'Diamonds & stones'], ['summary', 'Month summary'], ['stock', 'Stock (catalogue)'], ['karigars', 'Karigar metal'],
 ];
 const LIVE_STATUSES = OPEN_STATUSES.concat(['delivered']);   // approved orders (in work, finished or delivered)
@@ -26,6 +26,7 @@ const REP_GROUPS = {
   stock: [['cat', 'Piece type'], ['', 'No grouping'], ['metal', 'Metal'], ['dtype', 'Diamond type'], ['color', 'Colour / finish'], ['status', 'Status']],
   karigars: [['', 'No grouping']],
   summary: [['', 'No grouping']],
+  steps: [['stage', 'Step'], ['vendor', 'Vendor'], ['party', 'Party'], ['month', 'Month'], ['', 'No grouping']],
 };
 /* reports that are "as on today" (no period) */
 const REP_NO_PERIOD = { pay: 1, stock: 1, karigars: 1 };
@@ -80,6 +81,13 @@ async function repLoad() {
     data = { rows: await repFetchAll(() => inRange(db.from('party_pay_log').select('*, clients(trade_name, city)'), 'on_date', r).order('on_date', { ascending: true }).order('created_at', { ascending: true }).order('id', { ascending: true })) };
   } else if (T === 'summary') {
     data = await monthSummaryData(r);
+  } else if (T === 'steps') {
+    const [orders, ups] = await Promise.all([
+      repFetchAll(() => db.from('orders').select('id, order_no, order_type, status, order_date, client_id' + (S.dbv6 ? ', vendor_id' : '') + ', clients(trade_name, city)')
+        .not('status', 'in', '(quote,declined)').order('id', { ascending: true })),
+      repFetchAll(() => db.from('order_updates').select('id, order_id, status, created_at').not('status', 'is', null).order('created_at', { ascending: true }).order('id', { ascending: true })),
+    ]);
+    data = { orders, ups };
   } else if (T === 'stock') {
     data = { items: await repFetchAll(() => db.from('catalogue_items').select('*').order('created_at', { ascending: true }).order('id', { ascending: true })) };
   } else {
@@ -254,12 +262,74 @@ function payHistBuild(D, f) {
   };
 }
 
+/* ---------------- step times ----------------
+   How long orders stay in each step: a step lasts from its tick to the next
+   tick in the order's history. Counted when the step is finished (its end
+   date is in the period). Grouped by vendor it shows who is slow. */
+const STEP_TIME_KEYS = ['new', 'cad', 'wax', 'in_production', 'setting', 'finished', 'igi'];
+function stepTimeLabel(k) { return k === 'new' ? 'Approved → first step' : OSTATUS_LABEL[k]; }
+function fmtDays(d) {
+  if (d < 1) { const h = Math.max(1, Math.round(d * 24)); return h + (h === 1 ? ' hour' : ' hours'); }
+  const x = Math.round(d * 10) / 10;
+  return x.toLocaleString('en-IN', { maximumFractionDigits: 1 }) + (x === 1 ? ' day' : ' days');
+}
+function stepTimeRows(D) {
+  const ups = new Map();
+  D.ups.forEach((u) => { if (!ups.has(u.order_id)) ups.set(u.order_id, []); ups.get(u.order_id).push(u); });
+  const rows = [];
+  D.orders.forEach((o) => {
+    let cur = null;
+    (ups.get(o.id) || []).forEach((u) => {
+      const k = u.status === 'ready' ? 'finished' : u.status;
+      if (cur && cur.k === k) return;   // ticked again: the step goes on
+      if (cur) {
+        const days = (new Date(u.created_at) - new Date(cur.t)) / 86400000;
+        if (days >= 0) rows.push({ o, k: cur.k, from: cur.t, to: u.created_at, days, party: (o.clients && o.clients.trade_name) || '', vendor: repVendor(o) });
+      }
+      cur = STEP_TIME_KEYS.indexOf(k) > -1 ? { k, t: u.created_at } : null;   // delivered, cancelled, quotation: no step running
+    });
+  });
+  return rows;
+}
+function stepTimesBuild(D, f) {
+  const r = D.range || [null, null];
+  const day = (ts) => ymd(new Date(ts));
+  let rows = stepTimeRows(D).filter((x) => (!r[0] || day(x.to) >= r[0]) && (!r[1] || day(x.to) <= r[1]));
+  if (f.step) rows = rows.filter((x) => x.k === f.step);
+  if (f.party) rows = rows.filter((x) => x.o.client_id === f.party);
+  if (f.otype) rows = rows.filter((x) => x.o.order_type === f.otype);
+  if (f.vendor) rows = rows.filter((x) => (f.vendor === 'none' ? !x.o.vendor_id : x.o.vendor_id === f.vendor));
+  rows.sort((a, b) => (a.to < b.to ? 1 : -1));
+  const agg = (list) => {
+    const n = list.length, sum = list.reduce((a, x) => a + x.days, 0);
+    return { n, avg: n ? sum / n : 0, max: list.reduce((a, x) => Math.max(a, x.days), 0) };
+  };
+  const tot = agg(rows);
+  const tiles = [['Steps done', String(tot.n)]];
+  STEP_TIME_KEYS.forEach((k) => {
+    const part = rows.filter((x) => x.k === k);
+    if (part.length) tiles.push([stepTimeLabel(k), fmtDays(agg(part).avg)]);
+  });
+  return {
+    rows, tot, agg, tiles, sortBy: (a) => a.avg,
+    groupKey: (x, k) => ({ stage: stepTimeLabel(x.k), vendor: x.vendor, party: x.party || '—', month: repMonth(day(x.to)) }[k]),
+    gcols: [['Steps', (a) => String(a.n)], ['Average', (a) => fmtDays(a.avg)], ['Longest', (a) => fmtDays(a.max)]],
+    lines: (x) => [ordNo(x.o.order_no) + ' · ' + x.party, [stepTimeLabel(x.k), 'Started ' + fmtD(x.from), 'Done ' + fmtD(x.to), x.o.vendor_id ? x.vendor : ''].filter(Boolean).join(' · ')],
+    amount: (x) => fmtDays(x.days), open: (x) => x.o.id,
+    csvHead: ['Order no', 'Party', 'Vendor', 'Step', 'Started', 'Finished', 'Days'],
+    csv: (x) => [ordNo(x.o.order_no), x.party, x.o.vendor_id ? x.vendor : '', stepTimeLabel(x.k), fmtExp(x.from), fmtExp(x.to), Math.round(x.days * 10) / 10],
+    pdfCols: [['Order', 18], ['Party', 0], ['Step', 34], ['Started', 20], ['Finished', 20], ['Days', 16, 'right']],
+    pdfRow: (x) => [ordNo(x.o.order_no), x.party, stepTimeLabel(x.k), fmtD(x.from), fmtD(x.to), String(Math.round(x.days * 10) / 10)],
+  };
+}
+
 /* rows + columns + totals for the chosen report */
 function repBuild(D) {
   const R = repState();
   const f = R.f;
   const T = R.type;
   if (T === 'summary') return monthSummaryBuild(D);
+  if (T === 'steps') return stepTimesBuild(D, f);
   if (T === 'pay') return payStatusBuild(D, f);
   if (T === 'payhist') return payHistBuild(D, f);
   if (T === 'items' || T === 'diamonds') {
@@ -425,6 +495,12 @@ function repFilterDefs() {
   if (T === 'pay') { d.push(['pshow', 'Show', PAY_SHOW, true], ['city', 'City', cities], ['party', 'Party', party]); return d; }
   if (T === 'payhist') { d.push(['kind', 'Entry', [['due', 'Due dates'], ['done', 'Paid dates']]], ['party', 'Party', party], ['city', 'City', cities], ['exec', 'Added by', team]); return d; }
   if (T === 'summary') return d;
+  if (T === 'steps') {
+    d.push(['step', 'Step', STEP_TIME_KEYS.map((k) => [k, stepTimeLabel(k)])]);
+    if (S.dbv6) d.push(['vendor', 'Vendor', [['none', 'No vendor yet']].concat((S.vendors || []).map((v) => [v.id, v.name]))]);
+    d.push(['party', 'Party', party], ['otype', 'Order type', otypes]);
+    return d;
+  }
   if (T === 'karigars') { d.push(['kshow', 'Show', [['active', 'Working karigars'], ['bal', 'Only with metal'], ['all', 'Everyone']], true]); return d; }
   if (T === 'stock') {
     d.push(['cstatus', 'Status', [['available', 'In stock'], ['reserved', 'Reserved'], ['sold', 'Sold'], ['all', 'All']], true], ['metal', 'Metal', metals]);
@@ -438,6 +514,8 @@ function repFilterDefs() {
   if (T === 'items' || T === 'diamonds') itemFilters();
   return d;
 }
+/* how a report is grouped when it is opened (step times: by step) */
+function repDefaultGroup(t) { return t === 'steps' ? 'stage' : ''; }
 /* each report starts without filters, so nothing is hidden */
 function repPruneFilters() { repState().f = {}; }
 /* a filter is "on" when it is set to something other than its first (default) choice */
@@ -481,7 +559,7 @@ async function renderReports() {
     '<div id="rep-body">' + loadingHTML() + '</div>';
   ['#rep-from', '#rep-to'].forEach((sel) => { const el = $(sel); if (el) el.addEventListener('change', () => { R.from = $('#rep-from').value; R.to = $('#rep-to').value; renderReports(); }); });
   const ts = $('#rep-type');
-  if (ts) ts.addEventListener('change', () => { R.type = ts.value; R.group = ''; S.repData = null; repPruneFilters(); renderReports(); });
+  if (ts) ts.addEventListener('change', () => { R.type = ts.value; R.group = repDefaultGroup(R.type); S.repData = null; repPruneFilters(); renderReports(); });
   const gsel = $('#rep-group'); if (gsel) gsel.addEventListener('change', () => { R.group = gsel.value; drawReport(); });
   const db2 = $('#rep-dateby'); if (db2) db2.addEventListener('change', () => { R.dateBy = db2.value; renderReports(); });
   c.querySelectorAll('select[data-rf]').forEach((s) => s.addEventListener('change', () => { R.f[s.dataset.rf] = s.value; renderReports(); }));
@@ -495,6 +573,7 @@ async function renderReports() {
 
 function repPeriodText() {
   const R = repState();
+  if (R.type === 'steps') return 'Steps finished: ' + rangeLabel(S.repData.range);
   return REP_NO_PERIOD[R.type] ? 'As on ' + fmtDLong(todayStr()) : rangeLabel(S.repData.range);
 }
 
@@ -572,7 +651,7 @@ async function buildReportPdf() {
 }
 
 onAct('rep-open', () => showSub('Reports', renderReports));
-onAct('rep-go', (el) => { const R = repState(); R.type = el.dataset.type || 'pay'; R.group = ''; S.repData = null; repPruneFilters(); showSub('Reports', renderReports); });
+onAct('rep-go', (el) => { const R = repState(); R.type = el.dataset.type || 'pay'; R.group = repDefaultGroup(R.type); S.repData = null; repPruneFilters(); showSub('Reports', renderReports); });
 onAct('rep-p', (el) => { const R = repState(); R.p = el.dataset.p; if (R.p === 'custom' && !R.from) { R.from = monthStart(); R.to = todayStr(); } renderReports(); });
 onAct('rep-filters', () => { const R = repState(); R.showFilters = !R.showFilters; renderReports(); });
 onAct('rep-clear', () => { const R = repState(); R.f = {}; renderReports(); });
