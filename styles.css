@@ -950,3 +950,14 @@ input.sw:disabled { cursor: default; }
 /* ---------- v17: works without internet ---------- */
 .off-bar { background: #3c3540; color: #fff; font-size: 12.5px; font-weight: 650; text-align: center; padding: 6px 12px; line-height: 1.35; }
 .off-bar:not(.offline) { background: #8a5a12; }
+
+/* ---------- v18: phone alerts ---------- */
+.al-card { text-align: center; padding: 18px 16px; }
+.al-card .al-ic { font-size: 34px; margin-bottom: 4px; }
+.al-card b { display: block; font-size: 16px; margin-bottom: 6px; }
+.al-card p { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+.al-card.on b { color: var(--green); margin-bottom: 0; }
+.al-person { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14.5px; }
+.al-person:last-child { border-bottom: 0; }
+.al-person b { font-size: 13px; color: var(--muted); }
+.al-person b.ok { color: var(--green); }

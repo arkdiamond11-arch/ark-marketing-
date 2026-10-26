@@ -1742,6 +1742,7 @@ async function renderMore() {
     (typeof repairsOn === 'function' && repairsOn() ? mrow('rp-list', '🔧', 'Repairs', 'Pieces shops send back — resize, polish, repair') : '') +
     (typeof approvalsOn === 'function' && approvalsOn() ? mrow('ap-list', '💎', 'Pieces on approval', 'Given to shops to show their customers · sold or returned') : '') +
     (typeof campaignsOn === 'function' && campaignsOn() ? mrow('camp-open-list', '📣', 'Messages to shops', 'New designs or an offer to many shops on WhatsApp') : '') +
+    (typeof renderAlerts === 'function' && S.dbv9 ? mrow('al-open', '📳', 'Phone alerts', 'When your orders move · your day every morning') : '') +
     (isOwner && typeof renderAppSettings === 'function' ? mrow('opt-open', '⚙️', 'App settings', 'Order steps in use · show or hide sections') : '') +
     (isOwner && typeof renderBizForm === 'function' ? mrow('biz-open', '🏷️', 'Business details', 'Address, GSTIN — printed on PDFs') : '') +
     (typeof renderLangPicker === 'function' ? mrow('lang-open', '🌐', 'Language / भाषा / ભાષા', 'English, हिन्दी, ગુજરાતી') : '') +
@@ -1861,6 +1862,7 @@ async function enterApp() {
 
   renderShell();
   switchTab('today');
+  if (typeof alertOpenUrl === 'function') alertOpenUrl(location.hash);   // opened from a phone alert
 }
 
 /* A new version of the app was published while this screen was open → offer a one-tap update.

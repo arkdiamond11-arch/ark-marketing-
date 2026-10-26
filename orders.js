@@ -1240,6 +1240,7 @@ async function applyStatus(o, s) {
     return false;
   }
   const { data: up } = await db.from('order_updates').insert({ order_id: o.id, status: s, note: null, created_by: S.me.id }).select('id').single();
+  if (typeof alertStep === 'function') alertStep(o.id, s);   // phone alerts for the others
   // a quotation never held its pieces; a cancelled order already let them go
   if (CLOSED_STATUSES.indexOf(s) === -1 || HOLDING_STATUSES.indexOf(o.status) > -1) await syncCatalogueForOrder(o.id, s);
   return (up && up.id) || null;

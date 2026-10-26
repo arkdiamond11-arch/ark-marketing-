@@ -203,21 +203,22 @@ function stateFromGstin(gstin) {
 /* returns the row, or null when it could not be read — then what was loaded before stays */
 async function loadBiz() {
   const get = () => db.from('business_settings').select('*').eq('id', 1).maybeSingle();
-  const v8 = probeDbV8();
+  const v8 = probeTable('repairs'), v9 = probeTable('push_subscriptions');
   let r = await get();
   if (r.error || !r.data) { await new Promise((ok) => setTimeout(ok, 1200)); r = await get(); }   // a phone waking up often fails its first request
-  const has8 = await v8;
+  const [has8, has9] = await Promise.all([v8, v9]);
   if (has8 !== null) S.dbv8 = has8;
+  if (has9 !== null) S.dbv9 = has9;
   if (r.error || !r.data) { if (!S.biz) S.biz = {}; return null; }
   S.biz = r.data;
   S.bizAt = Date.now();
   S.dbv7 = Object.prototype.hasOwnProperty.call(S.biz, 'app_options');   // database update 07 has been run
   return S.biz;
 }
-/* database update 08 (repairs, pieces on approval, messages, wishes, IGI files, hand-over) has been run?
+/* has a database update been run? (its table is there) — 08: repairs, 09: push_subscriptions.
    true / false, or null when it could not be checked (no internet) */
-async function probeDbV8() {
-  const q = () => db.from('repairs').select('id').limit(1);
+async function probeTable(name) {
+  const q = () => db.from(name).select('id').limit(1);
   let r = await q();
   if (r.error && !dbObjMissing(r.error)) { await new Promise((ok) => setTimeout(ok, 1200)); r = await q(); }
   if (!r.error) return true;
