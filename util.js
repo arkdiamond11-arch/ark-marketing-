@@ -223,7 +223,7 @@ const APP_SECTIONS = [
   ['targets', 'Targets', 'Monthly targets for the team'],
   ['location', 'Visit location', 'Shop location, visit check-in, clients near me'],
 ];
-const STEP_CHOICES = ['cad', 'wax', 'in_production', 'setting', 'finished'];   // between Approved and Delivered
+const STEP_CHOICES = ['cad', 'wax', 'in_production', 'setting', 'finished', 'igi'];   // between Approved and Delivered
 function appOpts() {
   const o = S.biz && S.biz.app_options;
   return o && typeof o === 'object' && !Array.isArray(o) ? o : {};

@@ -14,10 +14,11 @@
 const OTYPE_LABEL = { job_work: 'Job work', ready_stock: 'Ready stock', custom: 'Custom order' };
 const OTYPE_KEY = { 'Job work': 'job_work', 'Ready stock': 'ready_stock', 'Custom order': 'custom' };
 const OSTATUS_LABEL = { quote: 'Quotation', declined: 'Not approved', new: 'Approved', cad: 'CAD done', wax: 'Wax', in_production: 'In production',
-  setting: 'Diamond setting', finished: 'Finished', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' };
+  setting: 'Diamond setting', finished: 'Finished', igi: 'IGI certification', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' };
 /* the stages an approved order moves through (tap any one on the order page) */
-const ORDER_STAGES = ['cad', 'wax', 'in_production', 'setting', 'finished', 'delivered'];
-const OPEN_STATUSES = ['new', 'cad', 'wax', 'in_production', 'setting', 'finished', 'ready'];   // approved, not delivered yet
+const ORDER_STAGES = ['cad', 'wax', 'in_production', 'setting', 'finished', 'igi', 'delivered'];
+const OPEN_STATUSES = ['new', 'cad', 'wax', 'in_production', 'setting', 'finished', 'igi', 'ready'];   // approved, not delivered yet
+const FINISHED_STATUSES = ['finished', 'igi', 'ready'];   // made, not delivered yet (the "Finished" filter)
 const CLOSED_STATUSES = ['declined', 'cancelled'];
 const PURITY = [['24K', 99.5], ['22K', 91.6], ['18K', 75], ['14K', 58.5], ['9K', 37.5]];
 const SILVER_PURITY = [['999', 99.9], ['925', 92.5]];
@@ -78,7 +79,7 @@ function activeStages(cur) {
   if (!S.dbv6) return ['delivered'];   // before database update 06 there is only Approved → Delivered
   const on = typeof stepsOn === 'function' ? stepsOn() : ORDER_STAGES.slice(0, -1);
   const c = cur === 'ready' ? 'finished' : cur;
-  return ORDER_STAGES.filter((k) => k === 'delivered' || k === c || on.indexOf(k) > -1);
+  return ORDER_STAGES.filter((k) => k === 'delivered' || k === c || (on.indexOf(k) > -1 && (k !== 'igi' || S.dbv7)));   // IGI needs database update 07
 }
 /* the stage that comes after the order's current one (null when there is none) */
 function nextStage(o) {
@@ -224,7 +225,7 @@ async function loadOrderList() {
   const L = S.olist;
   let q = db.from('orders').select('id, order_no, order_type, status, order_date, due_date' + (S.dbv6 ? ', vendor_id' : '') + finCol() + ', clients!inner(trade_name, city), ' + ORDER_PHOTO_COLS);
   if (L.status === 'open') q = q.in('status', OPEN_STATUSES);
-  else if (L.status === 'finished') q = q.in('status', ['finished', 'ready']);
+  else if (L.status === 'finished') q = q.in('status', FINISHED_STATUSES);
   else if (L.status === 'closed') q = q.in('status', CLOSED_STATUSES);
   else if (L.status !== 'all') q = q.eq('status', L.status);
   if (L.type !== 'all') q = q.eq('order_type', L.type);
@@ -245,7 +246,7 @@ async function loadOrderList() {
   const quotesOnly = L.status === 'quote';
   const t = todayStr();
   const late = rows.filter((o) => isOpenStatus(o.status) && o.due_date && o.due_date < t).length;
-  const finished = rows.filter((o) => o.status === 'finished' || o.status === 'ready').length;
+  const finished = rows.filter((o) => FINISHED_STATUSES.indexOf(o.status) > -1).length;
   box.innerHTML =
     '<div class="stat-row">' +
     '<div class="stat"><div class="st-num">' + rows.length + (rows.length >= 300 ? '+' : '') + '</div><div class="st-label">' + (quotesOnly ? 'Quotations' : 'Orders') + '</div></div>' +
@@ -1094,26 +1095,36 @@ function renderOrderPage(o) {
     '</div>';
 }
 
-/* the stages of an approved order: tap one to set it; each shows the day it was reached */
+/* the stages of an approved order: tap one to set it. Every tick shows when it was ticked
+   (date, time) and who ticked it; a step the order went past without a tick says so. */
+function tickStamp(u) {
+  if (!u) return '';
+  const who = u.created_by ? String(nameOf(u.created_by)).split(' ')[0] : '';
+  return fmtD(u.created_at) + ', ' + fmtTime(u.created_at) + (who && who !== '—' ? ' · ' + who : '');
+}
 function stageCardHTML(o, ups) {
-  const when = {};
-  (ups || []).slice().reverse().forEach((u) => { if (u.status) when[u.status] = u.created_at; });   // newest wins
+  const tick = {};   // the newest tick of each stage ("ready" is the old name of Finished)
+  (ups || []).slice().reverse().forEach((u) => { if (u.status) tick[u.status === 'ready' ? 'finished' : u.status] = u; });
   const cur = o.status === 'ready' ? ORDER_STAGES.indexOf('finished') : ORDER_STAGES.indexOf(o.status);
-  const row = (key, label, state, ts, tap) => '<div class="os-row ' + state + (tap ? ' tap' : '') + '"' + (tap ? ' data-action="o-status" data-id="' + o.id + '" data-s="' + key + '"' : '') + '>' +
-    '<span class="os-dot">' + (state === 'pending' ? '' : '✓') + '</span>' +
-    '<span class="os-name">' + esc(label) + '</span>' +
-    '<span class="os-date">' + (ts ? esc(fmtD(ts)) : state === 'pending' && tap ? 'Tap to set' : '') + '</span></div>';
+  const row = (key, label, state, sub, tap) => '<div class="os-row ' + state + (tap ? ' tap' : '') + '"' + (tap ? ' data-action="o-status" data-id="' + o.id + '" data-s="' + key + '"' : '') + '>' +
+    '<span class="os-dot">' + (state === 'pending' ? '' : state === 'skip' ? '–' : '✓') + '</span>' +
+    '<span class="os-name">' + esc(label) + (sub ? '<span class="os-when">' + esc(sub) + '</span>' : '') + '</span>' +
+    '<span class="os-date">' + (state === 'pending' && tap ? 'Tap to set' : '') + '</span></div>';
+  const approved = tick.new ? tickStamp(tick.new) : (o.order_date ? fmtD(o.order_date) : '');
+  const delivered = tick.delivered ? tickStamp(tick.delivered) : (o.delivered_on ? fmtD(o.delivered_on) : '');
   if (!S.dbv6) {
     return '<div class="notice" style="margin:0 0 8px">CAD, wax, diamond setting and the other stages need the database update (ark-update-payments-vendors.sql) — ask the owner to run it.</div>' +
-      row('new', 'Approved', 'done', when.new || o.order_date, false) +
-      row('delivered', 'Delivered', o.status === 'delivered' ? 'cur' : 'pending', o.status === 'delivered' ? (o.delivered_on || when.delivered) : null, o.status !== 'delivered');
+      row('new', 'Approved', 'done', approved, false) +
+      row('delivered', 'Delivered', o.status === 'delivered' ? 'cur' : 'pending', o.status === 'delivered' ? delivered : '', o.status !== 'delivered');
   }
   // only the stages in use (More → App settings); the order's own stage always shows
-  return row('new', 'Approved', 'done', when.new || o.order_date, false) +
+  return row('new', 'Approved', 'done', approved, false) +
     activeStages(o.status).map((k) => {
       const i = ORDER_STAGES.indexOf(k);
-      return row(k, OSTATUS_LABEL[k], i < cur ? 'done' : i === cur ? 'cur' : 'pending',
-        i <= cur ? (k === 'delivered' && o.delivered_on ? o.delivered_on : when[k]) : null, i !== cur);
+      const when = k === 'delivered' ? delivered : tickStamp(tick[k]);
+      if (i < cur) return row(k, OSTATUS_LABEL[k], tick[k] ? 'done' : 'skip', tick[k] ? when : 'Not ticked', true);
+      if (i === cur) return row(k, OSTATUS_LABEL[k], 'cur', when, false);
+      return row(k, OSTATUS_LABEL[k], 'pending', '', true);
     }).join('');
 }
 
@@ -1198,7 +1209,7 @@ async function applyStatus(o, s) {
   // only if nobody changed it meanwhile (another phone, or a box left open)
   const { data, error } = await db.from('orders').update(patch).eq('id', o.id).eq('status', o.status).select('id');
   if (error) {
-    toast(String(error.code) === '23514' ? 'This needs the database update (ark-update-payments-vendors.sql).' : 'Could not update — try again.', 'err');
+    toast(String(error.code) === '23514' ? (s === 'igi' ? 'IGI certification needs the database update (ark-update-07.sql).' : 'This needs the database update (ark-update-payments-vendors.sql).') : 'Could not update — try again.', 'err');
     return false;
   }
   if (!data || !data.length) {

@@ -802,3 +802,11 @@ input.sw:disabled { cursor: default; }
 .section-label.cl-group.lead-cold { color: #26509c; }
 .section-label.cl-group.lead-none { color: var(--muted); }
 .filter-chips.cl-show { align-items: center; margin-bottom: 8px; }
+
+/* ---------------- v13: IGI step, tick date and time ---------------- */
+.chip-st-igi, .client-head .chip-st-igi { background: #e2eefb; color: #1f4f8f; }
+.os-name .os-when { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-top: 1px; letter-spacing: 0; }
+.os-row.cur .os-name .os-when { color: #8a5a6b; }
+.os-row.skip .os-dot { background: #fff; border-color: #d9d3dc; color: #a39aa8; }
+.os-row.skip .os-name { color: #7d7584; font-weight: 600; }
+.os-row.skip .os-when { font-style: italic; }

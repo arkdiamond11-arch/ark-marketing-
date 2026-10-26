@@ -309,7 +309,7 @@ function drawFinalBox(o, items, urls) {
   const box = $('#o-final-view');
   if (!box || !S.dbv7) return;
   const fin = (o.final_photo_paths || []).filter(Boolean);
-  const done = ['finished', 'ready', 'delivered'].indexOf(o.status) > -1;
+  const done = ['finished', 'igi', 'ready', 'delivered'].indexOf(o.status) > -1;
   S.finView = { o, fin, items: items || [], urls: urls || [] };
   if (!fin.length && !done) { box.innerHTML = ''; return; }
   if (!fin.length) {
@@ -413,7 +413,7 @@ onAct('fin-share', (el) => shareFinalPhotos(el.dataset.id));
 onAct('fin-view', (el) => viewFinalPhotos(el.dataset.i));
 
 /* ---------------- app settings (owner) ---------------- */
-const STEP_HINTS = { cad: 'Design drawn on the computer', wax: 'Wax model and casting', in_production: 'Being made', setting: 'Diamonds being set', finished: 'Ready, waiting for delivery' };
+const STEP_HINTS = { cad: 'Design drawn on the computer', wax: 'Wax model and casting', in_production: 'Being made', setting: 'Diamonds being set', finished: 'The piece is made', igi: 'At IGI for the certificate' };
 
 function renderAppSettings() {
   const c = $('#content');

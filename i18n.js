@@ -1499,6 +1499,12 @@ const I18N = {
   'Save the photos': ['फोटो सेव करें', 'ફોટા સેવ કરો'],
   "Open the client's WhatsApp": ['क्लाइंट का WhatsApp खोलें', 'ક્લાયન્ટનું WhatsApp ખોલો'],
   'Could not open sharing — save the photos instead': ['शेयर नहीं खुला — फोटो सेव कर लें', 'શેર ન ખૂલ્યું — ફોટા સેવ કરી લો'],
+  /* ---- v13: IGI step, tick times ---- */
+  'IGI certification': ['IGI सर्टिफिकेशन', 'IGI સર્ટિફિકેશન'],
+  'At IGI for the certificate': ['सर्टिफिकेट के लिए IGI में', 'સર્ટિફિકેટ માટે IGIમાં'],
+  'The piece is made': ['पीस बन गया', 'પીસ બની ગયો'],
+  'Not ticked': ['टिक नहीं किया', 'ટિક નથી કર્યું'],
+  'IGI certification needs the database update (ark-update-07.sql)': ['IGI सर्टिफिकेशन के लिए डेटाबेस अपडेट (ark-update-07.sql) चाहिए', 'IGI સર્ટિફિકેશન માટે ડેટાબેઝ અપડેટ (ark-update-07.sql) જોઈએ'],
 };
 
 /* Sentences with changing parts (numbers, names, dates).

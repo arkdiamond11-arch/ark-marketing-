@@ -16,7 +16,7 @@ const REP_TYPES = [
 const LIVE_STATUSES = OPEN_STATUSES.concat(['delivered']);   // approved orders (in work, finished or delivered)
 const REP_STATUS = [['booked', 'Booked (open + delivered)'], ['open', 'Open'], ['finished', 'Finished'], ['delivered', 'Delivered'], ['quote', 'Quotations'],
   ['cancelled', 'Not approved / cancelled'], ['all', 'All']];
-const REP_STATUS_SET = { booked: LIVE_STATUSES, open: OPEN_STATUSES, finished: ['finished', 'ready'], delivered: ['delivered'], quote: ['quote'], cancelled: CLOSED_STATUSES, all: null };
+const REP_STATUS_SET = { booked: LIVE_STATUSES, open: OPEN_STATUSES, finished: FINISHED_STATUSES, delivered: ['delivered'], quote: ['quote'], cancelled: CLOSED_STATUSES, all: null };
 const REP_GROUPS = {
   pay: [['', 'No grouping'], ['status', 'Status'], ['city', 'City']],
   payhist: [['', 'No grouping'], ['party', 'Party'], ['kind', 'Entry'], ['month', 'Month'], ['exec', 'Added by']],
