@@ -961,3 +961,17 @@ input.sw:disabled { cursor: default; }
 .al-person:last-child { border-bottom: 0; }
 .al-person b { font-size: 13px; color: var(--muted); }
 .al-person b.ok { color: var(--green); }
+
+/* ---------- v19: delete a client ---------- */
+.cl-del-row { display: flex; justify-content: center; margin: 18px 0 6px; }
+.modal .cd-name { background: var(--bg); border-radius: 12px; padding: 10px 12px; margin: 4px 0 12px; }
+.modal .cd-name b, .cd-twin b { display: block; font-size: 15.5px; color: var(--ink); }
+.modal .cd-name span, .cd-twin span { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+.modal .cd-what { font-weight: 700; color: var(--ink); margin: -8px 0 14px; }
+.modal .cd-with { color: var(--ink); }
+.cd-twins { border: 1px solid var(--line); border-radius: 12px; padding: 2px 12px; margin: 0 0 14px; }
+.cd-tl { font-size: 11.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); padding: 9px 0 3px; }
+.cd-twin { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+.cd-tl + .cd-twin { border-top: 0; }
+.cd-twin small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.modal .cd-warn { color: var(--red); font-weight: 600; margin-bottom: 14px; }

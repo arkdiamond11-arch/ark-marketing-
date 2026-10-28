@@ -1,7 +1,7 @@
 /* Marketing app service worker — network-first, cache as offline fallback for the app shell.
    The database library (from the CDN) is kept too, so the app opens without internet.
    The app's own copies of lists and pages (offline.js, cache 'ark-data-…') are left alone. */
-const CACHE = 'app-shell-v18';
+const CACHE = 'app-shell-v19';
 const LIBS = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js'];
 const SHELL = ['index.html', 'styles.css', 'config.js', 'manifest.json', 'icon-192.png', 'icon.svg', 'badge-96.png',
   'app.js', 'i18n.js', 'jewel.js', 'orders.js', 'util.js', 'docs.js', 'payments.js', 'vendors.js',

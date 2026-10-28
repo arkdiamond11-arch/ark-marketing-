@@ -1243,7 +1243,8 @@ function renderClientPage(cl) {
     '<div id="client-orders"></div>' +
     '<div id="client-repairs"></div>' +
     '<div id="client-approvals"></div>' +
-    '<div id="client-history"><div class="empty">Loading history…</div></div>';
+    '<div id="client-history"><div class="empty">Loading history…</div></div>' +
+    (isOwner() ? '<div class="cl-del-row"><button class="btn btn-small btn-danger-ghost" data-action="cl-delete" data-id="' + cl.id + '">Delete client</button></div>' : '');
 
   const sides = [['Front', cl.card_image_path], ['Back', cl.card_image_back_path]].filter((s) => s[1]);
   if (sides.length) {
@@ -1299,6 +1300,97 @@ async function loadClientHistory(cl) {
   hiEl.innerHTML = '<div class="section-label">Meeting history</div>' +
     (items.length ? items.join('') : '<div class="empty">No meetings recorded yet.<br>Tap “Record meeting” after you speak with them.</div>');
 }
+
+/* ---------------- delete a client (the owner) ----------------
+   For a client added by mistake, e.g. saved twice. Its meetings, follow-ups, notes and payment
+   dates are deleted with it. Not when it has orders, account entries, repair jobs or pieces on
+   approval: deleting the client would delete those too. (The database lets only the owner delete.) */
+const CL_LINKS = [   // table, one, many, stops the delete, needs database update
+  ['orders', 'order', 'orders', true],
+  ['party_txns', 'account entry', 'account entries', true],
+  ['repairs', 'repair job', 'repair jobs', true, 8],
+  ['approvals', 'approval memo', 'approval memos', true, 8],
+  ['interactions', 'meeting', 'meetings', false],
+  ['followups', 'follow-up', 'follow-ups', false],
+  ['client_notes', 'note', 'notes', false],
+  ['party_pay_log', 'payment date', 'payment dates', false],
+];
+/* what is saved for this client: [{ n, label, stops }], only what it has */
+async function clientLinks(id) {
+  const list = CL_LINKS.filter((l) => l[4] !== 8 || S.dbv8);
+  const counts = await Promise.all(list.map(async (l) => {
+    const r = await db.from(l[0]).select('id', { count: 'exact' }).eq('client_id', id).limit(1);
+    if (r.error) { if (dbObjMissing(r.error)) return 0; throw r.error; }   // that part of the app is not set up
+    return r.count != null ? r.count : (r.data || []).length;
+  }));
+  return list.map((l, i) => ({ n: counts[i], label: counts[i] + ' ' + (counts[i] === 1 ? l[1] : l[2]), stops: l[3] }))
+    .filter((x) => x.n > 0);
+}
+/* other clients with the same name or mobile — the one to keep is often among them */
+async function clientTwins(cl) {
+  const cols = 'id, trade_name, city, mobile, created_at';
+  const name = String(cl.trade_name || '').trim();
+  const qs = [];
+  if (name) qs.push(db.from('clients').select(cols).ilike('trade_name', name.replace(/[\\%_]/g, (m) => '\\' + m)).neq('id', cl.id).limit(5));
+  if (cl.mobile) qs.push(db.from('clients').select(cols).eq('mobile', cl.mobile).neq('id', cl.id).limit(5));
+  try {
+    const rs = await Promise.all(qs);
+    const seen = new Map();
+    rs.forEach((r) => (r.data || []).forEach((x) => seen.set(x.id, x)));
+    return Array.from(seen.values()).slice(0, 4);
+  } catch (e) { return []; }
+}
+function clientIdHTML(c) {
+  const sub = [c.city, c.mobile].filter(Boolean).join(' · ');
+  return '<b class="noi18n">' + esc(c.trade_name || '') + '</b>' + (sub ? '<span class="noi18n">' + esc(sub) + '</span>' : '');
+}
+async function clientDeleteStart(id, btn) {
+  if (!isOwner()) { toast('Only the owner can delete a client.', 'err'); return; }
+  if (btn) btn.disabled = true;
+  let cl = null, links = null, twins = [];
+  try {
+    cl = await fetchClient(id);
+    if (cl) [links, twins] = await Promise.all([clientLinks(id), clientTwins(cl)]);
+  } catch (e) {
+    links = null;
+  }
+  if (btn) btn.disabled = false;
+  if (!cl) return;   // fetchClient said so
+  if (!links) { toast('Could not check this client — try again.', 'err'); return; }
+  const stops = links.filter((x) => x.stops);
+  if (stops.length) {
+    const ov = openModal('<h3>This client cannot be deleted</h3>' +
+      '<div class="cd-name">' + clientIdHTML(cl) + '</div>' +
+      '<p>Deleting it would also delete:</p><div class="cd-what">' + esc(stops.map((x) => x.label).join(' · ')) + '</div>' +
+      '<p>Delete is only for a client added by mistake. If it was saved twice, keep this one and delete the other one.</p>' +
+      '<div class="modal-actions"><button class="btn btn-primary" data-m="no">Close</button></div>');
+    ov.querySelector('[data-m=no]').onclick = closeModal;
+    return;
+  }
+  const ov = openModal('<h3>Delete this client?</h3>' +
+    '<div class="cd-name">' + clientIdHTML(cl) + '</div>' +
+    '<p>For a client added by mistake — for example, saved twice.</p>' +
+    (links.length ? '<p class="cd-with">Deleted with it: ' + esc(links.map((x) => x.label).join(' · ')) + '</p>' : '') +
+    (twins.length ? '<div class="cd-twins"><div class="cd-tl">Also saved with the same name or mobile</div>' +
+      twins.map((t) => '<div class="cd-twin"><div>' + clientIdHTML(t) + '<small>' + esc('Added ' + fmtD(t.created_at)) + '</small></div>' +
+        '<button class="btn btn-small btn-secondary" data-twin="' + esc(t.id) + '">Open client</button></div>').join('') + '</div>' : '') +
+    '<p class="cd-warn">This cannot be undone.</p>' +
+    '<div class="modal-actions"><button class="btn btn-secondary" data-m="no">Cancel</button>' +
+    '<button class="btn btn-primary" data-m="yes" style="background:#b3372f">Delete</button></div>');
+  ov.querySelector('[data-m=no]').onclick = closeModal;
+  ov.querySelectorAll('[data-twin]').forEach((b) => { b.onclick = () => { closeModal(); openClient(b.dataset.twin); }; });
+  ov.querySelector('[data-m=yes]').onclick = async (e) => {
+    e.target.disabled = true;
+    const { data, error } = await db.from('clients').delete().eq('id', id).select('id');
+    if (error) { e.target.disabled = false; toast('Could not delete — try again.', 'err'); return; }
+    closeModal();
+    if (!data || !data.length) { toast('Only the owner can delete a client.', 'err'); return; }
+    toast('Client deleted', 'ok');
+    S.lastMet = null; S.leadCache = null; S.currentClientId = null;
+    if (S.sub.length) { S.suppressPop = true; try { history.back(); } catch (_) {} goBack(); }   // leave its page
+  };
+}
+onAct('cl-delete', (el) => clientDeleteStart(el.dataset.id, el));
 
 /* ============================================================
    INTERACTION FORM
