@@ -1244,7 +1244,7 @@ function renderClientPage(cl) {
     '<div id="client-repairs"></div>' +
     '<div id="client-approvals"></div>' +
     '<div id="client-history"><div class="empty">Loading history…</div></div>' +
-    (isOwner() ? '<div class="cl-del-row"><button class="btn btn-small btn-danger-ghost" data-action="cl-delete" data-id="' + cl.id + '">Delete client</button></div>' : '');
+    (canDeleteClients() ? '<div class="cl-del-row"><button class="btn btn-small btn-danger-ghost" data-action="cl-delete" data-id="' + cl.id + '">Delete client</button></div>' : '');
 
   const sides = [['Front', cl.card_image_path], ['Back', cl.card_image_back_path]].filter((s) => s[1]);
   if (sides.length) {
@@ -1301,10 +1301,12 @@ async function loadClientHistory(cl) {
     (items.length ? items.join('') : '<div class="empty">No meetings recorded yet.<br>Tap “Record meeting” after you speak with them.</div>');
 }
 
-/* ---------------- delete a client (the owner) ----------------
+/* ---------------- delete a client (the owner, and team members the owner allows) ----------------
    For a client added by mistake, e.g. saved twice. Its meetings, follow-ups, notes and payment
    dates are deleted with it. Not when it has orders, account entries, repair jobs or pieces on
-   approval: deleting the client would delete those too. (The database lets only the owner delete.) */
+   approval: deleting the client would delete those too. The database checks the same
+   (update 10: profiles.can_delete_clients, set by the owner in More → Team). */
+function canDeleteClients() { return isOwner() || !!(S.me && S.me.active !== false && S.me.can_delete_clients === true); }
 const CL_LINKS = [   // table, one, many, stops the delete, needs database update
   ['orders', 'order', 'orders', true],
   ['party_txns', 'account entry', 'account entries', true],
@@ -1345,7 +1347,7 @@ function clientIdHTML(c) {
   return '<b class="noi18n">' + esc(c.trade_name || '') + '</b>' + (sub ? '<span class="noi18n">' + esc(sub) + '</span>' : '');
 }
 async function clientDeleteStart(id, btn) {
-  if (!isOwner()) { toast('Only the owner can delete a client.', 'err'); return; }
+  if (!canDeleteClients()) { toast('You are not allowed to delete clients — ask the owner.', 'err'); return; }
   if (btn) btn.disabled = true;
   let cl = null, links = null, twins = [];
   try {
@@ -1384,7 +1386,7 @@ async function clientDeleteStart(id, btn) {
     const { data, error } = await db.from('clients').delete().eq('id', id).select('id');
     if (error) { e.target.disabled = false; toast('Could not delete — try again.', 'err'); return; }
     closeModal();
-    if (!data || !data.length) { toast('Only the owner can delete a client.', 'err'); return; }
+    if (!data || !data.length) { toast('You are not allowed to delete this client — ask the owner.', 'err'); return; }
     toast('Client deleted', 'ok');
     S.lastMet = null; S.leadCache = null; S.currentClientId = null;
     if (S.sub.length) { S.suppressPop = true; try { history.back(); } catch (_) {} goBack(); }   // leave its page
@@ -1862,8 +1864,24 @@ async function renderTeamList() {
         '<button class="btn btn-small btn-ghost" data-action="member-resetpw" data-id="' + p.id + '">Reset PW</button>' +
         '<button class="btn btn-small ' + (p.active ? 'btn-danger-ghost' : 'btn-ghost') + '" data-action="member-toggle" data-id="' + p.id + '" data-active="' + p.active + '">' + (p.active ? 'Deactivate' : 'Activate') + '</button>' +
         '</div>') +
+      // database update 10: the owner lets a team member delete clients added by mistake
+      (!me && p.role !== 'owner' && Object.prototype.hasOwnProperty.call(p, 'can_delete_clients')
+        ? '<label class="m-perm"><span class="sw-t"><b>Can delete clients</b><span>Only clients without orders or account entries</span></span>' +
+          '<input type="checkbox" class="sw" data-del-perm="' + p.id + '"' + (p.can_delete_clients ? ' checked' : '') + '></label>' : '') +
       '</div>';
   }).join('') || '<div class="empty" style="padding:8px">Only you so far — add your executives.</div>';
+  el.querySelectorAll('[data-del-perm]').forEach((x) => x.addEventListener('change', () => setDeletePerm(x)));
+}
+async function setDeletePerm(input) {
+  const id = input.dataset.delPerm, on = input.checked;
+  input.disabled = true;
+  let r;
+  try { r = await db.rpc('set_can_delete_clients', { p_user: id, p_on: on }); } catch (e) { r = { error: e }; }
+  input.disabled = false;
+  if (!r || r.error || r.data !== true) { input.checked = !on; toast('Could not save — try again.', 'err'); return; }
+  const p = S.team && S.team.get(id);
+  if (p) p.can_delete_clients = on;
+  toast('Saved ✓', 'ok');
 }
 
 function renderTeamAddModal() {

@@ -1841,6 +1841,12 @@ const I18N = {
   'notes': ['नोट', 'નોંધ'],
   'payment date': ['पेमेंट की तारीख', 'પેમેન્ટની તારીખ'],
   'payment dates': ['पेमेंट की तारीखें', 'પેમેન્ટની તારીખો'],
+  /* ---------- v20: who can delete clients ---------- */
+  'Can delete clients': ['क्लाइंट डिलीट कर सकते हैं', 'ક્લાયન્ટ ડિલીટ કરી શકે'],
+  'Only clients without orders or account entries': ['सिर्फ बिना ऑर्डर और अकाउंट एंट्री वाले क्लाइंट', 'ફક્ત ઓર્ડર અને એકાઉન્ટ એન્ટ્રી વગરના ક્લાયન્ટ'],
+  'You are not allowed to delete clients': ['आपको क्लाइंट डिलीट करने की अनुमति नहीं है', 'તમને ક્લાયન્ટ ડિલીટ કરવાની મંજૂરી નથી'],
+  'You are not allowed to delete this client': ['आपको यह क्लाइंट डिलीट करने की अनुमति नहीं है', 'તમને આ ક્લાયન્ટ ડિલીટ કરવાની મંજૂરી નથી'],
+  'ask the owner': ['मालिक से पूछें', 'માલિકને પૂછો'],
 };
 
 /* Sentences with changing parts (numbers, names, dates).

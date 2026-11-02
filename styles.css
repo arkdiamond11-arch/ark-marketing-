@@ -975,3 +975,12 @@ input.sw:disabled { cursor: default; }
 .cd-tl + .cd-twin { border-top: 0; }
 .cd-twin small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
 .modal .cd-warn { color: var(--red); font-weight: 600; margin-bottom: 14px; }
+
+/* ---------- v20: who can delete clients (More → Team) ---------- */
+.member-row { flex-wrap: wrap; }
+.member-row .m-main { flex: 1 1 150px; }   /* a long name keeps its room; the buttons go below it */
+.member-row .m-name { overflow-wrap: anywhere; }
+.member-row .m-perm { flex-basis: 100%; display: flex; align-items: center; gap: 12px; margin-top: 2px; padding: 8px 10px;
+  background: var(--bg); border-radius: 10px; cursor: pointer; }
+.member-row .m-perm .sw-t b { font-size: 14px; }
+.member-row .m-perm .sw-t span { font-size: 12px; }
