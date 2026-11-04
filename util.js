@@ -203,17 +203,30 @@ function stateFromGstin(gstin) {
 /* returns the row, or null when it could not be read — then what was loaded before stays */
 async function loadBiz() {
   const get = () => db.from('business_settings').select('*').eq('id', 1).maybeSingle();
-  const v8 = probeTable('repairs'), v9 = probeTable('push_subscriptions');
+  const v8 = probeTable('repairs'), v9 = probeTable('push_subscriptions'), v11 = probeDbVersion();
   let r = await get();
   if (r.error || !r.data) { await new Promise((ok) => setTimeout(ok, 1200)); r = await get(); }   // a phone waking up often fails its first request
-  const [has8, has9] = await Promise.all([v8, v9]);
+  const [has8, has9, ver] = await Promise.all([v8, v9, v11]);
   if (has8 !== null) S.dbv8 = has8;
   if (has9 !== null) S.dbv9 = has9;
+  if (ver !== null) S.dbv11 = ver >= 11;
   if (r.error || !r.data) { if (!S.biz) S.biz = {}; return null; }
   S.biz = r.data;
   S.bizAt = Date.now();
   S.dbv7 = Object.prototype.hasOwnProperty.call(S.biz, 'app_options');   // database update 07 has been run
   return S.biz;
+}
+/* update 11 and later say which update is in (ark_db_version); before that: 0.
+   null when it could not be checked (no internet) */
+async function probeDbVersion() {
+  let r = await db.rpc('ark_db_version');
+  if (r.error && !dbFnMissing(r.error)) { await new Promise((ok) => setTimeout(ok, 1200)); r = await db.rpc('ark_db_version'); }
+  if (!r.error) return +r.data || 0;
+  return dbFnMissing(r.error) ? 0 : null;
+}
+function dbFnMissing(error) {
+  const c = String((error && error.code) || '');
+  return c === 'PGRST202' || c === '42883' || c === '404';
 }
 /* has a database update been run? (its table is there) — 08: repairs, 09: push_subscriptions.
    true / false, or null when it could not be checked (no internet) */

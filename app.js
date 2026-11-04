@@ -802,7 +802,7 @@ function renderClientForm(existing, pre, source) {
 
     '<div class="section-label">Basic details</div>' +
     '<div class="card">' +
-    '<div class="field"><label>Company / firm name <span class="req">*</span></label><input type="text" id="f-company" value="' + compVal + '" placeholder="Shop / company name"></div>' +
+    '<div class="field"><label>Company / firm name <span class="req">*</span></label><input type="text" id="f-company" value="' + compVal + '" placeholder="Shop / company name"><div id="name-note"></div></div>' +
     '<div class="field"><label>Contact person <span class="req">*</span></label><input type="text" id="f-person" value="' + v('contact_person') + '"></div>' +
     '<div class="field"><label>Designation</label>' + segHTML('desig', ['Partner', 'Owner', 'Founder', 'Staff', 'Other'], S.formState.desig) +
     '<div id="desig-other-wrap" style="display:' + (S.formState.desig === 'Other' ? 'block' : 'none') + ';margin-top:8px"><input type="text" id="f-desig-other" value="' + esc(S.formState.desig_other) + '" placeholder="Type the designation"></div></div>' +
@@ -863,6 +863,7 @@ function renderClientForm(existing, pre, source) {
 
   attachCombo('#f-city', '#cl-city', INDIAN_CITIES);
   attachCombo('#f-state', '#cl-state', INDIAN_STATES);
+  if (!existing && typeof watchSameShop === 'function') watchSameShop(null);   // the same shop already saved in this city?
 }
 
 async function saveClient(editId) {
@@ -970,11 +971,15 @@ async function saveClient(editId) {
     ov.querySelector('[data-m=now]').onclick = () => { closeModal(); if (client) openInteractionForm(client, true); };
   };
 
-  if (mobile && !isIndianMobile(mobile)) {
-    confirmModal('Not a mobile number?', 'The number "' + mobile + '" does not look like a 10-digit Indian mobile. Save anyway?', 'Save anyway', doSave);
-  } else {
-    doSave();
-  }
+  const go = () => {
+    if (mobile && !isIndianMobile(mobile)) {
+      confirmModal('Not a mobile number?', 'The number "' + mobile + '" does not look like a 10-digit Indian mobile. Save anyway?', 'Save anyway', doSave);
+    } else {
+      doSave();
+    }
+  };
+  if (!editId && typeof sameShopCheck === 'function') sameShopCheck(vals.company, vals.city, go);   // saved twice by mistake?
+  else go();
 }
 
 /* ============================================================
@@ -994,9 +999,9 @@ function clientSortKey() {
 
 /* which clients the list shows: all · no order yet · near me (for this visit to the app only) */
 function clientShows() {
-  return [['all', 'All'], ['lead', 'No order yet'], ['sleep', '😴 Sleeping'], ['near', '📍 Near me']].filter((x) =>
+  return [['all', 'All'], ['lead', 'No order yet'], ['sleep', '😴 Sleeping'], ['near', '📍 Near me'], ['trip', '🧳 Trip']].filter((x) =>
     x[0] === 'all' || (x[0] === 'lead' && typeof runLeadList === 'function') || (x[0] === 'sleep' && typeof runSleepList === 'function') ||
-    (x[0] === 'near' && typeof runNearList === 'function' && appOn('location')));
+    (x[0] === 'near' && typeof runNearList === 'function' && appOn('location')) || (x[0] === 'trip' && typeof runTripList === 'function'));
 }
 function clientShowKey() {
   if (!clientShows().some((x) => x[0] === S.clientShow)) S.clientShow = 'all';
@@ -1113,6 +1118,7 @@ async function runSearch(qRaw) {
   if (show === 'lead') return runLeadList(qRaw);
   if (show === 'sleep') return runSleepList(qRaw);
   if (show === 'near') return runNearList(qRaw);
+  if (show === 'trip') return runTripList(qRaw);
   const q = String(qRaw || '').trim().replace(/[,%()]/g, ' ').trim();
   const how = clientSortKey();
   const cols = 'id, trade_name, company_name, contact_person, city, area, category, interest, mobile, created_at, created_by';
@@ -1244,7 +1250,9 @@ function renderClientPage(cl) {
     '<div id="client-repairs"></div>' +
     '<div id="client-approvals"></div>' +
     '<div id="client-history"><div class="empty">Loading history…</div></div>' +
-    (canDeleteClients() ? '<div class="cl-del-row"><button class="btn btn-small btn-danger-ghost" data-action="cl-delete" data-id="' + cl.id + '">Delete client</button></div>' : '');
+    (canDeleteClients() ? '<div class="cl-del-row">' +
+      (typeof mergeOn === 'function' && mergeOn() ? '<button class="btn btn-small btn-ghost" data-action="cl-merge" data-id="' + cl.id + '">Merge with another client</button>' : '') +
+      '<button class="btn btn-small btn-danger-ghost" data-action="cl-delete" data-id="' + cl.id + '">Delete client</button></div>' : '');
 
   const sides = [['Front', cl.card_image_path], ['Back', cl.card_image_back_path]].filter((s) => s[1]);
   if (sides.length) {
@@ -1361,12 +1369,17 @@ async function clientDeleteStart(id, btn) {
   if (!links) { toast('Could not check this client — try again.', 'err'); return; }
   const stops = links.filter((x) => x.stops);
   if (stops.length) {
+    const canMerge = isOwner() && typeof mergeOn === 'function' && mergeOn() && twins.length;
     const ov = openModal('<h3>This client cannot be deleted</h3>' +
       '<div class="cd-name">' + clientIdHTML(cl) + '</div>' +
       '<p>Deleting it would also delete:</p><div class="cd-what">' + esc(stops.map((x) => x.label).join(' · ')) + '</div>' +
       '<p>Delete is only for a client added by mistake. If it was saved twice, keep this one and delete the other one.</p>' +
+      (canMerge ? '<div class="cd-twins"><div class="cd-tl">Or merge it into the other copy — nothing is lost</div>' +
+        twins.map((t) => '<div class="cd-twin"><div>' + clientIdHTML(t) + '<small>' + esc('Added ' + fmtD(t.created_at)) + '</small></div>' +
+          '<button class="btn btn-small btn-secondary" data-merge="' + esc(t.id) + '">Merge here</button></div>').join('') + '</div>' : '') +
       '<div class="modal-actions"><button class="btn btn-primary" data-m="no">Close</button></div>');
     ov.querySelector('[data-m=no]').onclick = closeModal;
+    ov.querySelectorAll('[data-merge]').forEach((b) => { b.onclick = () => { closeModal(); mergeAsk(id, b.dataset.merge); }; });
     return;
   }
   const ov = openModal('<h3>Delete this client?</h3>' +
@@ -1375,21 +1388,27 @@ async function clientDeleteStart(id, btn) {
     (links.length ? '<p class="cd-with">Deleted with it: ' + esc(links.map((x) => x.label).join(' · ')) + '</p>' : '') +
     (twins.length ? '<div class="cd-twins"><div class="cd-tl">Also saved with the same name or mobile</div>' +
       twins.map((t) => '<div class="cd-twin"><div>' + clientIdHTML(t) + '<small>' + esc('Added ' + fmtD(t.created_at)) + '</small></div>' +
-        '<button class="btn btn-small btn-secondary" data-twin="' + esc(t.id) + '">Open client</button></div>').join('') + '</div>' : '') +
-    '<p class="cd-warn">This cannot be undone.</p>' +
+        '<div class="cd-btns"><button class="btn btn-small btn-secondary" data-twin="' + esc(t.id) + '">Open client</button>' +
+        (typeof mergeOn === 'function' && mergeOn() ? '<button class="btn btn-small btn-secondary" data-merge="' + esc(t.id) + '">Merge here</button>' : '') +
+        '</div></div>').join('') + '</div>' : '') +
+    (S.dbv11 ? '<p class="cd-warn">' + (isOwner() ? 'It stays in Deleted clients for 30 days.' : 'The owner can bring it back within 30 days.') + '</p>'
+      : '<p class="cd-warn">This cannot be undone.</p>') +
     '<div class="modal-actions"><button class="btn btn-secondary" data-m="no">Cancel</button>' +
     '<button class="btn btn-primary" data-m="yes" style="background:#b3372f">Delete</button></div>');
   ov.querySelector('[data-m=no]').onclick = closeModal;
   ov.querySelectorAll('[data-twin]').forEach((b) => { b.onclick = () => { closeModal(); openClient(b.dataset.twin); }; });
+  ov.querySelectorAll('[data-merge]').forEach((b) => { b.onclick = () => { closeModal(); mergeAsk(id, b.dataset.merge); }; });
   ov.querySelector('[data-m=yes]').onclick = async (e) => {
     e.target.disabled = true;
     const { data, error } = await db.from('clients').delete().eq('id', id).select('id');
     if (error) { e.target.disabled = false; toast('Could not delete — try again.', 'err'); return; }
     closeModal();
     if (!data || !data.length) { toast('You are not allowed to delete this client — ask the owner.', 'err'); return; }
-    toast('Client deleted', 'ok');
+    const undo = typeof binOn === 'function' && binOn();   // the owner: an Undo bar instead of the message
+    if (!undo) toast(S.dbv11 ? 'Client deleted — the owner can bring it back within 30 days' : 'Client deleted', 'ok');
     S.lastMet = null; S.leadCache = null; S.currentClientId = null;
     if (S.sub.length) { S.suppressPop = true; try { history.back(); } catch (_) {} goBack(); }   // leave its page
+    if (undo) binUndo(id);
   };
 }
 onAct('cl-delete', (el) => clientDeleteStart(el.dataset.id, el));
@@ -1831,6 +1850,7 @@ async function renderMore() {
     (isOwner && typeof renderReports === 'function' ? mrow('rep-open', '📊', 'Reports', 'Orders, items, diamonds, delivery — filter and download') : '') +
     (typeof renderBoard === 'function' && !boardIsTab() ? mrow('bd-open', '🗂️', 'Production board', 'Every open order under its step · one tap to move it on') : '') +
     (typeof renderPayDues === 'function' && appOn('payments') ? mrow('dues-open', '💰', 'Payment dues', 'Which party has to pay and by when · reminders') : '') +
+    (typeof binOn === 'function' && binOn() ? mrow('bin-open', '🗑️', 'Deleted clients', 'Bring back a client deleted in the last 30 days') : '') +
     (typeof renderVendors === 'function' && appOn('vendors') ? mrow('v-list', '🏭', 'Vendors', 'Who makes your orders · diamonds to give them') : '') +
     (typeof renderKarigars === 'function' && appOn('karigars') ? mrow('k-list', '🔨', 'Karigars', 'Metal given and received back') : '') +
     (typeof repairsOn === 'function' && repairsOn() ? mrow('rp-list', '🔧', 'Repairs', 'Pieces shops send back — resize, polish, repair') : '') +

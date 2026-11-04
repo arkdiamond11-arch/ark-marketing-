@@ -61,15 +61,54 @@ function payDueGroups(index) {
   };
 }
 
-/* ---------------- WhatsApp reminder (no amount) ---------------- */
-function payReminderText(cl, dueOn) {
+/* ---------------- WhatsApp reminder (no amount) — in English, Hindi or Gujarati ---------------- */
+function payReminderText(cl, dueOn, lang) {
   const name = cl.contact_person || cl.trade_name || '';
   const t = todayStr();
-  const when = dueOn < t ? 'your payment was due on ' + fmtDLong(dueOn)
-    : dueOn === t ? 'your payment is due today (' + fmtDLong(dueOn) + ')'
+  const was = dueOn < t, today = dueOn === t;
+  if (lang === 'hi' || lang === 'gu') {
+    const d = dueOn.slice(8, 10) + '-' + dueOn.slice(5, 7) + '-' + dueOn.slice(0, 4);   // 05-11-2026
+    if (lang === 'hi') {
+      return ['नमस्ते ' + name + ' जी,', '', bizName() + ' की ओर से एक विनम्र याद — ' +
+        (was ? 'आपका पेमेंट ' + d + ' को देना था।' : today ? 'आपका पेमेंट आज (' + d + ') देना है।' : 'आपका पेमेंट ' + d + ' को देना है।'), '',
+        'कृपया जल्द से जल्द व्यवस्था करें। धन्यवाद!'].join('\n');
+    }
+    return ['નમસ્તે ' + name + ',', '', bizName() + ' તરફથી એક નમ્ર યાદ — ' +
+      (was ? 'તમારું પેમેન્ટ ' + d + ' ના રોજ આપવાનું હતું.' : today ? 'તમારું પેમેન્ટ આજે (' + d + ') આપવાનું છે.' : 'તમારું પેમેન્ટ ' + d + ' ના રોજ આપવાનું છે.'), '',
+      'કૃપા કરીને વહેલી તકે વ્યવસ્થા કરશો. આભાર!'].join('\n');
+  }
+  const when = was ? 'your payment was due on ' + fmtDLong(dueOn)
+    : today ? 'your payment is due today (' + fmtDLong(dueOn) + ')'
       : 'your payment is due on ' + fmtDLong(dueOn);
   return ['Namaste ' + name + ',', '', 'This is a gentle reminder from ' + bizName() + ' — ' + when + '.', '',
     'Kindly arrange it at your earliest convenience. Thank you!'].join('\n');
+}
+/* choose the language, see (and change) the message, then WhatsApp */
+const PAY_LANGS = [['en', 'English'], ['hi', 'हिन्दी'], ['gu', 'ગુજરાતી']];
+function payRemindAsk(cl, dueOn) {
+  if (!cl.mobile) { toast('No mobile number is saved for this party.', 'err'); return; }
+  let lang = null;
+  try { lang = localStorage.getItem('payLang:' + cl.id); } catch (e) { lang = null; }
+  if (!PAY_LANGS.some((x) => x[0] === lang)) lang = PAY_LANGS.some((x) => x[0] === (typeof LANG !== 'undefined' && LANG)) ? LANG : 'en';
+  const ov = openModal('<h3>Payment reminder</h3>' +
+    '<div class="seg pay-langs">' + PAY_LANGS.map((x) => '<button type="button" class="noi18n" data-l="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' +
+    '<textarea id="pay-msg" class="pay-msg" rows="7"></textarea>' +
+    '<div class="modal-actions"><button class="btn btn-secondary" data-m="no">Cancel</button>' +
+    '<button class="btn btn-primary" data-m="yes">Open WhatsApp</button></div>');
+  const set = (l) => {
+    lang = l;
+    ov.querySelectorAll('.pay-langs button').forEach((b) => b.classList.toggle('on', b.dataset.l === l));
+    ov.querySelector('#pay-msg').value = payReminderText(cl, dueOn, l);
+  };
+  ov.querySelectorAll('.pay-langs button').forEach((b) => { b.onclick = () => set(b.dataset.l); });
+  set(lang);
+  ov.querySelector('[data-m=no]').onclick = closeModal;
+  ov.querySelector('[data-m=yes]').onclick = () => {
+    const text = ov.querySelector('#pay-msg').value.trim();
+    try { localStorage.setItem('payLang:' + cl.id, lang); } catch (e) { /* private mode */ }
+    closeModal();
+    if (text) openWa(cl.mobile, text);
+  };
 }
 
 /* ---------------- the Payment card on a party's page ---------------- */
@@ -217,11 +256,11 @@ onAct('pay-set', (el) => { const P = S.payClient; if (P) openPayStatusModal(P.cl
 onAct('pay-wa', () => {
   const P = S.payClient;
   const cur = P && P.rows[0];
-  if (cur && cur.status === 'due') openWa(P.cl.mobile, payReminderText(P.cl, cur.on_date));
+  if (cur && cur.status === 'due') payRemindAsk(P.cl, cur.on_date);
 });
 onAct('pay-remind', (el) => {
   const e = S.payDues && S.payDues[+el.dataset.idx];
-  if (e) openWa(e.cl.mobile, payReminderText(e.cl, e.cur.on_date));
+  if (e) payRemindAsk(Object.assign({ id: e.id }, e.cl), e.cur.on_date);
 });
 onAct('pay-quick-done', (el) => {
   const e = S.payDues && S.payDues[+el.dataset.idx];

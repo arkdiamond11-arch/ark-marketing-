@@ -984,3 +984,37 @@ input.sw:disabled { cursor: default; }
   background: var(--bg); border-radius: 10px; cursor: pointer; }
 .member-row .m-perm .sw-t b { font-size: 14px; }
 .member-row .m-perm .sw-t span { font-size: 12px; }
+
+/* ---------- v21: saved twice · merge · deleted clients · trip · payment reminder ---------- */
+.dup-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0 3px; }
+.dup-row > span { min-width: 0; }
+.dup-row b { display: block; font-size: 14.5px; color: var(--ink); }
+.dup-row small { display: block; color: var(--muted); font-size: 12.5px; }
+.dup-row a, .dup-row .btn { flex: none; }
+.dup-list { border: 1px solid var(--line); border-radius: 12px; padding: 2px 12px 8px; margin: 0 0 14px; }
+.dup-list .dup-row + .dup-row { border-top: 1px solid var(--line); }
+.cl-del-row { flex-wrap: wrap; gap: 6px; }
+.cd-btns { display: flex; flex-direction: column; gap: 6px; flex: none; }
+.modal.mg-modal { max-height: 92vh; overflow-y: auto; }
+.mg-list { max-height: 44vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; padding: 2px 12px; margin-bottom: 14px; }
+.mg-side > span { display: block; font-size: 11.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+.mg-side .cd-name { margin: 4px 0 10px; }
+.modal .cd-name.mg-dup { background: #fbeceb; }
+.bin-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 10px; }
+.bin-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bin-main b { font-size: 15.5px; }
+.bin-main span, .bin-main small { color: var(--muted); font-size: 12.5px; }
+.bin-main .bin-note { color: var(--maroon); font-weight: 650; }
+.trip-pick { padding: 12px 14px; margin-bottom: 10px; }
+.trip-stats { display: flex; gap: 12px; flex-wrap: wrap; margin: 2px 4px 10px; font-size: 13px; color: var(--muted); font-weight: 650; }
+.trip-stats .ok { color: var(--green); }
+.trip-acts { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
+.trip-tick { flex: none; width: 30px; height: 30px; border-radius: 9px; border: 2px solid #cfc8cf; background: #fff; color: #fff;
+  font-size: 17px; font-weight: 800; line-height: 1; padding: 0; cursor: pointer; }
+.trip-tick.on { background: var(--maroon); border-color: var(--maroon); }
+.trip-item.picked { box-shadow: 0 0 0 2px var(--maroon-soft), var(--shadow); }
+.chip.chip-trip-met { background: #e3f4ea; color: var(--green); }
+.chip.chip-trip-sleep { background: #eceef6; color: #4a5470; }
+.pay-langs { margin: 4px 0 10px; }
+.modal .pay-msg { width: 100%; border: 1.5px solid var(--line); border-radius: 11px; padding: 11px 12px; font: inherit; font-size: 14.5px;
+  min-height: 150px; margin: 0 0 14px; resize: vertical; background: #fff; }

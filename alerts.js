@@ -76,7 +76,9 @@ async function renderAlerts() {
       h += '<div class="card al-card on"><div class="al-ic">✅</div><b>Alerts are on for this phone</b></div>' +
         '<div class="section-label">Alerts on this phone</div><div class="card sw-card">' +
         sw('steps', 'Orders moving to a new step', (owner ? 'Every order as it moves' : 'Orders you took, as they move') + ' — CAD done, Finished, Delivered…') +
-        sw('today', 'Morning summary, 8:30 am', 'Reminders, orders due or late, repairs ready, pieces to collect') + '</div>' +
+        sw('today', 'Morning summary, 8:30 am', 'Reminders, orders due or late, repairs ready, pieces to collect') +
+        (S.dbv11 ? sw('evening', owner ? 'Evening summary, 7 pm' : 'Evening reminder, 7 pm',   // database update 11
+          owner ? 'Who logged meetings today' : 'Log today\'s meetings — how many you have logged so far') : '') + '</div>' +
         '<div class="action-row"><button class="btn btn-secondary" data-action="al-test" id="al-test">Send a test alert</button>' +
         '<button class="btn btn-ghost" data-action="al-off">Turn off on this phone</button></div>';
     } else {
