@@ -141,8 +141,13 @@ onAct('bd-late', () => openBoardShowing('late'));
 onAct('bd-stuck', () => openBoardShowing('stuck'));
 
 /* ---------------- one tap: move an order to its next stage ---------------- */
-async function quickMove(id, s, btn) {
+async function quickMove(id, s, btn, checked) {
   if (S.moving) return;   // one at a time — the cards move when the board is drawn again
+  if (s === 'delivered' && !checked && typeof creditOn === 'function' && creditOn()) {   // credit rules (credit.js): ask before delivering
+    const o = await fetchOrder(id);
+    if (o) creditCheckDelivery(o, () => quickMove(id, s, btn, true));
+    return;
+  }
   S.moving = true;
   if (btn) btn.disabled = true;
   try {
@@ -490,6 +495,13 @@ function renderAppSettings() {
     '<div class="section-label">When is an order stuck?</div>' +
     '<div class="card sd-card"><p class="hint" style="margin:0 0 8px">Days an order can stay in one step before it shows as stuck on Today and on the Board. 0 = never.</p>' +
     ['new'].concat(STEP_CHOICES).map(sd).join('') + '</div>' +
+    (typeof visitDays === 'function' ? '<div class="section-label">Visit plan</div>' +
+      '<div class="card sd-card"><p class="hint" style="margin:0 0 8px">How often each shop should be visited, by its customer category — counted from the last meeting. 0 = no plan for that category.</p>' +
+      VISIT_CATS.map((k) => '<label class="sd-row"><span>' + esc('Category ' + k + ' — every') + '</span><input type="number" inputmode="numeric" min="0" max="365" id="vd-' + k + '" value="' +
+        visitDays(k) + '"><span class="sd-unit">days</span></label>').join('') + '</div>' : '') +
+    (S.dbv12 && typeof creditDaysDefault === 'function' ? '<div class="section-label">Credit rules</div>' +
+      '<div class="card sd-card"><p class="hint" style="margin:0 0 8px">A new approved order needs your OK when the shop\'s payment is late by more than this. A shop can have its own number: its page → Credit rules.</p>' +
+      '<label class="sd-row"><span>Payment can be late by up to</span><input type="number" inputmode="numeric" min="0" max="365" id="cd-days" value="' + creditDaysDefault() + '"><span class="sd-unit">days</span></label></div>' : '') +
     '<div class="section-label">Sections of the app</div>' +
     '<div class="card sw-card">' + appSectionsShown().map((s) => sw('sw-' + s[0], !off.has(s[0]), s[1], s[2])).join('') + '</div>' +
     '<button class="btn btn-primary" data-action="opt-save" id="opt-save">Save settings</button><div style="height:10px"></div>';
@@ -509,6 +521,13 @@ async function saveAppSettings() {
     stuck[k] = isFinite(v) && v >= 0 ? Math.min(v, 365) : stuckLimit(k);
   });
   const opts = Object.assign({}, appOpts(), { off, steps, stuck });
+  if (typeof visitDays === 'function' && $('#vd-A')) {   // visit plan (plan.js)
+    const visit = {};
+    VISIT_CATS.forEach((k) => { const el = $('#vd-' + k), v = el ? parseInt(el.value, 10) : NaN; visit[k] = isFinite(v) && v >= 0 ? Math.min(v, 365) : visitDays(k); });
+    opts.visit = visit;
+  }
+  const cd = $('#cd-days');   // credit rules (credit.js)
+  if (cd) { const v = parseInt(cd.value, 10); opts.credit_days = isFinite(v) && v >= 0 ? Math.min(v, 365) : creditDaysDefault(); }
   const btn = $('#opt-save');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   const { data, error } = await db.from('business_settings').update({ app_options: opts, updated_by: S.me.id }).eq('id', 1).select('*');
@@ -519,6 +538,7 @@ async function saveAppSettings() {
   }
   S.biz = data[0];
   S.bizAt = Date.now();
+  S.vpData = null;   // the visit plan is worked out again with the new days
   toast('Settings saved ✓', 'ok');
   if (S.sub.length) { S.suppressPop = true; try { history.back(); } catch (e) { /* ignore */ } }
   S.sub = [];

@@ -447,7 +447,7 @@ async function renderToday() {
   }
   c.innerHTML = '<div id="today-late"></div><div id="today-stuck"></div><div id="today-summary"></div><div id="today-targets"></div><div id="today-wishes"></div>' +
     '<div id="today-pay"></div><div id="today-orders"></div><div id="today-repairs"></div><div id="today-approvals"></div>' + html +
-    '<div id="today-sleep"></div>';
+    '<div id="today-visits"></div><div id="today-sleep"></div>';
   if (typeof renderTodaySummary === 'function') renderTodaySummary($('#today-summary'));
   if (typeof renderMyTargets === 'function' && appOn('targets')) renderMyTargets($('#today-targets'));
   if (typeof loadTodayPay === 'function' && appOn('payments')) loadTodayPay();
@@ -456,6 +456,7 @@ async function renderToday() {
   if (typeof loadTodayWishes === 'function') loadTodayWishes();
   if (typeof loadTodayRepairs === 'function') loadTodayRepairs();
   if (typeof loadTodayApprovals === 'function') loadTodayApprovals();
+  if (typeof loadTodayVisits === 'function') loadTodayVisits();
 }
 
 /* ============================================================
@@ -818,7 +819,8 @@ function renderClientForm(existing, pre, source) {
     '<div class="card">' +
     '<div class="field"><label>Buys Polki jewellery? <span class="req">*</span></label>' + segHTML('polki', ['Yes', 'No', 'Undefined'], S.formState.polki) + '</div>' +
     '<div class="field"><label>Customer category (volume of work)</label>' + segHTML('category', ['A', 'B', 'C', 'Undefined'], S.formState.category) +
-    '<div class="hint">A = highest volume · C = lowest</div></div>' +
+    '<div class="hint">A = highest volume · C = lowest' + (typeof visitPlanOn === 'function' && visitPlanOn()
+      ? ' · Visits: ' + VISIT_CATS.map((k) => k + ' ' + (visitDays(k) ? 'every ' + visitDays(k) + ' days' : 'no plan')).join(', ') : '') + '</div></div>' +
     '<div class="field"><label>Order type <span class="req">*</span></label>' + segHTML('order_type', ['Job work', 'Outright', 'Both'], S.formState.order_type) + '</div>' +
     '<div class="field"><label>Client interest (lead quality) <span class="req">*</span></label>' + segHTML('interest', ['Hot', 'Warm', 'Cold'], S.formState.interest, { Hot: 'hot', Warm: 'warm', Cold: 'cold' }) +
     '<div class="hint">Hot = high interest · Warm = medium · Cold = low</div></div>' +
@@ -958,7 +960,7 @@ async function saveClient(editId) {
     if (editId) { openClient(editId, true); return; }
 
     // the client's page comes first (so the form can't be saved twice), then: reminder · first visit · meeting
-    S.lastMet = null; S.leadCache = null;
+    S.lastMet = null; S.leadCache = null; S.vpData = null;
     await openClient(clientId, true);
     const client = await fetchClient(clientId);
     if (client && typeof afterNewClient === 'function') { afterNewClient(client); return; }
@@ -999,8 +1001,9 @@ function clientSortKey() {
 
 /* which clients the list shows: all · no order yet · near me (for this visit to the app only) */
 function clientShows() {
-  return [['all', 'All'], ['lead', 'No order yet'], ['sleep', '😴 Sleeping'], ['near', '📍 Near me'], ['trip', '🧳 Trip']].filter((x) =>
+  return [['all', 'All'], ['lead', 'No order yet'], ['sleep', '😴 Sleeping'], ['visit', '🗓️ Visits'], ['near', '📍 Near me'], ['trip', '🧳 Trip']].filter((x) =>
     x[0] === 'all' || (x[0] === 'lead' && typeof runLeadList === 'function') || (x[0] === 'sleep' && typeof runSleepList === 'function') ||
+    (x[0] === 'visit' && typeof runVisitList === 'function' && visitPlanOn()) ||
     (x[0] === 'near' && typeof runNearList === 'function' && appOn('location')) || (x[0] === 'trip' && typeof runTripList === 'function'));
 }
 function clientShowKey() {
@@ -1117,6 +1120,7 @@ async function runSearch(qRaw) {
   const show = clientShowKey();
   if (show === 'lead') return runLeadList(qRaw);
   if (show === 'sleep') return runSleepList(qRaw);
+  if (show === 'visit') return runVisitList(qRaw);
   if (show === 'near') return runNearList(qRaw);
   if (show === 'trip') return runTripList(qRaw);
   const q = String(qRaw || '').trim().replace(/[,%()]/g, ' ').trim();
@@ -1203,6 +1207,9 @@ async function openClient(id, replace) {
     if (typeof loadClientOrders === 'function') loadClientOrders(cl);
     if (typeof loadClientRepairs === 'function') loadClientRepairs(cl);
     if (typeof loadClientApprovals === 'function') loadClientApprovals(cl);
+    if (typeof loadClientCredit === 'function') loadClientCredit(cl);
+    if (typeof loadClientPicks === 'function') loadClientPicks(cl);
+    if (typeof loadClientVisit === 'function') loadClientVisit(cl);
   }, replace);
 }
 
@@ -1230,7 +1237,9 @@ function renderClientPage(cl) {
     '<div class="client-head"><h2>' + esc(cl.trade_name) + '</h2>' +
     (cl.company_name && cl.company_name !== cl.trade_name ? '<div class="co">' + esc(cl.company_name) + '</div>' : '') +
     '<div class="chips">' + chipCat(cl.category) + chipInterest(cl.interest) +
-    (cl.order_type ? '<span class="chip">' + esc(cl.order_type) + '</span>' : '') + '</div></div>' +
+    (cl.order_type ? '<span class="chip">' + esc(cl.order_type) + '</span>' : '') +
+    (cl.credit_hold && typeof creditOn === 'function' && creditOn() ? '<span class="chip cr-hold">⛔ On hold</span>' : '') +
+    '<span id="cl-visit"></span></div></div>' +
 
     '<div class="action-row">' +
     '<button class="btn btn-primary" data-action="new-interaction" data-id="' + cl.id + '">＋ Meeting</button>' +
@@ -1240,6 +1249,8 @@ function renderClientPage(cl) {
     (more.length ? '<div class="o-more-acts">' + more.join('') + '</div>' : '') +
     (typeof quickRemindHTML === 'function' ? quickRemindHTML(cl.id) : '') +
     '<div id="client-pay"></div>' +
+    '<div id="client-credit"></div>' +
+    '<div id="client-picks"></div>' +
 
     '<div class="card">' + (rows.join('') || '<div class="empty" style="padding:6px">No details yet</div>') +
     (typeof clientLocRowHTML === 'function' && appOn('location') ? clientLocRowHTML(cl) : '') + '</div>' +
@@ -1406,7 +1417,7 @@ async function clientDeleteStart(id, btn) {
     if (!data || !data.length) { toast('You are not allowed to delete this client — ask the owner.', 'err'); return; }
     const undo = typeof binOn === 'function' && binOn();   // the owner: an Undo bar instead of the message
     if (!undo) toast(S.dbv11 ? 'Client deleted — the owner can bring it back within 30 days' : 'Client deleted', 'ok');
-    S.lastMet = null; S.leadCache = null; S.currentClientId = null;
+    S.lastMet = null; S.leadCache = null; S.vpData = null; S.currentClientId = null;
     if (S.sub.length) { S.suppressPop = true; try { history.back(); } catch (_) {} goBack(); }   // leave its page
     if (undo) binUndo(id);
   };
@@ -1512,7 +1523,7 @@ async function saveInteraction() {
     await db.from('clients').update({ interest: interestAfter }).eq('id', cl.id);
   }
 
-  S.lastMet = null; S.leadCache = null;   // the client lists show the newest meeting
+  S.lastMet = null; S.leadCache = null; S.vpData = null;   // the client lists show the newest meeting
   toast(typeof offQueuedSince === 'function' && offQueuedSince(t0) ? 'Meeting saved on this phone — it will be sent when the internet is back' : 'Meeting recorded ✓', 'ok');
   await openClient(cl.id, true);
 

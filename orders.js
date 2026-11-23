@@ -343,6 +343,7 @@ async function shotUrls(refs) {
   const m = new Map();
   a.forEach((u, p) => m.set('orders|' + p, u));
   b.forEach((u, p) => m.set('catalogue|' + p, u));
+  if (typeof promoUrl === 'function') refs.filter((f) => f[0] === 'promo').forEach((f) => m.set('promo|' + f[1], promoUrl(f[1])));   // design picks
   return m;
 }
 
@@ -481,12 +482,14 @@ function blankItem(prev) {
 function startNewOrder(client, typeKey, replace) {
   const pending = S.pendingCatItems || null;
   S.pendingCatItems = null;
+  const pick = S.pendingPick || null;   // the designs a shop picked (picks.js) — set just before this call
+  S.pendingPick = null;
   if (pending && pending.length && !typeKey) typeKey = 'ready_stock';
   S.ord = {
-    id: null, orderNo: null, status: null, oldItemIds: [], oldCatIds: [],
+    id: null, orderNo: null, status: null, oldItemIds: [], oldCatIds: [], fromPick: pick ? pick.id : null,
     client: { id: client.id, trade_name: client.trade_name, city: client.city },
-    items: [blankItem()],
-    o: { order_date: todayStr(), due_date: '', karigar_id: '', vendor_id: '' },
+    items: pick && pick.items.length ? pick.items : [blankItem()],
+    o: { order_date: todayStr(), due_date: '', karigar_id: '', vendor_id: '', notes: pick && pick.note ? pick.note : '' },
   };
   S.formState = { o_type: typeKey ? OTYPE_LABEL[typeKey] : null, o_metal: 'Gold', o_purity: '22K', o_jw_purity: '22K' };
   if (pending && pending.length && typeof addCatItemsToOrder === 'function') addCatItemsToOrder(pending);
@@ -910,13 +913,23 @@ function itemHasContent(it) {
     num(it.net_wt) || num(it.gross_wt) || it._photo || it.photo_path || it._copy || it.catalogue_id || it.diamond_type);
 }
 
-async function saveOrder(asQuote) {
+async function saveOrder(asQuote, credit) {
   const t = curOType();
   if (!t) { toast('Choose the order type first.', 'err'); try { $('#order-form').scrollIntoView({ behavior: 'smooth' }); } catch (_) {} return; }
   const items = S.ord.items.filter(itemHasContent);
   if (!items.length) { toast('Add at least one item.', 'err'); return; }
   const o = formOrderObj();
   const isNew = !S.ord.id;
+  // credit rules (credit.js): a new approved order for a shop that is late to pay, on hold or at its limit
+  if (isNew && !asQuote && !credit && typeof creditOn === 'function' && creditOn()) {
+    const ord = S.ord;
+    const probs = await creditProblems(ord.client.id);
+    if (S.ord !== ord) return;   // left the form meanwhile
+    if (probs.length) {
+      creditAskOrder(probs, ord.client.trade_name, () => saveOrder(false, { ok: probs }), () => saveOrder(true, { quote: probs }));
+      return;
+    }
+  }
   const kg = t !== 'ready_stock';
   const kid = kg ? (o.karigar_id || null) : null;
   const kRow = kid ? (S.karigars || []).find((k) => k.id === kid) : null;
@@ -1007,12 +1020,15 @@ async function saveOrder(asQuote) {
   if (row.karigar_id || !isNew) await syncOrderKarigarTxns(id, row, ordNo(orderNo) + ' · ' + (S.ord.client.trade_name || ''));
 
   const dueMoved = !isNew && (S.ord.origDue || '') !== (row.due_date || '');
+  const crNote = credit && typeof creditNoteText === 'function' ? ' · ' + (credit.ok ? creditNoteText(credit.ok, true) : creditNoteText(credit.quote, false)) : '';
   await db.from('order_updates').insert({
     order_id: id, status: isNew ? status : null,
-    note: isNew ? (asQuote ? 'Quotation created' : 'Order created') + (S.ord.repeatOf ? ' · ' + ordNo(S.ord.repeatOf) + ' repeated' : '')
+    note: isNew ? (asQuote ? 'Quotation created' : 'Order created') + (S.ord.repeatOf ? ' · ' + ordNo(S.ord.repeatOf) + ' repeated' : '') +
+      (S.ord.fromPick ? ' · From the designs the shop picked' : '') + crNote
       : 'Details edited' + (dueMoved ? ' · ' + (typeof dueChangeText === 'function' ? dueChangeText(S.ord.origDue, row.due_date) : 'Delivery date changed') : ''),
     created_by: S.me.id,
   });
+  if (isNew && S.ord.fromPick && typeof pickOrdered === 'function') await pickOrdered(S.ord.fromPick, id, S.ord.client.id);
 
   if (!itErr) {
     toast(photoFail ? 'Saved — but a design photo could not be uploaded.' : (isNew ? (asQuote ? 'Quotation saved ✓' : 'Order saved ✓') : 'Saved ✓'), photoFail ? 'err' : 'ok');
@@ -1267,7 +1283,8 @@ async function setOrderStatus(id, s) {
     confirmModal('Cancel this order?', 'It stays on record as Cancelled. You can reopen it later.', 'Cancel order', go, true);
   } else if (ORDER_STAGES.indexOf(s) > -1 && stageIndex(o.status) > ORDER_STAGES.indexOf(s)) {
     confirmModal('Move back to ' + OSTATUS_LABEL[s] + '?', 'The order is at ' + OSTATUS_LABEL[o.status] + ' now.', 'Move back', go);
-  } else go();
+  } else if (s === 'delivered' && typeof creditCheckDelivery === 'function') creditCheckDelivery(o, go);
+  else go();
 }
 
 /* a catalogue piece can only be in one order — pieces of this order that were taken meanwhile */
@@ -1282,16 +1299,22 @@ function warnPiecesTaken(taken, yesLabel, onYes) {
   confirmModal('Piece not available', taken.map((c) => (c.tag_no || c.title || 'A piece') + ' (' + String(CAT_STATUS_LABEL[c.status] || c.status).toLowerCase() + ')').join(', ') +
     ' — already in another order or sold. Continue anyway?', yesLabel, onYes);
 }
-async function convertQuote(id) {
+async function convertQuote(id, credit) {
+  if (!credit && typeof creditOn === 'function' && creditOn()) {   // credit rules (credit.js)
+    const o = await fetchOrder(id);
+    if (!o) return;
+    const probs = await creditProblems(o.client_id);
+    if (probs.length) { creditAskApprove(probs, o.clients && o.clients.trade_name, () => convertQuote(id, probs)); return; }
+  }
   const taken = await piecesTaken(id);
-  if (taken.length) { warnPiecesTaken(taken, 'Approve anyway', () => doConvertQuote(id)); return; }
-  doConvertQuote(id);
+  if (taken.length) { warnPiecesTaken(taken, 'Approve anyway', () => doConvertQuote(id, credit)); return; }
+  doConvertQuote(id, credit);
 }
 /* the client approved the quotation → it becomes an order (dated today) */
-async function doConvertQuote(id) {
+async function doConvertQuote(id, credit) {
   const { error } = await db.from('orders').update({ status: 'new', order_date: todayStr() }).eq('id', id);
   if (error) { toast('Could not update — try again.', 'err'); return; }
-  await db.from('order_updates').insert({ order_id: id, status: 'new', note: 'Quotation approved', created_by: S.me.id });
+  await db.from('order_updates').insert({ order_id: id, status: 'new', note: 'Quotation approved' + (credit && credit.length ? ' · ' + creditNoteText(credit, true) : ''), created_by: S.me.id });
   await syncCatalogueForOrder(id, 'new');
   toast('Quotation approved ✓', 'ok');
   openOrder(id, true);

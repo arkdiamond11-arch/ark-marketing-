@@ -78,7 +78,8 @@ async function renderAlerts() {
         sw('steps', 'Orders moving to a new step', (owner ? 'Every order as it moves' : 'Orders you took, as they move') + ' — CAD done, Finished, Delivered…') +
         sw('today', 'Morning summary, 8:30 am', 'Reminders, orders due or late, repairs ready, pieces to collect') +
         (S.dbv11 ? sw('evening', owner ? 'Evening summary, 7 pm' : 'Evening reminder, 7 pm',   // database update 11
-          owner ? 'Who logged meetings today' : 'Log today\'s meetings — how many you have logged so far') : '') + '</div>' +
+          owner ? 'Who logged meetings today' : 'Log today\'s meetings — how many you have logged so far') : '') +
+        (S.dbv12 ? sw('picks', 'Shops picking designs', owner ? 'When a shop sends the designs it likes' : 'When a shop you sent a message to picks designs') : '') + '</div>' +
         '<div class="action-row"><button class="btn btn-secondary" data-action="al-test" id="al-test">Send a test alert</button>' +
         '<button class="btn btn-ghost" data-action="al-off">Turn off on this phone</button></div>';
     } else {
@@ -217,18 +218,19 @@ document.addEventListener('visibilitychange', () => {
   AL_WAITING.clear();
 });
 
-/* a tapped alert opens its order: index.html#o=<order id> */
+/* a tapped alert opens its order (index.html#o=<order id>) or its message with the shops' picks (#k=<message id>) */
 function alertOpenUrl(u) {
-  const m = /#o=([0-9a-f-]{36})/i.exec(String(u || ''));
+  const m = /#([ok])=([0-9a-f-]{36})/i.exec(String(u || ''));
   if (!m || !S.me) return false;
   try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { /* ignore */ }
-  openOrder(m[1]);
+  if (m[1].toLowerCase() === 'o') openOrder(m[2]);
+  else if (typeof renderCampaign === 'function') showSub('Messages to shops', () => renderCampaign(m[2]));
   return true;
 }
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open') alertOpenUrl(e.data.url); });
 }
-window.addEventListener('hashchange', () => { if (/#o=/.test(location.hash)) alertOpenUrl(location.hash); });
+window.addEventListener('hashchange', () => { if (/#[ok]=/.test(location.hash)) alertOpenUrl(location.hash); });
 
 onAct('al-open', () => showSub('Phone alerts', renderAlerts));
 onAct('al-setup', (el) => alertSetup(el.dataset.again === '1'));

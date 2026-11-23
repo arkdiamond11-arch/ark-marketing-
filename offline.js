@@ -233,7 +233,7 @@ async function offFlush() {
   } catch (e) { /* next time */ } finally { OFF.flushing = false; }
   if (sent && typeof toast === 'function') toast(sent === 1 ? 'Sent what was saved without internet ✓' : 'Sent ' + sent + ' entries saved without internet ✓', 'ok');
   if (refused.length && typeof toast === 'function') toast(refused.length === 1 ? 'A saved entry could not be sent — enter it again' : refused.length + ' saved entries could not be sent — enter them again', 'err');
-  if (sent && typeof S !== 'undefined') { S.lastMet = null; S.leadCache = null; }
+  if (sent && typeof S !== 'undefined') { S.lastMet = null; S.leadCache = null; S.vpData = null; }
   offBar();
 }
 

@@ -10,11 +10,13 @@
 'use strict';
 
 const TRIP_SORTS = [['old', 'Not met longest'], ['hot', 'Hot first'], ['area', 'By area']];
+/* "Visit due first" when the visit plan is on (plan.js) */
+function tripSorts() { return typeof visitPlanOn === 'function' && visitPlanOn() ? TRIP_SORTS.concat([['due', 'Visit due first']]) : TRIP_SORTS; }
 function tripCityKey(s) { return String(s || '').trim().toLowerCase().replace(/\s+/g, ' '); }
 function tripStoreKey() { return 'trip:' + ((S.me && S.me.id) || ''); }
 function tripLoad() { try { return JSON.parse(localStorage.getItem(tripStoreKey()) || 'null') || {}; } catch (e) { return {}; } }
 function tripSave(t) { try { localStorage.setItem(tripStoreKey(), JSON.stringify(t)); } catch (e) { /* private mode */ } }
-function tripSortKey() { return TRIP_SORTS.some((x) => x[0] === S.tripSort) ? S.tripSort : 'old'; }
+function tripSortKey() { return tripSorts().some((x) => x[0] === S.tripSort) ? S.tripSort : 'old'; }
 
 /* the cities with their shops, the most shops first (each city once, however it was typed) */
 function tripCities(clients) {
@@ -36,7 +38,7 @@ async function tripData() {
   const C = leadCache('trip');
   if (C) return C;
   const [clients, orders, met, pay, today] = await Promise.all([
-    fetchPaged(() => db.from('clients').select(LEAD_COLS + ', address, lat, lng').order('id', { ascending: true })),
+    fetchPaged(() => db.from('clients').select(LEAD_COLS + ', address, lat, lng' + (S.dbv12 ? ', credit_hold' : '')).order('id', { ascending: true })),
     fetchPaged(() => db.from('orders').select('client_id, status, order_date').order('id', { ascending: true })),
     lastMeetingMap(),
     typeof payAllEntries === 'function' ? payAllEntries().catch(() => []) : Promise.resolve([]),
@@ -61,6 +63,8 @@ function tripInfo(D, c) {
     due: p && p.cur && p.cur.status === 'due' ? p.cur.on_date : '',
     sleeping: D.sleeping.has(c.id),
     today: D.metToday.has(c.id),
+    vp: typeof visitInfo === 'function' && visitPlanOn() ? visitInfo(c, D.met.get(c.id)) : null,
+    hold: !!c.credit_hold && typeof creditOn === 'function' && creditOn(),
   };
 }
 function tripSorted(list, D, how) {
@@ -76,12 +80,20 @@ function tripSorted(list, D, how) {
     hot: (a, b) => ((a.interest in rank ? rank[a.interest] : 3) - (b.interest in rank ? rank[b.interest] : 3)) || notMet(a, b),
     area: (a, b) => { const x = String(a.area || '').toLowerCase(), y = String(b.area || '').toLowerCase();
       return (!x !== !y ? (x ? -1 : 1) : x.localeCompare(y)) || String(a.trade_name || '').localeCompare(String(b.trade_name || '')); },
-  }[how];
+    due: (a, b) => {   // the most late for a visit first, then the next due; shops without a plan last
+      const va = typeof visitInfo === 'function' ? visitInfo(a, D.met.get(a.id)) : null, vb = typeof visitInfo === 'function' ? visitInfo(b, D.met.get(b.id)) : null;
+      if (!va !== !vb) return va ? -1 : 1;
+      if (!va) return notMet(a, b);
+      return (vb.late - va.late) || (va.dueOn < vb.dueOn ? -1 : va.dueOn > vb.dueOn ? 1 : 0) || notMet(a, b);
+    },
+  }[how] || notMet;
   return list.slice().sort(by);
 }
 
 function tripRowHTML(c, i, picked) {
   const chips = (i.today ? '<span class="chip chip-trip-met">✓ Met today</span>' : '') +
+    (i.hold ? '<span class="chip cr-hold">⛔ On hold</span>' : '') +
+    (i.vp && !i.today ? visitChipHTML(i.vp) : '') +
     chipInterest(c.interest) +
     (i.open ? '<span class="chip chip-orders">' + esc(i.open === 1 ? '1 order in work' : i.open + ' orders in work') + '</span>' : '') +
     (i.due ? '<span class="chip pay-chip-' + (i.due < todayStr() ? 'late' : 'due') + '">' + esc('Payment due ' + fmtD(i.due)) + '</span>' : '') +
@@ -127,7 +139,7 @@ async function runTripList(qRaw) {
   const pickedList = tripSorted(inCity.filter((c) => picks.has(c.id)), D, tripSortKey());
   S.tripPicked = pickedList;
   const sorts = '<div class="filter-chips trip-sorts"><span class="cl-sort-lbl">Sort</span>' +
-    TRIP_SORTS.map((x) => '<button class="' + (x[0] === tripSortKey() ? 'on' : '') + '" data-action="trip-sort" data-v="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>';
+    tripSorts().map((x) => '<button class="' + (x[0] === tripSortKey() ? 'on' : '') + '" data-action="trip-sort" data-v="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>';
   const stats = '<div class="trip-stats"><span>' + esc(inCity.length === 1 ? '1 shop' : inCity.length + ' shops') + '</span>' +
     '<span>' + esc(picks.size + ' in the plan') + '</span>' + (metToday ? '<span class="ok">' + esc(metToday + ' met today') + '</span>' : '') + '</div>';
   const acts = pickedList.length ? '<div class="trip-acts">' +

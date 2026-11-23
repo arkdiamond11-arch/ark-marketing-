@@ -12,9 +12,15 @@
 const CAMP_MAX_PHOTOS = 8;
 const CAMP_WHO = [['all', 'All clients'], ['hot', 'Hot'], ['warm', 'Warm'], ['cold', 'Cold'], ['ordered', 'Ordered before'], ['lead', 'No order yet'], ['sleep', 'Sleeping']];
 function campaignsOn() { return !!S.dbv8 && appOn('messages'); }
-function showUrl(id) { return new URL('show.html#' + id, location.href).href; }
+/* the page the shops open; with the shop's own number (update 12) its choice comes back with its name */
+function showUrl(id, sendId) { return new URL('show.html#' + id + (sendId ? '.' + sendId : ''), location.href).href; }
 function promoUrl(path) { return String((window.APP_CONFIG || {}).SUPABASE_URL || '').replace(/\/$/, '') + '/storage/v1/object/public/promo/' + path.split('/').map(encodeURIComponent).join('/'); }
-function campText(k) { return k.message + '\n\n' + (k.photo_paths && k.photo_paths.length ? 'See the photos: ' : 'More: ') + showUrl(k.id) + '\n— ' + bizName(); }
+function campText(k, sendId) {
+  const photos = k.photo_paths && k.photo_paths.length;
+  const pick = photos && typeof picksOn === 'function' && picksOn();
+  return k.message + '\n\n' + (pick ? 'See the photos and tap the ones you like: ' : photos ? 'See the photos: ' : 'More: ') +
+    showUrl(k.id, pick ? sendId : null) + '\n— ' + bizName();
+}
 
 /* ---------------- the list ---------------- */
 async function renderCampaigns() {
@@ -23,9 +29,10 @@ async function renderCampaigns() {
   c.innerHTML = '<button class="btn btn-primary" data-action="camp-new" style="margin-bottom:12px">＋ New message</button>' +
     '<div class="notice">Write the message once, add photos of the new designs, choose the shops — then send it on WhatsApp one shop at a time with one tap each.</div>' +
     '<div id="camp-list">' + loadingHTML() + '</div>';
-  const [kr, sr] = await Promise.all([
+  const [kr, sr, pr] = await Promise.all([
     db.from('campaigns').select('*').order('created_at', { ascending: false }).limit(100),
     fetchPaged(() => db.from('campaign_sends').select('campaign_id, sent_at').order('id', { ascending: true })).catch(() => []),
+    typeof picksOn === 'function' && picksOn() ? fetchPaged(() => db.from('campaign_picks').select('id, campaign_id, status').order('id', { ascending: true })).catch(() => []) : Promise.resolve([]),
   ]);
   const box = $('#camp-list');
   if (!box) return;
@@ -34,13 +41,20 @@ async function renderCampaigns() {
   if (!list.length) { box.innerHTML = '<div class="empty"><div class="big">📣</div>No messages yet.</div>'; return; }
   const n = new Map();
   (sr || []).forEach((s) => { const x = n.get(s.campaign_id) || { all: 0, sent: 0 }; x.all++; if (s.sent_at) x.sent++; n.set(s.campaign_id, x); });
-  box.innerHTML = '<div class="section-label">Messages</div>' + list.map((k) => {
+  const pk = new Map();   // design picks: how many, how many new
+  (pr || []).forEach((p) => { const x = pk.get(p.campaign_id) || { all: 0, fresh: 0 }; x.all++; if (p.status === 'new') x.fresh++; pk.set(p.campaign_id, x); });
+  const fresh = (pr || []).filter((p) => p.status === 'new').length;
+  box.innerHTML = ((pr || []).length ? '<button class="more-row pk-row" data-action="pk-open"><span class="mr-ic">🛍️</span><span class="mr-t"><b>Design picks</b>' +
+      '<span>' + esc(fresh ? (fresh === 1 ? '1 new choice from a shop' : fresh + ' new choices from shops') : 'What the shops chose') + '</span></span><span class="mr-go">›</span></button>' : '') +
+    '<div class="section-label">Messages</div>' + list.map((k) => {
     const x = n.get(k.id) || { all: 0, sent: 0 };
+    const y = pk.get(k.id);
     return '<div class="list-item" data-action="camp-open" data-id="' + k.id + '"><div class="li-main">' +
       '<div class="li-title">' + esc(k.title) + '</div>' +
       '<div class="li-sub">' + esc(fmtD(k.created_at) + ' · ' + nameOf(k.created_by)) + '</div>' +
       '<div class="li-chips"><span class="chip ' + (x.all && x.sent === x.all ? 'chip-st-delivered' : 'chip-st-new') + '">' + esc(x.sent + ' of ' + x.all + ' sent') + '</span>' +
-      (k.photo_paths && k.photo_paths.length ? '<span class="chip">' + esc(k.photo_paths.length === 1 ? '1 photo' : k.photo_paths.length + ' photos') + '</span>' : '') + '</div>' +
+      (k.photo_paths && k.photo_paths.length ? '<span class="chip">' + esc(k.photo_paths.length === 1 ? '1 photo' : k.photo_paths.length + ' photos') + '</span>' : '') +
+      (y ? '<span class="chip ' + (y.fresh ? 'pk-st-new' : 'chip-st-delivered') + '">' + esc('🛍️ ' + (y.all === 1 ? '1 pick' : y.all + ' picks') + (y.fresh ? ' · ' + y.fresh + ' new' : '')) + '</span>' : '') + '</div>' +
       '</div>' + (k.photo_paths && k.photo_paths[0] ? '<img class="camp-thumb" src="' + esc(promoUrl(k.photo_paths[0])) + '" alt="">' : '<div class="li-go">›</div>') + '</div>';
   }).join('');
 }
@@ -171,14 +185,16 @@ async function saveCampaign() {
 async function renderCampaign(id) {
   const c = $('#content');
   c.innerHTML = loadingHTML();
-  const [kr, sr] = await Promise.all([
+  const [kr, sr, picks] = await Promise.all([
     db.from('campaigns').select('*').eq('id', id).maybeSingle(),
     fetchPaged(() => db.from('campaign_sends').select('id, client_id, sent_at, sent_by, clients(trade_name, contact_person, city, mobile)').eq('campaign_id', id).order('id', { ascending: true })),
-  ]).catch(() => [{ error: true }, []]);
+    typeof campaignPicks === 'function' ? campaignPicks(id).catch(() => []) : Promise.resolve([]),
+  ]).catch(() => [{ error: true }, [], []]);
   if (kr.error || !kr.data) { c.innerHTML = '<div class="empty">Could not load — try again.</div>'; return; }
   const k = kr.data;
-  S.camp = { k, rows: sr || [], show: (S.camp && S.camp.k.id === id && S.camp.show) || 'todo' };
+  S.camp = { k, rows: sr || [], picks: picks || [], show: (S.camp && S.camp.k.id === id && S.camp.show) || 'todo' };
   drawCampaign();
+  if (typeof pickSeen === 'function') pickSeen(S.camp.picks);
 }
 function drawCampaign() {
   const C = S.camp, k = C.k, c = $('#content');
@@ -193,6 +209,7 @@ function drawCampaign() {
     '<div class="camp-msg noi18n">' + esc(k.message) + '</div>' +
     '<div class="photo-row"><a class="btn btn-small btn-secondary" href="' + esc(showUrl(k.id)) + '" target="_blank" rel="noopener">See the page the shops get</a>' +
     (S.me.role === 'owner' || k.created_by === S.me.id ? '<button class="btn btn-small btn-ghost" data-action="camp-del" data-id="' + k.id + '">Delete</button>' : '') + '</div></div>' +
+    (typeof campaignPicksHTML === 'function' ? '<div id="camp-picks">' + campaignPicksHTML(C.picks) + '</div>' : '') +
     '<div class="camp-prog"><b>' + esc(sent + ' of ' + C.rows.length + ' sent') + '</b><div class="pg-bar"><i class="' + (sent === C.rows.length ? 'done' : 'ok') + '" style="width:' +
     (C.rows.length ? Math.round(sent / C.rows.length * 100) : 0) + '%"></i></div></div>' +
     '<div class="filter-chips">' + chip('todo', 'To send (' + todo.length + ')') + chip('sent', 'Sent (' + sent + ')') + chip('all', 'All (' + C.rows.length + ')') + '</div>' +
@@ -215,7 +232,7 @@ async function campSend(rowId) {
   const r = C && C.rows.find((x) => x.id === rowId);
   if (!r) return;
   const cl = r.clients || {};
-  window.open(waUrl(cl.mobile, campText(C.k)), '_blank');
+  window.open(waUrl(cl.mobile, campText(C.k, r.id)), '_blank');   // the shop's own link (its choice comes back with its name)
   if (r.sent_at) return;   // "Again": nothing to record
   const now = new Date().toISOString();
   const { error } = await db.from('campaign_sends').update({ sent_at: now, sent_by: S.me.id }).eq('id', rowId).is('sent_at', null);

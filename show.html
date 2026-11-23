@@ -8,20 +8,47 @@
   <title>New designs</title>
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <style>
-    :root { --maroon: #7b1e3c; --gold: #c9973c; --bg: #f6f4f1; --ink: #27222b; --muted: #857e8c; --line: #eae6e2; --green: #1a7f4e; }
+    :root { --maroon: #7b1e3c; --gold: #c9973c; --bg: #f6f4f1; --ink: #27222b; --muted: #857e8c; --line: #eae6e2; --green: #1a7f4e; --red: #b3261e; }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", "Noto Sans Gujarati", sans-serif; font-size: 15px; line-height: 1.45; }
     header { background: var(--maroon); color: #fff; padding: calc(16px + env(safe-area-inset-top)) 16px 16px; text-align: center; }
     header .biz { font-size: 13px; letter-spacing: .8px; text-transform: uppercase; color: #e8be5a; font-weight: 700; }
     header h1 { margin: 4px 0 0; font-size: 22px; }
+    header .for { margin-top: 4px; font-size: 13.5px; color: #f3dfe6; }
     main { max-width: 640px; margin: 0 auto; padding: 14px 12px 40px; }
     .langs { display: flex; gap: 6px; justify-content: flex-end; margin: 0 0 10px; }
     .langs button { border: 1.5px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink); }
     .langs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .lead { text-align: center; color: var(--muted); margin: 0 4px 12px; font-size: 14px; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .grid img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; display: block; border-radius: 12px; background: #eee6df; cursor: zoom-in; }
-    .grid img.wide { grid-column: 1 / -1; aspect-ratio: auto; max-height: 520px; object-fit: contain; background: #fff; }
+    .pc { position: relative; }
+    .pc.wide { grid-column: 1 / -1; }
+    .pc img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; display: block; border-radius: 12px; background: #eee6df; cursor: zoom-in; }
+    .pc.wide img { aspect-ratio: auto; max-height: 520px; object-fit: contain; background: #fff; }
+    .pc.on img { outline: 3px solid var(--maroon); outline-offset: -3px; }
+    .like { position: absolute; right: 8px; bottom: 8px; border: 0; border-radius: 999px; background: rgba(255, 255, 255, .95); color: var(--maroon);
+      font: inherit; font-weight: 800; font-size: 14px; padding: 8px 13px; box-shadow: 0 1px 5px rgba(0, 0, 0, .2); cursor: pointer; }
+    .pc.on .like { background: var(--maroon); color: #fff; font-size: 17px; padding: 6px 12px; }   /* liked: just ♥, so the count fits beside it */
+    .qty { position: absolute; left: 8px; bottom: 8px; display: flex; align-items: center; background: #fff; border-radius: 999px; box-shadow: 0 1px 5px rgba(0, 0, 0, .2); }
+    .qty button { border: 0; background: none; font: inherit; font-size: 20px; line-height: 1; width: 36px; height: 36px; cursor: pointer; color: var(--ink); }
+    .qty b { min-width: 20px; text-align: center; font-size: 15px; }
+    .num { position: absolute; left: 8px; top: 8px; background: rgba(0, 0, 0, .55); color: #fff; border-radius: 999px; font-size: 12px; font-weight: 700; padding: 2px 8px; }
+    .bar { position: sticky; bottom: 0; padding: 12px 0 calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(to top, var(--bg) 72%, rgba(246, 244, 241, 0)); }
+    .btn { display: block; width: 100%; border: 0; border-radius: 14px; padding: 14px 18px; font: inherit; font-size: 16px; font-weight: 800; cursor: pointer; text-align: center; text-decoration: none; }
+    .btn-main { background: var(--maroon); color: #fff; }
+    .btn-main[disabled] { opacity: .6; }
+    .btn-soft { background: #fff; color: var(--maroon); border: 1.5px solid var(--line); margin-top: 8px; }
+    .sheet { background: #fff; border-radius: 16px; padding: 14px; margin: 14px 0 0; box-shadow: 0 1px 6px rgba(0, 0, 0, .06); }
+    .sheet h2 { font-size: 17px; margin: 0 0 4px; }
+    .sheet .sum { color: var(--muted); font-size: 14px; margin: 0 0 10px; }
+    .sheet label { display: block; font-size: 13px; font-weight: 700; margin: 10px 0 4px; }
+    .sheet input, .sheet textarea { width: 100%; border: 1.5px solid var(--line); border-radius: 10px; padding: 11px 12px; font: inherit; font-size: 16px; background: #fff; color: var(--ink); }
+    .sheet textarea { min-height: 70px; resize: vertical; }
+    .sheet .btn-main { margin-top: 14px; }
+    .err { color: var(--red); font-size: 14px; margin: 8px 0 0; font-weight: 600; }
+    .done { text-align: center; background: #e9f6ef; color: var(--green); border-radius: 14px; padding: 14px; font-weight: 700; margin: 0 0 12px; }
+    .done span { display: block; font-weight: 500; color: #2f6b4f; font-size: 13.5px; margin-top: 2px; }
     .ask { display: block; margin: 18px auto 6px; max-width: 420px; text-align: center; background: var(--green); color: #fff; text-decoration: none; font-weight: 800;
       padding: 14px 18px; border-radius: 14px; font-size: 16px; }
     .contact { text-align: center; color: var(--muted); font-size: 13.5px; margin-top: 10px; }
@@ -33,21 +60,50 @@
   </style>
 </head>
 <body>
-  <header><div class="biz" id="biz">&nbsp;</div><h1 id="title">New designs</h1></header>
+  <header><div class="biz" id="biz">&nbsp;</div><h1 id="title">New designs</h1><div class="for" id="for"></div></header>
   <main id="main"><div class="msg">Loading…</div></main>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js"></script>
   <script src="config.js"></script>
   <script>
-  /* The page shops open from a message: the photos of the designs (no login). */
+  /* The page shops open from a message: the photos of the designs (no login).
+     With database update 12 the shop taps the designs it likes, chooses how many and sends its
+     choice. Its own link (#<message>.<shop>) tells us which shop it is; a forwarded link asks
+     for the shop's name and mobile. */
   (function () {
     'use strict';
     var T = {
       hi: { 'New designs': 'नए डिज़ाइन', 'This link does not work any more.': 'यह लिंक अब काम नहीं करता।',
         'Could not load — check the internet and open the link again.': 'लोड नहीं हुआ — इंटरनेट देखें और लिंक फिर से खोलें।',
-        'Ask about these designs on WhatsApp': 'इन डिज़ाइनों के बारे में WhatsApp पर पूछें', 'Loading…': 'लोड हो रहा है…' },
+        'Ask about these designs on WhatsApp': 'इन डिज़ाइनों के बारे में WhatsApp पर पूछें', 'Loading…': 'लोड हो रहा है…',
+        'Tap ♡ on the designs you like, choose how many, then send your choice.': 'जो डिज़ाइन पसंद हों उन पर ♡ दबाएँ, कितने चाहिए चुनें, फिर अपनी पसंद भेजें।',
+        'Like': 'पसंद करें', 'Liked': 'पसंद है', 'For': 'किसके लिए',
+        'Send my choice': 'मेरी पसंद भेजें', 'Send my new choice': 'मेरी नई पसंद भेजें',
+        'Your choice': 'आपकी पसंद', 'designs': 'डिज़ाइन', 'design': 'डिज़ाइन', 'pieces': 'पीस',
+        'Name of your shop': 'आपकी दुकान का नाम', 'Your mobile number': 'आपका मोबाइल नंबर', 'Message (optional)': 'संदेश (ज़रूरी नहीं)',
+        'e.g. Need them by Diwali': 'जैसे — दिवाली तक चाहिए', 'Send': 'भेजें', 'Back': 'वापस', 'Sending…': 'भेज रहे हैं…',
+        'Write the name of your shop': 'अपनी दुकान का नाम लिखें', 'Write your mobile number': 'अपना मोबाइल नंबर लिखें',
+        'Choose at least one design': 'कम से कम एक डिज़ाइन चुनें',
+        'Could not send — check the internet and try again.': 'भेज नहीं पाए — इंटरनेट देखें और फिर कोशिश करें।',
+        'Too many replies to this message — please send your choice on WhatsApp': 'इस संदेश पर बहुत जवाब आ गए — कृपया अपनी पसंद WhatsApp पर भेजें',
+        'Thank you — your choice is sent ✓': 'धन्यवाद — आपकी पसंद भेज दी गई ✓', 'We will contact you soon.': 'हम जल्द ही आपसे संपर्क करेंगे।',
+        'You sent your choice on': 'आपने अपनी पसंद भेजी', 'Change it any time and send again.': 'इसे कभी भी बदलकर फिर से भेज सकते हैं।',
+        'Change my choice': 'मेरी पसंद बदलें' },
       gu: { 'New designs': 'નવી ડિઝાઇન', 'This link does not work any more.': 'આ લિંક હવે કામ કરતી નથી.',
         'Could not load — check the internet and open the link again.': 'લોડ ન થયું — ઇન્ટરનેટ તપાસો અને લિંક ફરી ખોલો.',
-        'Ask about these designs on WhatsApp': 'આ ડિઝાઇન વિશે WhatsApp પર પૂછો', 'Loading…': 'લોડ થાય છે…' }
+        'Ask about these designs on WhatsApp': 'આ ડિઝાઇન વિશે WhatsApp પર પૂછો', 'Loading…': 'લોડ થાય છે…',
+        'Tap ♡ on the designs you like, choose how many, then send your choice.': 'જે ડિઝાઇન ગમે તેના પર ♡ દબાવો, કેટલા જોઈએ તે પસંદ કરો, પછી તમારી પસંદ મોકલો.',
+        'Like': 'પસંદ કરો', 'Liked': 'પસંદ છે', 'For': 'કોના માટે',
+        'Send my choice': 'મારી પસંદ મોકલો', 'Send my new choice': 'મારી નવી પસંદ મોકલો',
+        'Your choice': 'તમારી પસંદ', 'designs': 'ડિઝાઇન', 'design': 'ડિઝાઇન', 'pieces': 'પીસ',
+        'Name of your shop': 'તમારી દુકાનનું નામ', 'Your mobile number': 'તમારો મોબાઇલ નંબર', 'Message (optional)': 'સંદેશ (જરૂરી નથી)',
+        'e.g. Need them by Diwali': 'જેમ કે — દિવાળી સુધીમાં જોઈએ', 'Send': 'મોકલો', 'Back': 'પાછા', 'Sending…': 'મોકલી રહ્યા છીએ…',
+        'Write the name of your shop': 'તમારી દુકાનનું નામ લખો', 'Write your mobile number': 'તમારો મોબાઇલ નંબર લખો',
+        'Choose at least one design': 'ઓછામાં ઓછી એક ડિઝાઇન પસંદ કરો',
+        'Could not send — check the internet and try again.': 'મોકલી ન શક્યા — ઇન્ટરનેટ તપાસો અને ફરી પ્રયત્ન કરો.',
+        'Too many replies to this message — please send your choice on WhatsApp': 'આ સંદેશ પર ઘણા જવાબ આવ્યા — કૃપા કરીને તમારી પસંદ WhatsApp પર મોકલો',
+        'Thank you — your choice is sent ✓': 'આભાર — તમારી પસંદ મોકલાઈ ગઈ ✓', 'We will contact you soon.': 'અમે જલ્દી તમારો સંપર્ક કરીશું.',
+        'You sent your choice on': 'તમે તમારી પસંદ મોકલી', 'Change it any time and send again.': 'તેને ગમે ત્યારે બદલીને ફરી મોકલી શકો છો.',
+        'Change my choice': 'મારી પસંદ બદલો' }
     };
     var lang = 'en';
     var stored = null;
@@ -56,10 +112,15 @@
     else { var nl = String(navigator.language || '').slice(0, 2); if (nl === 'hi' || nl === 'gu') lang = nl; }   // first visit: the phone's own language
     function t(s) { return (T[lang] && T[lang][s]) || s; }
     var c = window.APP_CONFIG || {};
-    var id = (location.hash || '').replace(/^#/, '').trim();
+    var parts = (location.hash || '').replace(/^#/, '').trim().split('.');
+    var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    var id = parts[0] || '';
+    var send = parts[1] && UUID.test(parts[1]) ? parts[1] : null;
     var main = document.getElementById('main');
-    var data = null;
+    var data = null, canPick = false, pick = {}, view = 'pick', sentAt = null, err = '', form = { name: '', phone: '', note: '' };
     function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    function store(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } }
+    function stored2(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
     if (c.BUSINESS_NAME) document.getElementById('biz').textContent = c.BUSINESS_NAME;
     if (lang !== 'en') { document.getElementById('title').textContent = t('New designs'); main.innerHTML = '<div class="msg">' + esc(t('Loading…')) + '</div>'; }
     function message(big, text) { main.innerHTML = '<div class="msg"><div class="big">' + big + '</div><p>' + esc(t(text)) + '</p></div>'; }
@@ -68,29 +129,76 @@
         return '<button data-l="' + x[0] + '" class="' + (lang === x[0] ? 'on' : '') + '">' + x[1] + '</button>';
       }).join('') + '</div>';
     }
-    if (!window.supabase || !c.SUPABASE_URL || !/^[0-9a-f-]{36}$/i.test(id)) { message('🔗', 'This link does not work any more.'); return; }
+    if (!window.supabase || !c.SUPABASE_URL || !UUID.test(id)) { message('🔗', 'This link does not work any more.'); return; }
     var db = window.supabase.createClient(c.SUPABASE_URL, c.SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
     var base = String(c.SUPABASE_URL).replace(/\/$/, '') + '/storage/v1/object/public/promo/';
+    function photoUrl(p) { return base + p.split('/').map(encodeURIComponent).join('/'); }
+    function photos() { return ((data && data.photos) || []).filter(Boolean); }
+    function chosen() { return photos().filter(function (p) { return pick[p]; }); }
+    function countText() {
+      var list = chosen(), pcs = 0;
+      list.forEach(function (p) { pcs += pick[p]; });
+      return list.length + ' ' + t(list.length === 1 ? 'design' : 'designs') + (pcs !== list.length ? ', ' + pcs + ' ' + t('pieces') : '');
+    }
+    function fmtDate(iso) {
+      try { return new Date(iso).toLocaleDateString(lang === 'en' ? 'en-IN' : lang + '-IN', { day: 'numeric', month: 'short' }); } catch (e) { return ''; }
+    }
+    var localKey = 'picks:' + id + (send ? '.' + send : '');
+
     function draw() {
       var d = data, b = d.business || {};
       document.getElementById('biz').textContent = b.name || c.BUSINESS_NAME || '';
       document.getElementById('title').textContent = d.title || '';
+      document.getElementById('for').textContent = d.shop ? t('For') + ': ' + d.shop : '';
       document.title = (d.title || 'New designs') + ' — ' + (b.name || '');
-      var photos = (d.photos || []).filter(Boolean);
-      var h = photos.length ? '<div class="grid">' + photos.map(function (p, i) {
-        return '<img src="' + esc(base + p.split('/').map(encodeURIComponent).join('/')) + '" alt="Design ' + (i + 1) + '"' + (photos.length % 2 === 1 && i === 0 ? ' class="wide"' : '') + '>';
+      var ps = photos();
+      var h = langBar();
+      if (canPick && view === 'done') {
+        h += '<div class="done">' + esc(t('Thank you — your choice is sent ✓')) + '<span>' + esc(t('We will contact you soon.')) + '</span></div>';
+      } else if (canPick && sentAt) {
+        h += '<div class="done">' + esc(t('You sent your choice on') + ' ' + fmtDate(sentAt)) + '<span>' + esc(t('Change it any time and send again.')) + '</span></div>';
+      } else if (canPick) {
+        h += '<p class="lead">' + esc(t('Tap ♡ on the designs you like, choose how many, then send your choice.')) + '</p>';
+      }
+      h += ps.length ? '<div class="grid">' + ps.map(function (p, i) {
+        var on = !!pick[p];
+        return '<div class="pc' + (ps.length % 2 === 1 && i === 0 ? ' wide' : '') + (on ? ' on' : '') + '" data-p="' + esc(p) + '">' +
+          '<img src="' + esc(photoUrl(p)) + '" alt="Design ' + (i + 1) + '"><span class="num">' + (i + 1) + '</span>' +
+          (canPick && view !== 'done' ? '<button class="like" data-like="' + i + '" aria-label="' + esc(t(on ? 'Liked' : 'Like')) + '">' + (on ? '♥' : '♡ ' + esc(t('Like'))) + '</button>' +
+            (on ? '<div class="qty"><button data-q="-1" data-i="' + i + '" aria-label="One less">−</button><b>' + pick[p] + '</b><button data-q="1" data-i="' + i + '" aria-label="One more">+</button></div>' : '') : '') +
+          '</div>';
       }).join('') + '</div>' : '';
+      if (canPick && view === 'form') {
+        var anon = !d.shop;
+        h += '<div class="sheet" id="sheet"><h2>' + esc(t('Your choice')) + '</h2><p class="sum">' + esc(countText()) + '</p>' +
+          (anon ? '<label for="f-name">' + esc(t('Name of your shop')) + '</label><input id="f-name" autocomplete="organization" value="' + esc(form.name) + '">' +
+            '<label for="f-phone">' + esc(t('Your mobile number')) + '</label><input id="f-phone" type="tel" inputmode="tel" autocomplete="tel" value="' + esc(form.phone) + '">' : '') +
+          '<label for="f-note">' + esc(t('Message (optional)')) + '</label><textarea id="f-note" maxlength="500" placeholder="' + esc(t('e.g. Need them by Diwali')) + '">' + esc(form.note) + '</textarea>' +
+          (err ? '<p class="err">' + esc(t(err)) + '</p>' : '') +
+          '<button class="btn btn-main" id="f-send">' + esc(t('Send')) + '</button><button class="btn btn-soft" id="f-back">' + esc(t('Back')) + '</button></div>';
+      } else if (canPick && view === 'done') {
+        h += '<div class="bar"><button class="btn btn-soft" id="again">' + esc(t('Change my choice')) + '</button></div>';
+      } else if (canPick && chosen().length) {
+        h += '<div class="bar"><button class="btn btn-main" id="go">' + esc(t(sentAt ? 'Send my new choice' : 'Send my choice') + ' (' + countText() + ')') + '</button></div>';
+      }
       if (b.phone) {
         var wa = String(b.phone).replace(/\D/g, ''); if (wa.length === 10) wa = '91' + wa;
         var txt = 'Namaste, I saw your "' + (d.title || 'new designs') + '". Please send me the details.';
         h += '<a class="ask" href="https://wa.me/' + esc(wa) + '?text=' + encodeURIComponent(txt) + '" target="_blank" rel="noopener">' + esc(t('Ask about these designs on WhatsApp')) + '</a>' +
           '<p class="contact"><a href="tel:' + esc(String(b.phone).replace(/[^\d+]/g, '')) + '">' + esc(b.phone) + '</a>' + (b.city ? ' · ' + esc(b.city) : '') + '</p>';
       }
-      main.innerHTML = langBar() + (h || '<div class="msg"><div class="big">✨</div></div>');
+      main.innerHTML = h || '<div class="msg"><div class="big">✨</div></div>';
+      bind();
+    }
+    function keepForm() {
+      var n = document.getElementById('f-name'), ph = document.getElementById('f-phone'), no = document.getElementById('f-note');
+      if (n) form.name = n.value; if (ph) form.phone = ph.value; if (no) form.note = no.value;
+    }
+    function bind() {
       main.querySelectorAll('.langs button').forEach(function (bt) {
-        bt.onclick = function () { lang = bt.dataset.l; try { localStorage.setItem('statusLang', lang); } catch (e) { /* ignore */ } draw(); };
+        bt.onclick = function () { keepForm(); lang = bt.dataset.l; try { localStorage.setItem('statusLang', lang); } catch (e) { /* ignore */ } draw(); };
       });
-      main.querySelectorAll('.grid img').forEach(function (im) {
+      main.querySelectorAll('.pc img').forEach(function (im) {
         im.onclick = function () {
           var z = document.createElement('div'); z.className = 'zoom';
           z.innerHTML = '<img alt="">'; z.firstChild.src = im.src;
@@ -98,13 +206,91 @@
           document.body.appendChild(z);
         };
       });
+      main.querySelectorAll('[data-like]').forEach(function (bt) {
+        bt.onclick = function (e) {
+          e.stopPropagation();
+          var p = photos()[+bt.dataset.like];
+          if (pick[p]) delete pick[p]; else pick[p] = 1;
+          if (view === 'form' && !chosen().length) view = 'pick';
+          draw();
+        };
+      });
+      main.querySelectorAll('[data-q]').forEach(function (bt) {
+        bt.onclick = function (e) {
+          e.stopPropagation();
+          var p = photos()[+bt.dataset.i];
+          var n = (pick[p] || 1) + (+bt.dataset.q);
+          if (n < 1) delete pick[p]; else pick[p] = Math.min(n, 999);
+          if (view === 'form') keepForm();
+          if (view === 'form' && !chosen().length) view = 'pick';
+          draw();
+        };
+      });
+      var go = document.getElementById('go');
+      if (go) go.onclick = function () { err = ''; view = 'form'; draw(); var s = document.getElementById('sheet'); if (s && s.scrollIntoView) s.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+      var back = document.getElementById('f-back');
+      if (back) back.onclick = function () { keepForm(); err = ''; view = 'pick'; draw(); };
+      var again = document.getElementById('again');
+      if (again) again.onclick = function () { view = 'pick'; draw(); };
+      var snd = document.getElementById('f-send');
+      if (snd) snd.onclick = function () { keepForm(); sendChoice(snd); };
     }
-    db.rpc('campaign_public', { p_id: id }).then(function (r) {
-      if (r.error) { message('⚠️', 'Could not load — check the internet and open the link again.'); return; }
-      if (!r.data) { message('🔗', 'This link does not work any more.'); return; }
-      data = r.data;
+    function sendChoice(btn) {
+      var anon = !data.shop;
+      if (!chosen().length) { err = 'Choose at least one design'; draw(); return; }
+      if (anon && form.name.trim().length < 2) { err = 'Write the name of your shop'; draw(); return; }
+      if (anon && form.phone.replace(/\D/g, '').length < 10) { err = 'Write your mobile number'; draw(); return; }
+      btn.disabled = true; btn.textContent = t('Sending…');
+      var items = chosen().map(function (p) { return { photo: p, qty: pick[p] }; });
+      db.rpc('campaign_pick', { p_id: id, p_send: anon ? null : send, p_items: items, p_name: anon ? form.name.trim() : null,
+        p_phone: anon ? form.phone.trim() : null, p_note: form.note.trim() || null }).then(function (r) {
+        if (r.error) {
+          var m = String(r.error.message || '');
+          var known = ['Write the name of your shop', 'Write your mobile number', 'Choose at least one design', 'This link does not work any more',
+            'Too many replies to this message — please send your choice on WhatsApp'].filter(function (k) { return m.indexOf(k) > -1; })[0];
+          err = known ? (known === 'This link does not work any more' ? 'This link does not work any more.' : known) : 'Could not send — check the internet and try again.';
+          draw();
+          return;
+        }
+        sentAt = new Date().toISOString();
+        store(localKey, { items: items, at: sentAt });
+        if (anon) store('picksShop', { name: form.name.trim(), phone: form.phone.trim() });
+        err = ''; view = 'done';
+        draw();
+        try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
+      }, function () { err = 'Could not send — check the internet and try again.'; draw(); });
+    }
+    function loaded(d, picksOn) {
+      data = d;
+      canPick = !!picksOn && photos().length > 0;
+      var mine = d.mine && Array.isArray(d.mine.items) ? d.mine : stored2(localKey);   // the shop's last choice: from the database (its own link) or this phone
+      if (mine && Array.isArray(mine.items)) {
+        mine.items.forEach(function (x) { if (x && photos().indexOf(x.photo) > -1) pick[x.photo] = Math.max(1, Math.min(+x.qty || 1, 999)); });
+        sentAt = mine.at || null;
+        if (d.mine && d.mine.note) form.note = d.mine.note;
+      }
+      var me = stored2('picksShop');
+      if (me) { form.name = me.name || ''; form.phone = me.phone || ''; }
       draw();
-    }, function () { message('⚠️', 'Could not load — check the internet and open the link again.'); });
+    }
+    function failed() { message('⚠️', 'Could not load — check the internet and open the link again.'); }
+    db.rpc('campaign_page', { p_id: id, p_send: send }).then(function (r) {
+      if (r.error) {
+        var code = String(r.error.code || '');
+        if (code === 'PGRST202' || code === '42883' || code === '404') {   // before database update 12: the photos only
+          db.rpc('campaign_public', { p_id: id }).then(function (r2) {
+            if (r2.error) { failed(); return; }
+            if (!r2.data) { message('🔗', 'This link does not work any more.'); return; }
+            loaded(r2.data, false);
+          }, failed);
+          return;
+        }
+        failed();
+        return;
+      }
+      if (!r.data) { message('🔗', 'This link does not work any more.'); return; }
+      loaded(r.data, r.data.picks_on);
+    }, failed);
   })();
   </script>
 </body>

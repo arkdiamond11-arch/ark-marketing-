@@ -86,7 +86,7 @@ async function recordFirstVisit(cl, posP) {
   }, visitFields(pos)));
   if (!error) await maybeSaveShopLocation(cl, pos);
   if (ov) ov.remove();
-  S.lastMet = null; S.leadCache = null;
+  S.lastMet = null; S.leadCache = null; S.vpData = null;
   if (error) { toast('Could not record the visit — tap ＋ Meeting on the client page.', 'err'); return; }
   toast(pos && pos.status === 'ok' && pos.acc <= 250 ? 'Visit recorded · shop location saved ✓' : 'Visit recorded ✓', 'ok');
 }

@@ -32,7 +32,7 @@ function payEntryText(r) { return r.status === 'done' ? 'Paid on ' + fmtD(r.on_d
 /* every entry, oldest first → per party: the current entry and the last "done" */
 async function payAllEntries() {
   return fetchPaged(() => db.from('party_pay_log')
-    .select('id, client_id, status, on_date, note, created_by, created_at, clients(trade_name, city, mobile, contact_person)')
+    .select('id, client_id, status, on_date, note, created_by, created_at, clients(trade_name, city, mobile, contact_person' + (S.dbv12 ? ', credit_hold' : '') + ')')
     .order('created_at', { ascending: true }).order('id', { ascending: true }));
 }
 function payIndex(rows) {
@@ -198,7 +198,8 @@ async function renderPayDues() {
       '<div class="li-main" data-action="open-client" data-id="' + e.id + '" style="cursor:pointer">' +
       '<div class="li-title">' + esc(e.cl.trade_name || 'Party') + '</div>' +
       '<div class="li-sub">' + esc([e.cl.city, 'Due by ' + fmtD(e.cur.on_date), e.cur.note].filter(Boolean).join(' · ')) + '</div>' +
-      (info.cls !== 'soon' ? '<div class="li-chips"><span class="chip pay-chip-' + (info.cls === 'late' ? 'late' : 'due') + '">' + esc(info.text) + '</span></div>' : '') + '</div>' +
+      (info.cls !== 'soon' || e.cl.credit_hold ? '<div class="li-chips">' + (info.cls !== 'soon' ? '<span class="chip pay-chip-' + (info.cls === 'late' ? 'late' : 'due') + '">' + esc(info.text) + '</span>' : '') +
+        (e.cl.credit_hold && typeof creditOn === 'function' && creditOn() ? '<span class="chip cr-hold">⛔ On hold</span>' : '') + '</div>' : '') + '</div>' +
       '<div class="dues-btns"><button class="btn btn-small btn-primary" data-action="pay-quick-done" data-idx="' + i + '">✓ Done</button>' +
       '<button class="btn btn-small btn-secondary" data-action="pay-remind" data-idx="' + i + '">Remind</button>' +
       (e.cl.mobile ? '<a class="btn btn-small btn-ghost" href="' + esc(telHref(e.cl.mobile)) + '">Call</a>' : '') + '</div></div>';

@@ -139,7 +139,7 @@ async function mergeAsk(dupId, keepId) {
     if (error) { e.target.disabled = false; toast(mergeErrText(error), 'err'); return; }
     closeModal();
     toast('Merged ✓ — ' + (keep.trade_name || ''), 'ok');
-    S.lastMet = null; S.leadCache = null; S.currentClientId = null;
+    S.lastMet = null; S.leadCache = null; S.vpData = null; S.currentClientId = null;
     openClient(keepId, true);   // the kept client takes the copy's place
   };
 }
@@ -172,7 +172,7 @@ async function binRestore(binId, clientId, quiet) {
     toast(/already back/.test(String(error.message || '')) ? 'This client is already back.' : 'Could not bring it back — try again.', 'err');
     return false;
   }
-  S.lastMet = null; S.leadCache = null;
+  S.lastMet = null; S.leadCache = null; S.vpData = null;
   toast('Client is back ✓', 'ok');
   if (!quiet) openClient(clientId);
   return true;
