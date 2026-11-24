@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#7b1e3c">
+  <meta name="robots" content="noindex">
+  <title>CAD design</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <style>
+    :root { --maroon: #7b1e3c; --gold: #c9973c; --bg: #f6f4f1; --card: #fff; --ink: #27222b; --muted: #857e8c; --line: #eae6e2; --green: #1a7f4e; --red: #b3372f; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", "Noto Sans Gujarati", sans-serif; font-size: 15px; line-height: 1.45; }
+    header { background: var(--maroon); color: #fff; padding: calc(14px + env(safe-area-inset-top)) 16px 14px; }
+    header .biz { font-size: 13px; letter-spacing: .6px; text-transform: uppercase; opacity: .85; }
+    header h1 { margin: 2px 0 0; font-size: 21px; }
+    header .shop { font-size: 14px; opacity: .9; }
+    main { max-width: 560px; margin: 0 auto; padding: 14px 16px 30px; }
+    .langs { display: flex; gap: 6px; justify-content: flex-end; margin: 0 0 10px; }
+    .langs button { border: 1.5px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink); }
+    .langs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 3px rgba(40,20,30,.08), 0 4px 14px rgba(40,20,30,.05); padding: 14px 15px; margin: 0 0 14px; }
+    .lead { margin: 0 0 12px; font-size: 15.5px; }
+    .hint { color: var(--muted); font-size: 13px; margin: 6px 2px 12px; }
+    h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); margin: 18px 2px 8px; }
+    .pics { display: flex; flex-direction: column; gap: 12px; }
+    .pics figure { margin: 0; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(40,20,30,.08); }
+    .pics img { width: 100%; display: block; min-height: 120px; background: #f3efe9; cursor: zoom-in; }
+    .pics figcaption { font-size: 12.5px; color: var(--muted); padding: 6px 10px 8px; }
+    .pdf { display: block; text-align: center; padding: 16px; border-radius: 14px; background: #f7e9ee; color: var(--maroon); font-weight: 800; text-decoration: none; }
+    .item { padding: 9px 0; border-top: 1px solid var(--line); }
+    .item:first-child { border-top: 0; }
+    .item b { display: block; }
+    .item span { font-size: 13px; color: var(--muted); }
+    .ask { position: sticky; bottom: 0; padding: 12px 0 calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(rgba(246,244,241,0), var(--bg) 22%); }
+    .btn { display: block; width: 100%; border: 0; border-radius: 14px; padding: 15px 16px; font: inherit; font-size: 16.5px; font-weight: 800; cursor: pointer; margin: 0 0 10px; }
+    .btn.ok { background: var(--green); color: #fff; }
+    .btn.change { background: #fff; color: var(--maroon); border: 2px solid var(--maroon); }
+    .btn.plain { background: transparent; color: var(--muted); font-weight: 650; font-size: 14.5px; padding: 8px; }
+    .btn:disabled { opacity: .55; }
+    textarea { width: 100%; min-height: 96px; border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; font: inherit; resize: vertical; background: #fff; color: var(--ink); }
+    label { display: block; font-weight: 700; margin: 0 0 6px; }
+    .err { color: var(--red); font-weight: 650; margin: 8px 0 0; }
+    .done { text-align: center; }
+    .done .big { font-size: 40px; line-height: 1.1; }
+    .done.ok .big { color: var(--green); }
+    .done p { margin: 8px 0; }
+    .note { background: #f8f3ea; border-radius: 10px; padding: 9px 12px; margin: 8px 0; text-align: left; white-space: pre-wrap; }
+    .contact { text-align: center; color: var(--muted); font-size: 13.5px; }
+    .contact a { color: var(--maroon); font-weight: 700; text-decoration: none; }
+    .msg { text-align: center; padding: 40px 10px; color: var(--muted); }
+    .msg .big { font-size: 40px; }
+    .zoom { position: fixed; inset: 0; background: rgba(10, 8, 12, .94); display: flex; align-items: center; justify-content: center; z-index: 9; overflow: auto; }
+    .zoom img { max-width: 100%; max-height: 100%; }
+  </style>
+</head>
+<body>
+  <header><div class="biz" id="biz">&nbsp;</div><h1 id="title">CAD design</h1><div class="shop" id="shop"></div></header>
+  <main id="main"><div class="msg">Loading…</div></main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+  /* The page a shop opens from the CAD approval link: no login, only this
+     order's CAD — it taps Approve, or asks for a change and says what. */
+  (function () {
+    'use strict';
+    var T = {
+      hi: {
+        'CAD design': 'CAD डिज़ाइन', 'for': 'के लिए', 'Look at the design and tell us if it is OK.': 'डिज़ाइन देखें और बताएं कि यह ठीक है या नहीं।',
+        'Design': 'डिज़ाइन', 'Open the PDF': 'PDF खोलें', 'Items': 'आइटम', 'Delivery by': 'डिलीवरी',
+        'Approve the design': 'डिज़ाइन मंज़ूर करें', 'Ask for a change': 'बदलाव चाहिए', 'What would you like changed?': 'क्या बदलना है?',
+        'Send': 'भेजें', 'Cancel': 'रद्द करें', 'Write what you would like changed.': 'लिखें कि क्या बदलना है।',
+        'You approved this design — thank you! We will start making it.': 'आपने यह डिज़ाइन मंज़ूर किया — धन्यवाद! हम इसे बनाना शुरू करेंगे।',
+        'You asked for a change:': 'आपने बदलाव मांगा:', 'We will send you the new design.': 'हम आपको नया डिज़ाइन भेजेंगे।',
+        'Change my answer': 'मेरा जवाब बदलें', 'Could not send — check the internet and try again.': 'भेजा नहीं गया — इंटरनेट देखें और फिर से कोशिश करें।',
+        'This link is not active any more.': 'यह लिंक अब चालू नहीं है।', 'Please ask us for a new link.': 'कृपया हमसे नया लिंक मांगें।',
+        'Could not load — check the internet and open the link again.': 'लोड नहीं हुआ — इंटरनेट देखें और लिंक फिर से खोलें।', 'Loading…': 'लोड हो रहा है…',
+        'Questions? Call or WhatsApp': 'कोई सवाल? कॉल या WhatsApp करें', 'Sending…': 'भेज रहे हैं…', 'Tap a photo to see it bigger.': 'बड़ा देखने के लिए फोटो पर टैप करें।'
+      },
+      gu: {
+        'CAD design': 'CAD ડિઝાઇન', 'for': 'માટે', 'Look at the design and tell us if it is OK.': 'ડિઝાઇન જુઓ અને કહો કે તે બરાબર છે કે નહીં.',
+        'Design': 'ડિઝાઇન', 'Open the PDF': 'PDF ખોલો', 'Items': 'આઇટમ', 'Delivery by': 'ડિલિવરી',
+        'Approve the design': 'ડિઝાઇન મંજૂર કરો', 'Ask for a change': 'ફેરફાર જોઈએ', 'What would you like changed?': 'શું બદલવું છે?',
+        'Send': 'મોકલો', 'Cancel': 'રદ કરો', 'Write what you would like changed.': 'લખો કે શું બદલવું છે.',
+        'You approved this design — thank you! We will start making it.': 'તમે આ ડિઝાઇન મંજૂર કરી — આભાર! અમે તેને બનાવવાનું શરૂ કરીશું.',
+        'You asked for a change:': 'તમે ફેરફાર માંગ્યો:', 'We will send you the new design.': 'અમે તમને નવી ડિઝાઇન મોકલીશું.',
+        'Change my answer': 'મારો જવાબ બદલો', 'Could not send — check the internet and try again.': 'મોકલાયું નહીં — ઇન્ટરનેટ તપાસો અને ફરી પ્રયાસ કરો.',
+        'This link is not active any more.': 'આ લિંક હવે ચાલુ નથી.', 'Please ask us for a new link.': 'કૃપા કરીને અમારી પાસે નવી લિંક માંગો.',
+        'Could not load — check the internet and open the link again.': 'લોડ ન થયું — ઇન્ટરનેટ તપાસો અને લિંક ફરી ખોલો.', 'Loading…': 'લોડ થાય છે…',
+        'Questions? Call or WhatsApp': 'કોઈ પ્રશ્ન? કૉલ અથવા WhatsApp કરો', 'Sending…': 'મોકલી રહ્યા છીએ…', 'Tap a photo to see it bigger.': 'મોટું જોવા માટે ફોટા પર ટેપ કરો.'
+      }
+    };
+    var lang = 'en';
+    var stored = null;
+    try { stored = localStorage.getItem('statusLang') || localStorage.getItem('lang'); } catch (e) { /* private mode */ }
+    if (stored === 'hi' || stored === 'gu' || stored === 'en') lang = stored;
+    else { var nl = String(navigator.language || '').slice(0, 2); if (nl === 'hi' || nl === 'gu') lang = nl; }
+    function t(s) { return (T[lang] && T[lang][s]) || s; }
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    var MONTHS = { en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+      hi: ['जन', 'फ़र', 'मार्च', 'अप्रै', 'मई', 'जून', 'जुला', 'अग', 'सित', 'अक्टू', 'नव', 'दिस'],
+      gu: ['જાન્યુ', 'ફેબ્રુ', 'માર્ચ', 'એપ્રિ', 'મે', 'જૂન', 'જુલા', 'ઑગ', 'સપ્ટે', 'ઑક્ટો', 'નવે', 'ડિસે'] };
+    function day(iso) {
+      if (!iso) return '';
+      var d = new Date(String(iso).length === 10 ? iso + 'T00:00:00' : iso);
+      return d.getDate() + ' ' + MONTHS[lang][d.getMonth()];
+    }
+    /* a team member opening the link on their own phone is not the shop */
+    function teamPhone() {
+      try { for (var i = 0; i < localStorage.length; i++) { if (/^sb-.+-auth-token$/.test(localStorage.key(i) || '')) return true; } } catch (e) { /* private mode */ }
+      return false;
+    }
+
+    var c = window.APP_CONFIG || {};
+    var token = (location.hash || '').replace(/^#/, '').trim();
+    var main = document.getElementById('main');
+    var data = null, urls = {}, view = 'ask', note = '', err = '', busy = false;
+    if (c.BUSINESS_NAME) document.getElementById('biz').textContent = c.BUSINESS_NAME;
+    function message(big, lines) {
+      main.innerHTML = '<div class="msg"><div class="big">' + big + '</div>' + lines.map(function (x) { return '<p>' + esc(t(x)) + '</p>'; }).join('') + '</div>';
+    }
+    if (!window.supabase || !c.SUPABASE_URL || !/^[0-9a-f-]{36}$/i.test(token)) { message('🔗', ['This link is not active any more.', 'Please ask us for a new link.']); return; }
+    var db = window.supabase.createClient(c.SUPABASE_URL, c.SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+
+    function langBar() {
+      return '<div class="langs">' + [['en', 'English'], ['hi', 'हिन्दी'], ['gu', 'ગુજરાતી']].map(function (x) {
+        return '<button data-l="' + x[0] + '" class="' + (lang === x[0] ? 'on' : '') + '">' + x[1] + '</button>';
+      }).join('') + '</div>';
+    }
+    function keepNote() { var el = document.getElementById('cad-note'); if (el) note = el.value; }
+
+    function draw() {
+      var d = data, b = d.business || {};
+      var no = 'ORD-' + String(d.order_no).padStart(4, '0');
+      document.getElementById('biz').textContent = b.name || c.BUSINESS_NAME || '';
+      document.getElementById('title').textContent = t('CAD design') + ' · ' + no;
+      document.getElementById('shop').textContent = d.shop ? (lang === 'en' ? 'for ' + d.shop : d.shop + ' ' + t('for')) : '';
+      document.title = t('CAD design') + ' · ' + no;
+      var files = (d.photos || []).filter(Boolean);
+      var h = langBar();
+      if (view === 'done') {
+        h += d.state === 'approved'
+          ? '<div class="card done ok"><div class="big">✓</div><p><b>' + esc(t('You approved this design — thank you! We will start making it.')) + '</b></p>' +
+            (d.answered_at ? '<p class="hint">' + esc(day(d.answered_at)) + '</p>' : '') + '<button class="btn plain" data-a="again">' + esc(t('Change my answer')) + '</button></div>'
+          : '<div class="card done"><div class="big">✎</div><p><b>' + esc(t('You asked for a change:')) + '</b></p><div class="note">' + esc(d.note || '') + '</div>' +
+            '<p>' + esc(t('We will send you the new design.')) + '</p><button class="btn plain" data-a="again">' + esc(t('Change my answer')) + '</button></div>';
+      } else {
+        h += '<p class="lead">' + esc(t('Look at the design and tell us if it is OK.')) + '</p>';
+      }
+      var n = 0;
+      h += '<div class="pics">' + files.map(function (p) {
+        if (/\.pdf$/i.test(p)) return '<a class="pdf" href="' + esc(urls[p] || '#') + '" target="_blank" rel="noopener">📄 ' + esc(t('Open the PDF')) + '</a>';
+        n++;
+        return '<figure><img data-p="' + esc(p) + '" alt=""' + (urls[p] ? ' src="' + esc(urls[p]) + '"' : '') + '><figcaption>' + esc(t('Design') + ' ' + n) + '</figcaption></figure>';
+      }).join('') + '</div>';
+      if (n) h += '<p class="hint">' + esc(t('Tap a photo to see it bigger.')) + '</p>';
+      if ((d.items || []).length) {
+        h += '<h2>' + esc(t('Items')) + '</h2><div class="card">' + d.items.map(function (it, i) {
+          return '<div class="item"><b>' + esc((i + 1) + '. ' + [it.category || '', it.design_code || ''].filter(Boolean).join(' · ')) + (it.qty > 1 ? ' × ' + it.qty : '') + '</b>' +
+            (it.description ? '<span>' + esc(it.description) + '</span>' : '') + '</div>';
+        }).join('') + (d.due_date ? '<div class="item"><span>' + esc(t('Delivery by') + ' ' + day(d.due_date)) + '</span></div>' : '') + '</div>';
+      }
+      if (view === 'ask') {
+        h += '<div class="ask"><button class="btn ok" data-a="ok"' + (busy ? ' disabled' : '') + '>✓ ' + esc(t('Approve the design')) + '</button>' +
+          '<button class="btn change" data-a="change"' + (busy ? ' disabled' : '') + '>✎ ' + esc(t('Ask for a change')) + '</button>' +
+          (err ? '<p class="err">' + esc(t(err)) + '</p>' : '') + '</div>';
+      } else if (view === 'change') {
+        h += '<div class="card" id="change-box"><label for="cad-note">' + esc(t('What would you like changed?')) + '</label>' +
+          '<textarea id="cad-note" maxlength="500">' + esc(note) + '</textarea>' + (err ? '<p class="err">' + esc(t(err)) + '</p>' : '') + '</div>' +
+          '<div class="ask"><button class="btn ok" data-a="send"' + (busy ? ' disabled' : '') + '>' + esc(t(busy ? 'Sending…' : 'Send')) + '</button>' +
+          '<button class="btn plain" data-a="cancel">' + esc(t('Cancel')) + '</button></div>';
+      }
+      if (b.phone) {
+        var ph = String(b.phone).replace(/[^\d+]/g, '');
+        var wa = ph.replace(/\D/g, ''); if (wa.length === 10) wa = '91' + wa;
+        h += '<p class="contact">' + esc(t('Questions? Call or WhatsApp')) + '<br><a href="tel:' + esc(ph) + '">' + esc(b.phone) + '</a> · <a href="https://wa.me/' + esc(wa) + '" target="_blank" rel="noopener">WhatsApp</a></p>';
+      }
+      main.innerHTML = h;
+      main.querySelectorAll('.langs button').forEach(function (bt) {
+        bt.onclick = function () { keepNote(); lang = bt.dataset.l; try { localStorage.setItem('statusLang', lang); } catch (e) { /* ignore */ } draw(); };
+      });
+      main.querySelectorAll('.pics img').forEach(function (im) {
+        im.onclick = function () {
+          if (!im.src) return;
+          var z = document.createElement('div'); z.className = 'zoom';
+          z.innerHTML = '<img alt="">'; z.firstChild.src = im.src;
+          z.onclick = function () { z.remove(); };
+          document.body.appendChild(z);
+        };
+      });
+      main.querySelectorAll('[data-a]').forEach(function (bt) {
+        bt.onclick = function () {
+          var a = bt.dataset.a;
+          if (a === 'ok') answer(true);
+          else if (a === 'change') { view = 'change'; err = ''; draw(); var tx = document.getElementById('cad-note'); if (tx) tx.focus(); }
+          else if (a === 'cancel') { keepNote(); view = 'ask'; err = ''; draw(); }
+          else if (a === 'send') { keepNote(); if (!note.trim()) { err = 'Write what you would like changed.'; draw(); return; } answer(false); }
+          else if (a === 'again') { view = 'ask'; err = ''; draw(); }
+        };
+      });
+    }
+
+    function answer(ok) {
+      if (busy) return;
+      busy = true; err = ''; draw();
+      db.rpc('cad_answer', { p_token: token, p_ok: ok, p_note: ok ? null : note.trim() }).then(function (r) {
+        busy = false;
+        if (r.error) {
+          if (/not active/i.test(r.error.message || '')) { message('🔗', ['This link is not active any more.', 'Please ask us for a new link.']); return; }
+          err = 'Could not send — check the internet and try again.'; draw(); return;
+        }
+        data.state = ok ? 'approved' : 'change';
+        data.note = ok ? null : note.trim();
+        data.answered_at = new Date().toISOString();
+        view = 'done';
+        draw();
+        try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
+      }, function () { busy = false; err = 'Could not send — check the internet and try again.'; draw(); });
+    }
+
+    db.rpc('cad_page', { p_token: token }).then(function (r) {
+      if (r.error) { message('⚠️', ['Could not load — check the internet and open the link again.']); return; }
+      if (!r.data) { message('🔗', ['This link is not active any more.', 'Please ask us for a new link.']); return; }
+      data = r.data;
+      view = data.state === 'approved' || data.state === 'change' ? 'done' : 'ask';
+      if (data.state === 'change') note = data.note || '';
+      draw();
+      if (!teamPhone()) { try { db.rpc('link_seen', { p_kind: 'cad', p_token: token }).then(function () {}, function () {}); } catch (e) { /* not counted */ } }
+      var files = (data.photos || []).filter(Boolean);
+      if (files.length) db.storage.from('orders').createSignedUrls(files, 3600).then(function (s) {
+        (s.data || []).forEach(function (x) { if (x && x.signedUrl) urls[x.path] = x.signedUrl; });
+        keepNote();
+        draw();
+      }, function () { /* the photos stay blank */ });
+    }, function () { message('⚠️', ['Could not load — check the internet and open the link again.']); });
+  })();
+  </script>
+</body>
+</html>

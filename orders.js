@@ -20,6 +20,10 @@ const ORDER_STAGES = ['cad', 'wax', 'in_production', 'setting', 'finished', 'igi
 const OPEN_STATUSES = ['new', 'cad', 'wax', 'in_production', 'setting', 'finished', 'igi', 'ready'];   // approved, not delivered yet
 const FINISHED_STATUSES = ['finished', 'igi', 'ready'];   // made, not delivered yet (the "Finished" filter)
 const CLOSED_STATUSES = ['declined', 'cancelled'];
+/* why a quotation was not approved (database update 13) */
+const LOST_REASONS = [['rate', 'Rate too high'], ['design', 'Did not like the design'], ['time', 'Delivery time too long'],
+  ['elsewhere', 'Ordered from someone else'], ['later', 'Will order later'], ['other', 'Other reason']];
+function lostLabel(k) { const x = LOST_REASONS.find((r) => r[0] === k); return x ? x[1] : ''; }
 const PURITY = [['24K', 99.5], ['22K', 91.6], ['18K', 75], ['14K', 58.5], ['9K', 37.5]];
 const SILVER_PURITY = [['999', 99.9], ['925', 92.5]];
 const ALL_PURITY = PURITY.concat(SILVER_PURITY);
@@ -1034,6 +1038,7 @@ async function saveOrder(asQuote, credit) {
     toast(photoFail ? 'Saved — but a design photo could not be uploaded.' : (isNew ? (asQuote ? 'Quotation saved ✓' : 'Order saved ✓') : 'Saved ✓'), photoFail ? 'err' : 'ok');
   }
   S.ord = null;
+  S.roData = null;   // re-order reminders count this order
   // editing: drop the Edit screen so Back doesn't lead to a stale copy of the order
   if (!isNew && S.sub.length > 1) { S.suppressPop = true; try { history.back(); } catch (_) {} S.sub.pop(); }
   openOrder(id, true);
@@ -1058,6 +1063,7 @@ async function openOrder(id, replace) {
       const top = S.sub[S.sub.length - 1];
       if (!x || !top || top.title !== title) return;   // user already moved on
       renderOrderPage(x); loadOrderDetails(x);
+      if (typeof drawCadBox === 'function') drawCadBox(x);
       if (typeof loadOrderVendorBox === 'function' && appOn('vendors')) loadOrderVendorBox(x);
     };
     if (first) { const x = first; first = null; use(x); }
@@ -1087,7 +1093,8 @@ function renderOrderPage(o) {
       '<button class="btn btn-primary" data-action="o-convert" data-id="' + o.id + '">✓ Approved</button>' +
       '<button class="btn btn-secondary" data-action="o-status" data-id="' + o.id + '" data-s="declined">✗ Not approved</button>' +
       '</div></div>' : '') +
-    (o.status === 'declined' ? '<div class="notice">The client did not approve this quotation.</div>' +
+    (o.status === 'declined' ? '<div class="notice">The client did not approve this quotation.' +
+      (o.lost_reason ? '<div class="lost-why">' + esc('Reason: ' + lostLabel(o.lost_reason)) + (o.lost_note ? ' — <span class="noi18n">' + esc(o.lost_note) + '</span>' : '') + '</div>' : '') + '</div>' +
       '<button class="btn btn-secondary" data-action="o-status" data-id="' + o.id + '" data-s="quote" style="margin-bottom:10px">Reopen quotation</button>' : '') +
     (o.status === 'cancelled' ? '<button class="btn btn-primary" data-action="o-status" data-id="' + o.id + '" data-s="new" style="margin-bottom:10px">Reopen order</button>' : '') +
 
@@ -1104,6 +1111,7 @@ function renderOrderPage(o) {
     (S.dbv8 && approved && typeof openStatusLink === 'function' ? '<button class="btn btn-small btn-secondary" data-action="o-link" data-id="' + o.id + '">🔗 Status link for the shop</button>' : '') +
     '</div>' +
 
+    '<div id="o-cad-view"></div>' +
     '<div id="o-final-view"></div>' +
     '<div id="o-igi-view"></div>' +
     '<div id="o-delivery-view"></div>' +
@@ -1231,7 +1239,7 @@ async function loadOrderDetails(o) {
   // timeline
   const tv = $('#o-timeline');
   if (tv) tv.innerHTML = ups.length ? '<div class="section-label">History</div>' + ups.map((u) =>
-    '<div class="timeline-item"><div class="t-meta"><span>' + esc(nameOf(u.created_by)) + '</span><span>' + fmtDT(u.created_at) + '</span></div>' +
+    '<div class="timeline-item"><div class="t-meta"><span>' + esc(!u.created_by && /^The shop /.test(u.note || '') ? 'The shop' : nameOf(u.created_by)) + '</span><span>' + fmtDT(u.created_at) + '</span></div>' +
     (u.status ? '<div style="margin:2px 0 4px">' + chipStatus(u.status) + '</div>' : '') +
     (u.note ? '<div class="t-notes">' + esc(u.note) + '</div>' : '') + '</div>').join('') : '';
 }
@@ -1242,8 +1250,9 @@ function stageIndex(st) { return st === 'ready' ? ORDER_STAGES.indexOf('finished
 /* change an order's status, write it in the history and keep its catalogue pieces in step.
    Returns the history line's id (for Undo; null if that line could not be written),
    or false when the status could not be changed. */
-async function applyStatus(o, s) {
-  const patch = { status: s, delivered_on: s === 'delivered' ? todayStr() : null };
+async function applyStatus(o, s, opt) {
+  const patch = Object.assign({ status: s, delivered_on: s === 'delivered' ? todayStr() : null }, (opt && opt.patch) || {});
+  if (S.dbv13 && s === 'quote' && o.lost_reason) Object.assign(patch, { lost_reason: null, lost_note: null });   // reopened: the old reason goes
   // only if nobody changed it meanwhile (another phone, or a box left open)
   const { data, error } = await db.from('orders').update(patch).eq('id', o.id).eq('status', o.status).select('id');
   if (error) {
@@ -1255,7 +1264,8 @@ async function applyStatus(o, s) {
     if (typeof refreshOrderViews === 'function') refreshOrderViews(o, { reload: true });
     return false;
   }
-  const { data: up } = await db.from('order_updates').insert({ order_id: o.id, status: s, note: null, created_by: S.me.id }).select('id').single();
+  S.roData = null;
+  const { data: up } = await db.from('order_updates').insert({ order_id: o.id, status: s, note: (opt && opt.note) || null, created_by: S.me.id }).select('id').single();
   if (typeof alertStep === 'function') alertStep(o.id, s);   // phone alerts for the others
   // a quotation never held its pieces; a cancelled order already let them go
   if (CLOSED_STATUSES.indexOf(s) === -1 || HOLDING_STATUSES.indexOf(o.status) > -1) await syncCatalogueForOrder(o.id, s);
@@ -1266,8 +1276,8 @@ async function setOrderStatus(id, s) {
   const o = await fetchOrder(id);
   if (!o) return;
   if (s === 'declined' && !S.dbv6) s = 'cancelled';   // before the database update "not approved" is kept as cancelled
-  const go = async () => {
-    if (await applyStatus(o, s) === false) return;
+  const go = async (opt) => {
+    if (await applyStatus(o, s, opt && opt.patch ? opt : null) === false) return;
     openOrder(id, true);
     if (s === 'finished' && typeof offerFinalPhoto === 'function' && S.dbv7) offerFinalPhoto(o, null);   // a photo of the finished piece?
     else if (s === 'delivered' && typeof offerHandover === 'function' && S.dbv8) offerHandover(Object.assign({}, o, { status: s, prev_status: o.status }), null);   // who received it
@@ -1277,14 +1287,35 @@ async function setOrderStatus(id, s) {
     const taken = await piecesTaken(id);
     if (taken.length) { warnPiecesTaken(taken, 'Reopen anyway', go); return; }
   }
-  if (s === 'declined' || (s === 'cancelled' && o.status === 'quote')) {
-    confirmModal('Not approved?', 'The quotation will be marked Not approved. You can reopen it later.', 'Not approved', go, true);
+  if (s === 'declined' && S.dbv13) lostAsk(o, go);
+  else if (s === 'declined' || (s === 'cancelled' && o.status === 'quote')) {
+    confirmModal('Not approved?', 'The quotation will be marked Not approved. You can reopen it later.', 'Not approved', () => go(), true);
   } else if (s === 'cancelled') {
     confirmModal('Cancel this order?', 'It stays on record as Cancelled. You can reopen it later.', 'Cancel order', go, true);
   } else if (ORDER_STAGES.indexOf(s) > -1 && stageIndex(o.status) > ORDER_STAGES.indexOf(s)) {
     confirmModal('Move back to ' + OSTATUS_LABEL[s] + '?', 'The order is at ' + OSTATUS_LABEL[o.status] + ' now.', 'Move back', go);
   } else if (s === 'delivered' && typeof creditCheckDelivery === 'function') creditCheckDelivery(o, go);
   else go();
+}
+
+/* "Not approved": why? (one tap) — counted in Reports → Quotations not approved */
+function lostAsk(o, go) {
+  let why = '';
+  const ov = openModal('<h3>Not approved — why?</h3><p>The quotation will be marked Not approved (you can reopen it later). Why did the client say no?</p>' +
+    '<div class="seg lost-seg">' + LOST_REASONS.map((r) => '<button type="button" data-r="' + r[0] + '">' + esc(r[1]) + '</button>').join('') + '</div>' +
+    '<div class="field" style="margin-top:12px"><input type="text" id="lost-note" maxlength="300" autocomplete="off" placeholder="Anything more? (optional)"></div>' +
+    '<div class="modal-actions"><button class="btn btn-secondary" data-m="no">Cancel</button>' +
+    '<button class="btn btn-primary" data-m="yes" style="background:#b3372f">Not approved</button></div>');
+  ov.querySelectorAll('.lost-seg button').forEach((b) => {
+    b.onclick = () => { why = why === b.dataset.r ? '' : b.dataset.r; ov.querySelectorAll('.lost-seg button').forEach((x) => x.classList.toggle('on', x.dataset.r === why)); };
+  });
+  ov.querySelector('[data-m=no]').onclick = closeModal;
+  ov.querySelector('[data-m=yes]').onclick = () => {
+    const note = ($('#lost-note').value || '').trim();
+    closeModal();
+    if (!why && !note) { go(); return; }
+    go({ patch: { lost_reason: why || 'other', lost_note: note || null }, note: [why ? lostLabel(why) : '', note].filter(Boolean).join(' — ') });
+  };
 }
 
 /* a catalogue piece can only be in one order — pieces of this order that were taken meanwhile */

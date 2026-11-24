@@ -54,6 +54,21 @@
     .contact a { color: var(--maroon); font-weight: 700; text-decoration: none; }
     .msg { text-align: center; padding: 40px 10px; color: var(--muted); }
     .msg .big { font-size: 40px; }
+    .disp { display: flex; gap: 10px; align-items: center; }
+    .disp .ic { font-size: 24px; }
+    .disp b { display: block; }
+    .disp span { font-size: 13.5px; color: var(--muted); }
+    .fb h3 { margin: 0 0 4px; font-size: 17px; }
+    .stars { display: flex; gap: 6px; margin: 8px 0 10px; }
+    .stars button { border: 0; background: none; font-size: 34px; line-height: 1; padding: 2px; cursor: pointer; color: #d9d2cb; }
+    .stars button.on { color: var(--gold); }
+    .fb textarea { width: 100%; min-height: 70px; border: 1.5px solid var(--line); border-radius: 12px; padding: 9px 11px; font: inherit; resize: vertical; color: var(--ink); background: #fff; }
+    .fb .send { display: block; width: 100%; border: 0; border-radius: 12px; padding: 13px; margin: 10px 0 0; background: var(--maroon); color: #fff; font: inherit; font-weight: 800; font-size: 15.5px; cursor: pointer; }
+    .fb .send:disabled { opacity: .55; }
+    .fb .link { border: 0; background: none; color: var(--maroon); font: inherit; font-weight: 700; padding: 6px 0 0; cursor: pointer; }
+    .fb .err { color: var(--red); font-weight: 650; margin: 8px 0 0; }
+    .fb .got { font-size: 26px; color: var(--gold); letter-spacing: 2px; }
+    .fb .note { background: #f8f3ea; border-radius: 10px; padding: 8px 11px; margin: 6px 0 0; white-space: pre-wrap; }
     .zoom { position: fixed; inset: 0; background: rgba(10, 8, 12, .92); display: flex; align-items: center; justify-content: center; z-index: 9; }
     .zoom img { max-width: 100%; max-height: 100%; }
   </style>
@@ -65,7 +80,8 @@
   <script src="config.js"></script>
   <script>
   /* The page a shop opens from the order status link: no login, only this
-     order — its steps with their dates, delivery date, photos, IGI numbers. */
+     order — its steps with their dates, delivery date, photos, IGI numbers,
+     how it was sent (courier / angadia) and, once delivered, its stars. */
   (function () {
     'use strict';
     var T = {
@@ -76,7 +92,11 @@
         'Finished': 'तैयार', 'IGI certification': 'IGI सर्टिफिकेशन', 'Delivered': 'डिलीवर हो गया', 'Questions? Call or WhatsApp': 'कोई सवाल? कॉल या WhatsApp करें',
         'This link is not active any more.': 'यह लिंक अब चालू नहीं है।', 'Please ask us for a new link.': 'कृपया हमसे नया लिंक मांगें।',
         'Could not load — check the internet and open the link again.': 'लोड नहीं हुआ — इंटरनेट देखें और लिंक फिर से खोलें।', 'Loading…': 'लोड हो रहा है…', 'for': 'के लिए',
-        'Certificate': 'सर्टिफिकेट', 'Open the PDF': 'PDF खोलें'
+        'Certificate': 'सर्टिफिकेट', 'Open the PDF': 'PDF खोलें',
+        'Sent by courier': 'कूरियर से भेजा', 'Sent by angadia': 'आंगड़िया से भेजा', 'Docket no.': 'डॉकेट नं.', 'Receipt no.': 'रसीद नं.',
+        'How was this order?': 'यह ऑर्डर कैसा रहा?', 'Tap the stars': 'स्टार पर टैप करें', 'Anything to tell us? (optional)': 'कुछ कहना है? (ज़रूरी नहीं)',
+        'Send': 'भेजें', 'Thank you for telling us!': 'बताने के लिए धन्यवाद!', 'Your rating': 'आपकी रेटिंग', 'Change': 'बदलें',
+        'Choose 1 to 5 stars': '1 से 5 स्टार चुनें', 'Could not send — check the internet and try again.': 'भेजा नहीं गया — इंटरनेट देखें और फिर से कोशिश करें।', 'Sending…': 'भेज रहे हैं…'
       },
       gu: {
         'Your order': 'તમારો ઓર્ડર', 'Now': 'હમણાં', 'Delivery by': 'ડિલિવરી', 'Delivered on': 'ડિલિવર થયો', 'Running late — new date soon': 'થોડું મોડું — નવી તારીખ જલ્દી',
@@ -85,7 +105,11 @@
         'Finished': 'તૈયાર', 'IGI certification': 'IGI સર્ટિફિકેશન', 'Delivered': 'ડિલિવર થઈ ગયો', 'Questions? Call or WhatsApp': 'કોઈ પ્રશ્ન? કૉલ અથવા WhatsApp કરો',
         'This link is not active any more.': 'આ લિંક હવે ચાલુ નથી.', 'Please ask us for a new link.': 'કૃપા કરીને અમારી પાસે નવી લિંક માંગો.',
         'Could not load — check the internet and open the link again.': 'લોડ ન થયું — ઇન્ટરનેટ તપાસો અને લિંક ફરી ખોલો.', 'Loading…': 'લોડ થાય છે…', 'for': 'માટે',
-        'Certificate': 'સર્ટિફિકેટ', 'Open the PDF': 'PDF ખોલો'
+        'Certificate': 'સર્ટિફિકેટ', 'Open the PDF': 'PDF ખોલો',
+        'Sent by courier': 'કુરિયરથી મોકલ્યું', 'Sent by angadia': 'આંગડિયાથી મોકલ્યું', 'Docket no.': 'ડોકેટ નં.', 'Receipt no.': 'રસીદ નં.',
+        'How was this order?': 'આ ઓર્ડર કેવો રહ્યો?', 'Tap the stars': 'સ્ટાર પર ટેપ કરો', 'Anything to tell us? (optional)': 'કંઈ કહેવું છે? (જરૂરી નથી)',
+        'Send': 'મોકલો', 'Thank you for telling us!': 'જણાવવા બદલ આભાર!', 'Your rating': 'તમારું રેટિંગ', 'Change': 'બદલો',
+        'Choose 1 to 5 stars': '1 થી 5 સ્ટાર પસંદ કરો', 'Could not send — check the internet and try again.': 'મોકલાયું નહીં — ઇન્ટરનેટ તપાસો અને ફરી પ્રયાસ કરો.', 'Sending…': 'મોકલી રહ્યા છીએ…'
       }
     };
     var lang = 'en';
@@ -103,6 +127,12 @@
       var d = new Date(String(iso).length === 10 ? iso + 'T00:00:00' : iso);
       return d.getDate() + ' ' + MONTHS[lang][d.getMonth()];
     }
+    /* a team member opening the link on their own phone is not the shop */
+    function teamPhone() {
+      try { for (var i = 0; i < localStorage.length; i++) { if (/^sb-.+-auth-token$/.test(localStorage.key(i) || '')) return true; } } catch (e) { /* private mode */ }
+      return false;
+    }
+    var fb = { stars: 0, note: '', view: '', err: '', busy: false };   // the shop's stars for a delivered order
     var STEP = { 'new': 'Order confirmed', cad: 'CAD design', wax: 'Wax model', in_production: 'Being made', setting: 'Diamond setting',
       finished: 'Finished', ready: 'Finished', igi: 'IGI certification', delivered: 'Delivered' };
     var ALL = ['cad', 'wax', 'in_production', 'setting', 'finished', 'igi'];
@@ -153,6 +183,12 @@
           return '<li class="' + state + '"><span class="dot">' + (state === 'pending' ? '' : '✓') + '</span><span class="nm">' + esc(t(STEP[k])) + '</span>' +
             '<span class="when">' + (state === 'pending' ? '' : esc(when)) + '</span></li>';
         }).join('') + '</ul></div>';
+      if (d.dispatch && (d.dispatch.mode === 'courier' || d.dispatch.mode === 'angadia')) {
+        var cour = d.dispatch.mode === 'courier';
+        h += '<div class="card disp"><span class="ic">' + (cour ? '📦' : '🤝') + '</span><div><b>' + esc(t(cour ? 'Sent by courier' : 'Sent by angadia')) + (d.dispatch.by ? ' — ' + esc(d.dispatch.by) : '') + '</b>' +
+          (d.dispatch.no ? '<span>' + esc(t(cour ? 'Docket no.' : 'Receipt no.')) + ' ' + esc(d.dispatch.no) + '</span>' : '') + '</div></div>';
+      }
+      if (st === 'delivered') h += fbHTML(d);
       var pics = [];
       (d.final_photos || []).forEach(function (p) { if (p) pics.push({ p: 'o:' + p, cap: t('Finished piece') }); });
       (d.items || []).forEach(function (it) {
@@ -184,8 +220,9 @@
       }
       main.innerHTML = h;
       main.querySelectorAll('.langs button').forEach(function (bt) {
-        bt.onclick = function () { lang = bt.dataset.l; try { localStorage.setItem('statusLang', lang); } catch (e) { /* ignore */ } draw(); };
+        bt.onclick = function () { fbKeep(); lang = bt.dataset.l; try { localStorage.setItem('statusLang', lang); } catch (e) { /* ignore */ } draw(); };
       });
+      fbWire();
       main.querySelectorAll('.photos img').forEach(function (im) {
         im.onclick = function () {
           if (!im.src) return;
@@ -197,11 +234,52 @@
       });
     }
 
+    function fbHTML(d) {
+      var view = fb.view || (d.feedback ? 'done' : 'form');
+      if (view === 'done' && d.feedback) {
+        return '<div class="card fb"><h3>' + esc(t('Your rating')) + '</h3><div class="got">' + '★★★★★'.slice(0, d.feedback.stars) +
+          '<span style="color:#d9d2cb">' + '★★★★★'.slice(d.feedback.stars) + '</span></div>' +
+          (d.feedback.note ? '<div class="note">' + esc(d.feedback.note) + '</div>' : '') +
+          '<p>' + esc(t('Thank you for telling us!')) + '</p><button class="link" data-fb="change">' + esc(t('Change')) + '</button></div>';
+      }
+      var s = fb.stars || (d.feedback ? d.feedback.stars : 0);
+      return '<div class="card fb"><h3>' + esc(t('How was this order?')) + '</h3><div class="hint" style="color:var(--muted);font-size:13px">' + esc(t('Tap the stars')) + '</div>' +
+        '<div class="stars">' + [1, 2, 3, 4, 5].map(function (n) { return '<button type="button" data-star="' + n + '" class="' + (n <= s ? 'on' : '') + '" aria-label="' + n + '">★</button>'; }).join('') + '</div>' +
+        '<textarea id="fb-note" maxlength="500" placeholder="' + esc(t('Anything to tell us? (optional)')) + '">' + esc(fb.note) + '</textarea>' +
+        (fb.err ? '<p class="err">' + esc(t(fb.err)) + '</p>' : '') +
+        '<button class="send" data-fb="send"' + (fb.busy ? ' disabled' : '') + '>' + esc(t(fb.busy ? 'Sending…' : 'Send')) + '</button></div>';
+    }
+    function fbKeep() { var el = document.getElementById('fb-note'); if (el) fb.note = el.value; }
+    function fbWire() {
+      main.querySelectorAll('[data-star]').forEach(function (bt) {
+        bt.onclick = function () { fbKeep(); fb.stars = +bt.dataset.star; fb.err = ''; draw(); };
+      });
+      var ch = main.querySelector('[data-fb=change]');
+      if (ch) ch.onclick = function () { fb.view = 'form'; fb.stars = data.feedback ? data.feedback.stars : 0; fb.note = data.feedback && data.feedback.note || ''; draw(); };
+      var sd = main.querySelector('[data-fb=send]');
+      if (sd) sd.onclick = function () {
+        fbKeep();
+        var s = fb.stars || (data.feedback ? data.feedback.stars : 0);
+        if (!s) { fb.err = 'Choose 1 to 5 stars'; draw(); return; }
+        if (fb.busy) return;
+        fb.busy = true; fb.err = ''; draw();
+        db.rpc('order_feedback', { p_token: token, p_stars: s, p_note: fb.note.trim() || null }).then(function (r) {
+          fb.busy = false;
+          if (r.error) { fb.err = 'Could not send — check the internet and try again.'; draw(); return; }
+          data.feedback = { stars: s, note: fb.note.trim() || null };
+          fb.view = 'done';
+          draw();
+        }, function () { fb.busy = false; fb.err = 'Could not send — check the internet and try again.'; draw(); });
+      };
+    }
+    function keepAndDraw() { fbKeep(); draw(); }
+
     db.rpc('order_status_public', { p_token: token }).then(function (r) {
       if (r.error) { message('⚠️', ['Could not load — check the internet and open the link again.']); return; }
       if (!r.data) { message('🔗', ['This link is not active any more.', 'Please ask us for a new link.']); return; }
       data = r.data;
       draw();
+      if (!teamPhone()) { try { db.rpc('link_seen', { p_kind: 'order', p_token: token }).then(function () {}, function () {}); } catch (e) { /* not counted */ } }
       var paths = [], cat = [];
       (data.final_photos || []).forEach(function (p) { if (p) paths.push(p); });
       (data.items || []).forEach(function (it) { if (it.photo) paths.push(it.photo); else if (it.cat_photo) cat.push(it.cat_photo); });
@@ -212,7 +290,7 @@
           (s.data || []).forEach(function (x) { if (x && x.signedUrl) urls[pre + x.path] = x.signedUrl; });
         }, function () { /* the photos stay blank */ });
       }
-      if (paths.length || cat.length) Promise.all([sign('orders', paths, 'o:'), sign('catalogue', cat, 'c:')]).then(draw);
+      if (paths.length || cat.length) Promise.all([sign('orders', paths, 'o:'), sign('catalogue', cat, 'c:')]).then(keepAndDraw);
     }, function () { message('⚠️', ['Could not load — check the internet and open the link again.']); });
   })();
   </script>

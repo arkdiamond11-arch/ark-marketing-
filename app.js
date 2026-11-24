@@ -447,7 +447,7 @@ async function renderToday() {
   }
   c.innerHTML = '<div id="today-late"></div><div id="today-stuck"></div><div id="today-summary"></div><div id="today-targets"></div><div id="today-wishes"></div>' +
     '<div id="today-pay"></div><div id="today-orders"></div><div id="today-repairs"></div><div id="today-approvals"></div>' + html +
-    '<div id="today-visits"></div><div id="today-sleep"></div>';
+    '<div id="today-reorder"></div><div id="today-visits"></div><div id="today-sleep"></div>';
   if (typeof renderTodaySummary === 'function') renderTodaySummary($('#today-summary'));
   if (typeof renderMyTargets === 'function' && appOn('targets')) renderMyTargets($('#today-targets'));
   if (typeof loadTodayPay === 'function' && appOn('payments')) loadTodayPay();
@@ -457,6 +457,7 @@ async function renderToday() {
   if (typeof loadTodayRepairs === 'function') loadTodayRepairs();
   if (typeof loadTodayApprovals === 'function') loadTodayApprovals();
   if (typeof loadTodayVisits === 'function') loadTodayVisits();
+  if (typeof loadTodayReorder === 'function') loadTodayReorder();
 }
 
 /* ============================================================
@@ -1210,6 +1211,7 @@ async function openClient(id, replace) {
     if (typeof loadClientCredit === 'function') loadClientCredit(cl);
     if (typeof loadClientPicks === 'function') loadClientPicks(cl);
     if (typeof loadClientVisit === 'function') loadClientVisit(cl);
+    if (typeof loadClientReorder === 'function') loadClientReorder(cl);
   }, replace);
 }
 
@@ -1232,6 +1234,7 @@ function renderClientPage(cl) {
   const more = [];   // repair job · pieces on approval, for this client
   if (typeof repairsOn === 'function' && repairsOn()) more.push('<button class="btn btn-small btn-secondary" data-action="rp-new-for" data-id="' + cl.id + '">🔧 Repair job</button>');
   if (typeof approvalsOn === 'function' && approvalsOn()) more.push('<button class="btn btn-small btn-secondary" data-action="ap-new-for" data-id="' + cl.id + '">💎 Give on approval</button>');
+  if (typeof shopLinkOn === 'function' && shopLinkOn()) more.push('<button class="btn btn-small btn-secondary" data-action="cl-shoplink" data-id="' + cl.id + '">🔗 Shop\'s own page</button>');
 
   $('#content').innerHTML =
     '<div class="client-head"><h2>' + esc(cl.trade_name) + '</h2>' +
@@ -1239,7 +1242,7 @@ function renderClientPage(cl) {
     '<div class="chips">' + chipCat(cl.category) + chipInterest(cl.interest) +
     (cl.order_type ? '<span class="chip">' + esc(cl.order_type) + '</span>' : '') +
     (cl.credit_hold && typeof creditOn === 'function' && creditOn() ? '<span class="chip cr-hold">⛔ On hold</span>' : '') +
-    '<span id="cl-visit"></span></div></div>' +
+    '<span id="cl-visit"></span><span id="cl-reorder"></span></div></div>' +
 
     '<div class="action-row">' +
     '<button class="btn btn-primary" data-action="new-interaction" data-id="' + cl.id + '">＋ Meeting</button>' +

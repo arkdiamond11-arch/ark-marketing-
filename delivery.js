@@ -7,6 +7,9 @@
      phone and a photo of the parcel. Printed on the delivery challan.
    · Order status link — a link the shop opens (no login) to see its
      order's step, photos and delivery date. It can be switched off.
+   · (update 13) How it was sent — by hand, courier or angadia, with the
+     docket / receipt number; the shop's stars after delivery; when the
+     shop opened its link.
    Loaded after flow.js, before app.js. Uses the app's helpers only at
    call time.
    ============================================================ */
@@ -288,6 +291,11 @@ async function offerHandover(o, undo) {
     (need.length ? '<div class="field"><label>IGI report numbers</label>' + items.map((it, i) => igiNo(it) ? '' :
       '<div class="igi-row"><span class="igi-it">' + esc((i + 1) + '. ' + [it.category || 'Item', it.design_code].filter(Boolean).join(' · ')) + '</span>' +
       '<input type="text" class="ho-igi" data-i="' + i + '" autocomplete="off" autocapitalize="characters" placeholder="IGI report no."></div>').join('') + '</div>' : '') +
+    (S.dbv13 ? '<div class="field"><label>How it went</label><div class="seg ho-mode">' +
+      DISPATCH_MODES.map((x) => '<button type="button" data-mode="' + x[0] + '" class="' + ((o.dispatch_mode || 'person') === x[0] ? 'on' : '') + '">' + esc(x[1]) + '</button>').join('') + '</div>' +
+      '<div class="ho-disp"' + (o.dispatch_mode === 'courier' || o.dispatch_mode === 'angadia' ? '' : ' hidden') + '>' +
+      '<input type="text" id="ho-by" autocomplete="off" placeholder="Courier / angadia name" value="' + esc(o.dispatch_by || '') + '">' +
+      '<input type="text" id="ho-no" autocomplete="off" autocapitalize="characters" placeholder="Docket / receipt no." value="' + esc(o.dispatch_no || '') + '"></div></div>' : '') +
     '<div class="field"><label>Received by</label><input type="text" id="ho-name" autocomplete="off" placeholder="Name of the person who took it" value="' + esc(o.delivered_to || '') + '"></div>' +
     '<div class="field"><label>Their signature</label><div class="sign-wrap" id="ho-sign"><button type="button" class="sign-clear" id="ho-clear">Clear</button></div></div>' +
     '<div class="field"><label>Photo of the parcel</label><div class="ho-photo"><div class="ho-thumb" id="ho-thumb"></div>' +
@@ -295,6 +303,17 @@ async function offerHandover(o, undo) {
     '<div class="modal-actions">' + (undo ? '<button class="btn btn-ghost" data-m="undo">Undo</button>' : '') +
     '<button class="btn btn-secondary" data-m="later">Skip</button><button class="btn btn-primary" data-m="yes">Save</button></div>');
   ov.classList.add('ho-modal');
+  let mode = o.dispatch_mode || 'person';   // what the buttons show (update 13)
+  ov.querySelectorAll('.ho-mode button').forEach((b) => {
+    b.onclick = () => {
+      mode = b.dataset.mode;
+      ov.querySelectorAll('.ho-mode button').forEach((x) => x.classList.toggle('on', x === b));
+      const d = ov.querySelector('.ho-disp');
+      if (d) d.hidden = !(mode === 'courier' || mode === 'angadia');
+      const lab = ov.querySelector('#ho-name');
+      if (lab) lab.placeholder = mode === 'person' ? 'Name of the person who took it' : 'Who received it at the shop (if known)';
+    };
+  });
   const pad = signPad(ov.querySelector('#ho-sign'));
   ov.querySelector('#ho-clear').onclick = () => pad.clear();
   ov.querySelector('#ho-cam').onclick = () => {
@@ -313,11 +332,15 @@ async function offerHandover(o, undo) {
     const name = $('#ho-name').value.trim();
     const igiVals = {};
     ov.querySelectorAll('.ho-igi').forEach((el) => { igiVals[+el.dataset.i] = el.value; });
-    if (!name && pad.empty() && !parcel && !Object.keys(igiVals).some((k) => String(igiVals[k]).trim())) { closeModal(); return; }
+    const sent = mode === 'courier' || mode === 'angadia';
+    const by = sent && $('#ho-by') ? $('#ho-by').value.trim() : '', no = sent && $('#ho-no') ? $('#ho-no').value.trim().toUpperCase() : '';
+    const modeChanged = S.dbv13 && mode !== (o.dispatch_mode || null);
+    if (!name && pad.empty() && !parcel && !Object.keys(igiVals).some((k) => String(igiVals[k]).trim()) && !modeChanged && !by && !no) { closeModal(); return; }
     e.target.disabled = true;
     const busy = busyOverlay('Saving the hand-over…');
     let ok = true;
     const patch = { delivered_to: name || null, delivered_at: o.delivered_at || new Date().toISOString() };
+    if (S.dbv13) Object.assign(patch, { dispatch_mode: mode, dispatch_by: sent ? by || null : null, dispatch_no: sent ? no || null : null });
     try {
       if (!pad.empty()) {
         const b = await pad.blob();
@@ -339,8 +362,46 @@ async function offerHandover(o, undo) {
     toast(ok ? 'Hand-over saved ✓' : 'Some of it could not be saved — add it on the order page.', ok ? 'ok' : 'err');
     const top = S.sub[S.sub.length - 1];
     if (top && top.title === ordNo(o.order_no)) openOrder(o.id, true);
+    if (ok && sent && (by || no) && (by !== (o.dispatch_by || '') || no !== (o.dispatch_no || ''))) {
+      confirmModal('Tell the shop?', 'Send ' + ((o.clients || {}).trade_name || 'the shop') + ' the ' + (mode === 'courier' ? 'courier' : 'angadia') + ' details on WhatsApp.', 'Send', () => dispatchTell(o.id));
+    }
   };
 }
+
+/* ---------------- how it was sent (update 13) ---------------- */
+const DISPATCH_MODES = [['person', 'By hand'], ['courier', 'Courier'], ['angadia', 'Angadia']];
+function dispatchLine(o) {
+  if (o.dispatch_mode === 'courier' || o.dispatch_mode === 'angadia') {
+    const c = o.dispatch_mode === 'courier';
+    return (c ? '📦 By courier' : '🤝 By angadia') + (o.dispatch_by ? ' — ' + o.dispatch_by : '') + (o.dispatch_no ? ' · ' + (c ? 'Docket no. ' : 'Receipt no. ') + o.dispatch_no : '');
+  }
+  return o.dispatch_mode === 'person' ? '🚶 By hand' : '';
+}
+async function dispatchTell(orderId) {
+  const o = await fetchOrder(orderId);
+  if (!o || !(o.dispatch_mode === 'courier' || o.dispatch_mode === 'angadia')) return;
+  const c = o.dispatch_mode === 'courier';
+  const text = 'Namaste 🙏\nYour order ' + ordNo(o.order_no) + ' has been sent ' + (c ? 'by courier' : 'through angadia') +
+    (o.dispatch_by ? ' — ' + o.dispatch_by : '') + (o.dispatch_no ? '\n' + (c ? 'Docket no.: ' : 'Receipt no.: ') + o.dispatch_no : '') +
+    (o.share_token ? '\nSee it here: ' + statusLinkUrl(o.share_token) : '') + '\n— ' + bizName();
+  openWa((o.clients || {}).mobile, text);
+}
+/* the shop's stars: send its order link so it can tap 1–5 */
+async function feedbackAsk(orderId) {
+  const o = await fetchOrder(orderId);
+  if (!o) return;
+  let token = null;
+  try {
+    const { data, error } = await db.rpc('order_share_link', { p_order: orderId, p_on: true });
+    token = !error && data ? data : null;
+  } catch (e) { token = null; }
+  if (!token) { toast('Could not make the link — try again.', 'err'); return; }
+  const text = 'Namaste 🙏\nThank you for your order ' + ordNo(o.order_no) + '. How did you like it? Please tap the stars here — it takes a few seconds:\n' + statusLinkUrl(token) + '\n— ' + bizName();
+  openWa((o.clients || {}).mobile, text);
+}
+function starsText(n) { return '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n); }
+onAct('ds-tell', (el) => dispatchTell(el.dataset.id));
+onAct('fb-ask', (el) => feedbackAsk(el.dataset.id));
 
 /* the order page: who received it, signature, parcel photo */
 function drawDeliveryBox(o) {
@@ -348,21 +409,40 @@ function drawDeliveryBox(o) {
   if (!box) return;
   if (!S.dbv8 || o.status !== 'delivered') { box.innerHTML = ''; return; }
   const photos = (o.delivery_photo_paths || []).filter(Boolean);
-  const has = o.delivered_to || o.delivery_sign_path || photos.length;
+  const has = o.delivered_to || o.delivery_sign_path || photos.length || (S.dbv13 && o.dispatch_mode);
+  const recent = !(o.delivered_on && o.delivered_on < todayStr(-30));
+  const fbBox = feedbackHTML(o, recent);
   if (!has) {
-    if (o.delivered_on && o.delivered_on < todayStr(-30)) { box.innerHTML = ''; return; }   // delivered long ago: nothing to ask
-    box.innerHTML = '<div class="section-label">Hand-over</div><div class="card"><p class="hint" style="margin:0 0 10px">Who received it, their signature and a photo of the parcel — printed on the delivery challan.</p>' +
-      '<button class="btn btn-small btn-secondary" data-action="ho-add" data-id="' + o.id + '">＋ Record the hand-over</button></div>';
+    if (!recent) { box.innerHTML = fbBox ? '<div class="section-label">The shop\'s feedback</div>' + fbBox : ''; return; }   // delivered long ago: nothing to ask
+    box.innerHTML = '<div class="section-label">Hand-over</div><div class="card"><p class="hint" style="margin:0 0 10px">' +
+      (S.dbv13 ? 'Who received it (or the courier / angadia), their signature and a photo of the parcel — printed on the delivery challan.' : 'Who received it, their signature and a photo of the parcel — printed on the delivery challan.') + '</p>' +
+      '<button class="btn btn-small btn-secondary" data-action="ho-add" data-id="' + o.id + '">＋ Record the hand-over</button></div>' + fbBox;
     return;
   }
   const when = o.delivered_at ? fmtD(o.delivered_at) + ', ' + fmtTime(o.delivered_at) : (o.delivered_on ? fmtD(o.delivered_on) : '');
+  const disp = S.dbv13 ? dispatchLine(o) : '';
+  const sent = S.dbv13 && (o.dispatch_mode === 'courier' || o.dispatch_mode === 'angadia');
   box.innerHTML = '<div class="section-label">Hand-over</div><div class="card ho-card">' +
-    '<div class="ho-line"><b>' + esc(o.delivered_to ? 'Received by ' + o.delivered_to : 'Received') + '</b>' + (when ? '<span>' + esc(when) + '</span>' : '') + '</div>' +
+    '<div class="ho-line"><b>' + esc(o.delivered_to ? 'Received by ' + o.delivered_to : sent ? 'Sent' : 'Received') + '</b>' + (when ? '<span>' + esc(when) + '</span>' : '') + '</div>' +
+    (disp ? '<div class="ho-disp-line">' + esc(disp) + '</div>' : '') +
     '<div class="ho-pics">' + (o.delivery_sign_path ? '<div class="ho-sig"><img data-hop="' + esc(o.delivery_sign_path) + '" alt="Signature"><span>Signature</span></div>' : '') +
     photos.map((p) => '<div class="ho-par"><img data-hop="' + esc(p) + '" alt="Parcel" data-action="ho-view" data-p="' + esc(p) + '"></div>').join('') + '</div>' +
-    '<button class="btn btn-small btn-secondary" data-action="ho-add" data-id="' + o.id + '">Change</button></div>';
+    '<div class="photo-row"><button class="btn btn-small btn-secondary" data-action="ho-add" data-id="' + o.id + '">Change</button>' +
+    (sent && (o.dispatch_by || o.dispatch_no) ? '<button class="btn btn-small btn-secondary" data-action="ds-tell" data-id="' + o.id + '">Tell the shop</button>' : '') + '</div></div>' + fbBox;
   const ps = [o.delivery_sign_path].concat(photos).filter(Boolean);
-  signedUrls('orders', ps).then((m) => { box.querySelectorAll('img[data-hop]').forEach((im) => { const u = m.get(im.dataset.hop); if (u) im.src = u; }); });
+  if (ps.length) signedUrls('orders', ps).then((m) => { box.querySelectorAll('img[data-hop]').forEach((im) => { const u = m.get(im.dataset.hop); if (u) im.src = u; }); });
+}
+/* the shop's stars on a delivered order — or a button to ask for them */
+function feedbackHTML(o, recent) {
+  if (!S.dbv13) return '';
+  if (o.feedback_stars) {
+    return '<div class="card fb-card"><div class="fb-stars" aria-label="' + o.feedback_stars + '/5">' + starsText(o.feedback_stars) + '</div>' +
+      '<div class="fb-meta">' + esc('The shop gave ' + o.feedback_stars + '/5 stars' + (o.feedback_at ? ' · ' + fmtD(o.feedback_at) : '')) + '</div>' +
+      (o.feedback_note ? '<div class="fb-note noi18n">' + esc(o.feedback_note) + '</div>' : '') + '</div>';
+  }
+  if (!recent) return '';
+  return '<div class="card fb-card"><p class="hint" style="margin:0 0 10px">Ask the shop how it liked the order — it taps 1 to 5 stars on its order link.</p>' +
+    '<button class="btn btn-small btn-secondary" data-action="fb-ask" data-id="' + o.id + '">⭐ Ask for feedback</button></div>';
 }
 
 onAct('ho-add', async (el) => { const o = await fetchOrder(el.dataset.id); if (o) offerHandover(o, null); });
@@ -390,11 +470,13 @@ async function openStatusLink(orderId) {
   const text = 'Namaste 🙏\nYou can see how your order ' + ordNo(o.order_no) + ' is coming along here:\n' + url + '\n— ' + bizName();
   const m = openModal('<h3>Order status link</h3>' +
     '<p>' + esc(cl.trade_name || 'The shop') + ' can open this link to see ' + esc(ordNo(o.order_no)) + '\'s step, photos and delivery date — no login needed. Turn it off any time.</p>' +
+    (S.dbv13 ? '<div class="hint" id="sl-seen"></div>' : '') +
     '<div class="sl-url noi18n">' + esc(url) + '</div>' +
     '<div class="fin-ask"><button class="btn btn-primary" data-m="wa">Send on WhatsApp</button>' +
     '<button class="btn btn-secondary" data-m="copy">Copy the link</button>' +
     '<button class="btn btn-ghost" data-m="off">Turn the link off</button>' +
     '<button class="btn btn-ghost" data-m="no">Close</button></div>');
+  if (S.dbv13 && typeof seenOf === 'function') seenOf('order', orderId).then((v) => { const el = $('#sl-seen'); if (el && v) el.textContent = seenText(v); });
   m.querySelector('[data-m=wa]').onclick = () => { window.open(waUrl(cl.mobile, text), '_blank'); closeModal(); };
   m.querySelector('[data-m=copy]').onclick = async () => {
     try { await navigator.clipboard.writeText(url); toast('Link copied ✓', 'ok'); }

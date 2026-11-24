@@ -209,7 +209,7 @@ async function loadBiz() {
   const [has8, has9, ver] = await Promise.all([v8, v9, v11]);
   if (has8 !== null) S.dbv8 = has8;
   if (has9 !== null) S.dbv9 = has9;
-  if (ver !== null) { S.dbv11 = ver >= 11; S.dbv12 = ver >= 12; }
+  if (ver !== null) { S.dbv11 = ver >= 11; S.dbv12 = ver >= 12; S.dbv13 = ver >= 13; }
   if (r.error || !r.data) { if (!S.biz) S.biz = {}; return null; }
   S.biz = r.data;
   S.bizAt = Date.now();
@@ -254,10 +254,11 @@ const APP_SECTIONS = [
   ['messages', 'Messages to shops', 'New designs or an offer, sent to many shops on WhatsApp', 8],
   ['wishes', 'Birthdays and anniversaries', 'Reminders on Today to wish your clients', 8],
   ['visits', 'Visit plan', 'Shops due for a visit, by customer category A / B / C'],
+  ['reorder', 'Re-order reminders', 'Shops that usually order again by now — on Today'],
   // database update 12
   ['credit', 'Credit rules', 'Check before taking orders from shops that are late to pay', 12],
 ];
-function appSectionsShown() { return APP_SECTIONS.filter((s) => !s[3] || (s[3] === 8 ? S.dbv8 : s[3] === 12 ? S.dbv12 : true)); }
+function appSectionsShown() { return APP_SECTIONS.filter((s) => !s[3] || !!S['dbv' + s[3]]); }
 const STEP_CHOICES = ['cad', 'wax', 'in_production', 'setting', 'finished', 'igi'];   // between Approved and Delivered
 function appOpts() {
   const o = S.biz && S.biz.app_options;

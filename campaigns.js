@@ -185,14 +185,15 @@ async function saveCampaign() {
 async function renderCampaign(id) {
   const c = $('#content');
   c.innerHTML = loadingHTML();
-  const [kr, sr, picks] = await Promise.all([
+  const [kr, sr, picks, seen] = await Promise.all([
     db.from('campaigns').select('*').eq('id', id).maybeSingle(),
     fetchPaged(() => db.from('campaign_sends').select('id, client_id, sent_at, sent_by, clients(trade_name, contact_person, city, mobile)').eq('campaign_id', id).order('id', { ascending: true })),
     typeof campaignPicks === 'function' ? campaignPicks(id).catch(() => []) : Promise.resolve([]),
-  ]).catch(() => [{ error: true }, [], []]);
+    typeof seenByShop === 'function' ? seenByShop('campaign', id) : Promise.resolve(new Map()),   // which shops opened the photos (update 13)
+  ]).catch(() => [{ error: true }, [], [], new Map()]);
   if (kr.error || !kr.data) { c.innerHTML = '<div class="empty">Could not load — try again.</div>'; return; }
   const k = kr.data;
-  S.camp = { k, rows: sr || [], picks: picks || [], show: (S.camp && S.camp.k.id === id && S.camp.show) || 'todo' };
+  S.camp = { k, rows: sr || [], picks: picks || [], seen: seen || new Map(), show: (S.camp && S.camp.k.id === id && S.camp.show) || 'todo' };
   drawCampaign();
   if (typeof pickSeen === 'function') pickSeen(S.camp.picks);
 }
@@ -201,6 +202,8 @@ function drawCampaign() {
   if (!c) return;
   const ok = (r) => isIndianMobile(normMobile(r.clients && r.clients.mobile));
   const sent = C.rows.filter((r) => r.sent_at).length, todo = C.rows.filter((r) => !r.sent_at && ok(r));
+  const seen = C.seen || new Map();
+  const opened = C.rows.filter((r) => r.sent_at && seen.has(r.client_id)).length;
   const list = C.show === 'sent' ? C.rows.filter((r) => r.sent_at) : C.show === 'all' ? C.rows : todo;
   const chip = (v, label) => '<button class="' + (C.show === v ? 'on' : '') + '" data-action="camp-show" data-v="' + v + '">' + label + '</button>';
   c.innerHTML =
@@ -210,7 +213,7 @@ function drawCampaign() {
     '<div class="photo-row"><a class="btn btn-small btn-secondary" href="' + esc(showUrl(k.id)) + '" target="_blank" rel="noopener">See the page the shops get</a>' +
     (S.me.role === 'owner' || k.created_by === S.me.id ? '<button class="btn btn-small btn-ghost" data-action="camp-del" data-id="' + k.id + '">Delete</button>' : '') + '</div></div>' +
     (typeof campaignPicksHTML === 'function' ? '<div id="camp-picks">' + campaignPicksHTML(C.picks) + '</div>' : '') +
-    '<div class="camp-prog"><b>' + esc(sent + ' of ' + C.rows.length + ' sent') + '</b><div class="pg-bar"><i class="' + (sent === C.rows.length ? 'done' : 'ok') + '" style="width:' +
+    '<div class="camp-prog"><b>' + esc(sent + ' of ' + C.rows.length + ' sent') + '</b>' + (opened ? '<span class="camp-seen">' + esc('👁 ' + opened + ' opened the photos') + '</span>' : '') + '<div class="pg-bar"><i class="' + (sent === C.rows.length ? 'done' : 'ok') + '" style="width:' +
     (C.rows.length ? Math.round(sent / C.rows.length * 100) : 0) + '%"></i></div></div>' +
     '<div class="filter-chips">' + chip('todo', 'To send (' + todo.length + ')') + chip('sent', 'Sent (' + sent + ')') + chip('all', 'All (' + C.rows.length + ')') + '</div>' +
     (list.length ? list.map((r) => {
@@ -219,6 +222,7 @@ function drawCampaign() {
         '<div class="li-title">' + esc(cl.trade_name || '') + '</div>' +
         '<div class="li-sub">' + esc([cl.contact_person, cl.city].filter(Boolean).join(' · ')) + '</div>' +
         (r.sent_at ? '<div class="li-when">' + esc('Sent ' + fmtD(r.sent_at) + ', ' + fmtTime(r.sent_at) + (r.sent_by ? ' · ' + String(nameOf(r.sent_by)).split(' ')[0] : '')) + '</div>' : '') +
+        (r.sent_at && seen.has(r.client_id) ? '<div class="li-when camp-seen">' + esc(seenText(seen.get(r.client_id))) + '</div>' : '') +
         '</div>' +
         (r.sent_at ? '<button type="button" class="camp-again" data-action="camp-send" data-id="' + r.id + '">Again</button>'
           : ok(r) ? '<button type="button" class="camp-send" data-action="camp-send" data-id="' + r.id + '">' + WA_SVG + '<span>Send</span></button>'

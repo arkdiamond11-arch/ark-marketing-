@@ -4,7 +4,8 @@
    with the dates) · Payment dates (every due date and paid date in
    a period) · Order items (weights, purity, colour, diamonds,
    certificates) · Orders · Diamonds & stones · Month summary ·
-   Stock (catalogue) · Karigar metal.
+   Stock (catalogue) · Karigar metal · Quotations not approved (why) ·
+   Shop feedback (stars).
    Each one can be filtered, grouped and downloaded (Excel / PDF).
    ============================================================ */
 'use strict';
@@ -12,6 +13,7 @@
 const REP_TYPES = [
   ['pay', 'Payment status'], ['payhist', 'Payment dates'], ['items', 'Order items'], ['orders', 'Orders'], ['steps', 'Step times'],
   ['diamonds', 'Diamonds & stones'], ['summary', 'Month summary'], ['stock', 'Stock (catalogue)'], ['karigars', 'Karigar metal'],
+  ['lost', 'Quotations not approved'], ['feedback', 'Shop feedback'],
 ];
 const LIVE_STATUSES = OPEN_STATUSES.concat(['delivered']);   // approved orders (in work, finished or delivered)
 const REP_STATUS = [['booked', 'Booked (open + delivered)'], ['open', 'Open'], ['finished', 'Finished'], ['delivered', 'Delivered'], ['quote', 'Quotations'],
@@ -27,6 +29,8 @@ const REP_GROUPS = {
   karigars: [['', 'No grouping']],
   summary: [['', 'No grouping']],
   steps: [['stage', 'Step'], ['vendor', 'Vendor'], ['party', 'Party'], ['month', 'Month'], ['', 'No grouping']],
+  lost: [['reason', 'Reason'], ['', 'No grouping'], ['party', 'Party'], ['exec', 'Executive'], ['city', 'City'], ['month', 'Month']],
+  feedback: [['', 'No grouping'], ['stars', 'Stars'], ['party', 'Party'], ['exec', 'Executive'], ['city', 'City'], ['month', 'Month']],
 };
 /* reports that are "as on today" (no period) */
 const REP_NO_PERIOD = { pay: 1, stock: 1, karigars: 1 };
@@ -36,6 +40,7 @@ function repTypeOn(t) {
   if (t === 'pay' || t === 'payhist') return appOn('payments');
   if (t === 'stock') return appOn('catalogue');
   if (t === 'karigars') return appOn('karigars');
+  if (t === 'lost' || t === 'feedback') return !!S.dbv13;   // database update 13
   return true;
 }
 function repTypes() { return REP_TYPES.filter((t) => repTypeOn(t[0])); }
@@ -88,6 +93,12 @@ async function repLoad() {
       repFetchAll(() => db.from('order_updates').select('id, order_id, status, created_at').not('status', 'is', null).order('created_at', { ascending: true }).order('id', { ascending: true })),
     ]);
     data = { orders, ups };
+  } else if (T === 'lost') {
+    data = { orders: await repFetchAll(() => inRange(db.from('orders').select('id, order_no, order_date, client_id, created_by, order_type, lost_reason, lost_note, clients(trade_name, city), order_items(net_wt, qty, category)')
+      .eq('status', 'declined'), 'order_date', r).order('order_date', { ascending: true }).order('id', { ascending: true })) };
+  } else if (T === 'feedback') {
+    data = { orders: await repFetchAll(() => inRangeTs(db.from('orders').select('id, order_no, order_date, delivered_on, client_id, created_by, feedback_stars, feedback_note, feedback_at, clients(trade_name, city)')
+      .not('feedback_stars', 'is', null), 'feedback_at', r).order('feedback_at', { ascending: true }).order('id', { ascending: true })) };
   } else if (T === 'stock') {
     data = { items: await repFetchAll(() => db.from('catalogue_items').select('*').order('created_at', { ascending: true }).order('id', { ascending: true })) };
   } else {
@@ -323,6 +334,59 @@ function stepTimesBuild(D, f) {
   };
 }
 
+/* ---------------- quotations not approved: why ---------------- */
+function lostBuild(D, f) {
+  let rows = D.orders.map((o) => ({ o, party: (o.clients && o.clients.trade_name) || '', city: (o.clients && o.clients.city) || '',
+    why: o.lost_reason ? lostLabel(o.lost_reason) : 'No reason given', net: (o.order_items || []).reduce((a, it) => a + num(it.net_wt), 0) }));
+  if (f.reason) rows = rows.filter((x) => (f.reason === 'none' ? !x.o.lost_reason : x.o.lost_reason === f.reason));
+  if (f.party) rows = rows.filter((x) => x.o.client_id === f.party);
+  if (f.city) rows = rows.filter((x) => x.city === f.city);
+  if (f.exec) rows = rows.filter((x) => x.o.created_by === f.exec);
+  rows.sort((a, b) => (a.o.order_date < b.o.order_date ? 1 : a.o.order_date > b.o.order_date ? -1 : 0));
+  const agg = (list) => ({ n: list.length, net: list.reduce((a, x) => a + x.net, 0) });
+  const tot = agg(rows);
+  const counts = new Map();
+  rows.forEach((x) => counts.set(x.why, (counts.get(x.why) || 0) + 1));
+  const top = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  return {
+    rows, tot, agg, sortBy: (a) => a.n,
+    tiles: [['Not approved', String(tot.n)]].concat(top.map((e) => [e[0], String(e[1]) + (tot.n ? ' (' + Math.round(e[1] / tot.n * 100) + '%)' : '')])),
+    groupKey: (x, k) => ({ reason: x.why, party: x.party || '—', exec: nameOf(x.o.created_by), city: x.city || '—', month: repMonth(x.o.order_date) }[k]),
+    gcols: [['Quotations', (a) => String(a.n)], ['%', (a) => (tot.n ? Math.round(a.n / tot.n * 100) + '%' : '')]],
+    lines: (x) => [ordNo(x.o.order_no) + ' · ' + x.party, [fmtD(x.o.order_date), x.why, x.o.lost_note || '', nameOf(x.o.created_by)].filter(Boolean).join(' · ')],
+    amount: (x) => (x.net ? fmtG(x.net) + ' g' : ''), open: (x) => x.o.id,
+    csvHead: ['Quotation no', 'Date', 'Party', 'City', 'Reason', 'Note', 'Executive', 'Net wt (g)'],
+    csv: (x) => [ordNo(x.o.order_no), x.o.order_date, x.party, x.city, x.why, x.o.lost_note || '', nameOf(x.o.created_by), round3(x.net)],
+    pdfCols: [['Date', 20], ['No', 18], ['Party', 0], ['Reason', 44], ['Note', 40]],
+    pdfRow: (x) => [fmtD(x.o.order_date), ordNo(x.o.order_no), x.party, x.why, x.o.lost_note || ''],
+  };
+}
+
+/* ---------------- shop feedback: the stars shops gave on their order links ---------------- */
+function feedbackBuild(D, f) {
+  let rows = D.orders.map((o) => ({ o, s: +o.feedback_stars || 0, party: (o.clients && o.clients.trade_name) || '', city: (o.clients && o.clients.city) || '' }));
+  if (f.stars === 'low') rows = rows.filter((x) => x.s <= 3); else if (f.stars) rows = rows.filter((x) => x.s === +f.stars);
+  if (f.party) rows = rows.filter((x) => x.o.client_id === f.party);
+  if (f.city) rows = rows.filter((x) => x.city === f.city);
+  if (f.exec) rows = rows.filter((x) => x.o.created_by === f.exec);
+  rows.sort((a, b) => (a.o.feedback_at < b.o.feedback_at ? 1 : -1));
+  const agg = (list) => ({ n: list.length, avg: list.length ? list.reduce((a, x) => a + x.s, 0) / list.length : 0, low: list.filter((x) => x.s <= 3).length });
+  const tot = agg(rows);
+  const avg = (a) => (a.n ? (Math.round(a.avg * 10) / 10).toLocaleString('en-IN', { maximumFractionDigits: 1 }) + ' / 5' : '—');   // no ★ — the PDF letters have none
+  return {
+    rows, tot, agg, sortBy: (a) => a.avg,
+    tiles: [['Ratings', String(tot.n)], ['Average', avg(tot)], ['5 stars', String(rows.filter((x) => x.s === 5).length)], ['3 stars or less', String(tot.low)]],
+    groupKey: (x, k) => ({ stars: x.s === 1 ? '1 star' : x.s + ' stars', party: x.party || '—', exec: nameOf(x.o.created_by), city: x.city || '—', month: repMonth(ymd(new Date(x.o.feedback_at))) }[k]),
+    gcols: [['Ratings', (a) => String(a.n)], ['Average', avg], ['3 or less', (a) => String(a.low)]],
+    lines: (x) => [ordNo(x.o.order_no) + ' · ' + x.party, [fmtD(x.o.feedback_at), x.o.feedback_note || '', nameOf(x.o.created_by)].filter(Boolean).join(' · ')],
+    amount: (x) => starsText(x.s), open: (x) => x.o.id,
+    csvHead: ['Order no', 'Party', 'City', 'Stars', 'What the shop said', 'Rated on', 'Delivered on', 'Executive'],
+    csv: (x) => [ordNo(x.o.order_no), x.party, x.city, x.s, x.o.feedback_note || '', fmtExp(x.o.feedback_at), x.o.delivered_on || '', nameOf(x.o.created_by)],
+    pdfCols: [['Date', 20], ['Order', 18], ['Party', 0], ['Stars', 14, 'right'], ['What the shop said', 60]],
+    pdfRow: (x) => [fmtD(x.o.feedback_at), ordNo(x.o.order_no), x.party, x.s + '/5', x.o.feedback_note || ''],
+  };
+}
+
 /* rows + columns + totals for the chosen report */
 function repBuild(D) {
   const R = repState();
@@ -332,6 +396,8 @@ function repBuild(D) {
   if (T === 'steps') return stepTimesBuild(D, f);
   if (T === 'pay') return payStatusBuild(D, f);
   if (T === 'payhist') return payHistBuild(D, f);
+  if (T === 'lost') return lostBuild(D, f);
+  if (T === 'feedback') return feedbackBuild(D, f);
   if (T === 'items' || T === 'diamonds') {
     let rows = repItems(D.orders.filter((o) => repOrderPass(o, f))).filter((x) => repItemPass(x, f));
     if (T === 'diamonds') rows = rows.filter((x) => x.it.diamond_type);
@@ -495,6 +561,14 @@ function repFilterDefs() {
   if (T === 'pay') { d.push(['pshow', 'Show', PAY_SHOW, true], ['city', 'City', cities], ['party', 'Party', party]); return d; }
   if (T === 'payhist') { d.push(['kind', 'Entry', [['due', 'Due dates'], ['done', 'Paid dates']]], ['party', 'Party', party], ['city', 'City', cities], ['exec', 'Added by', team]); return d; }
   if (T === 'summary') return d;
+  if (T === 'lost') {
+    d.push(['reason', 'Reason', LOST_REASONS.concat([['none', 'No reason given']])], ['party', 'Party', party], ['city', 'City', cities], ['exec', 'Executive (booked by)', team]);
+    return d;
+  }
+  if (T === 'feedback') {
+    d.push(['stars', 'Stars', [['5', '5 stars'], ['4', '4 stars'], ['3', '3 stars'], ['2', '2 stars'], ['1', '1 star'], ['low', '3 stars or less']]], ['party', 'Party', party], ['city', 'City', cities], ['exec', 'Executive (booked by)', team]);
+    return d;
+  }
   if (T === 'steps') {
     d.push(['step', 'Step', STEP_TIME_KEYS.map((k) => [k, stepTimeLabel(k)])]);
     if (S.dbv6) d.push(['vendor', 'Vendor', [['none', 'No vendor yet']].concat((S.vendors || []).map((v) => [v.id, v.name]))]);
@@ -515,7 +589,7 @@ function repFilterDefs() {
   return d;
 }
 /* how a report is grouped when it is opened (step times: by step) */
-function repDefaultGroup(t) { return t === 'steps' ? 'stage' : ''; }
+function repDefaultGroup(t) { return t === 'steps' ? 'stage' : t === 'lost' ? 'reason' : ''; }
 /* each report starts without filters, so nothing is hidden */
 function repPruneFilters() { repState().f = {}; }
 /* a filter is "on" when it is set to something other than its first (default) choice */
@@ -574,6 +648,8 @@ async function renderReports() {
 function repPeriodText() {
   const R = repState();
   if (R.type === 'steps') return 'Steps finished: ' + rangeLabel(S.repData.range);
+  if (R.type === 'lost') return 'Quotation date: ' + rangeLabel(S.repData.range);
+  if (R.type === 'feedback') return 'Rated: ' + rangeLabel(S.repData.range);
   return REP_NO_PERIOD[R.type] ? 'As on ' + fmtDLong(todayStr()) : rangeLabel(S.repData.range);
 }
 

@@ -274,6 +274,11 @@
       draw();
     }
     function failed() { message('⚠️', 'Could not load — check the internet and open the link again.'); }
+    /* a team member opening the link on their own phone is not the shop */
+    function teamPhone() {
+      try { for (var i = 0; i < localStorage.length; i++) { if (/^sb-.+-auth-token$/.test(localStorage.key(i) || '')) return true; } } catch (e) { /* private mode */ }
+      return false;
+    }
     db.rpc('campaign_page', { p_id: id, p_send: send }).then(function (r) {
       if (r.error) {
         var code = String(r.error.code || '');
@@ -290,6 +295,7 @@
       }
       if (!r.data) { message('🔗', 'This link does not work any more.'); return; }
       loaded(r.data, r.data.picks_on);
+      if (send && !teamPhone()) { try { db.rpc('link_seen', { p_kind: 'campaign', p_token: send }).then(function () {}, function () {}); } catch (e) { /* not counted */ } }
     }, failed);
   })();
   </script>

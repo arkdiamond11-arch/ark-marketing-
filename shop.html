@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#7b1e3c">
+  <meta name="robots" content="noindex">
+  <title>Your orders</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <style>
+    :root { --maroon: #7b1e3c; --gold: #c9973c; --bg: #f6f4f1; --card: #fff; --ink: #27222b; --muted: #857e8c; --line: #eae6e2; --green: #1a7f4e; --red: #b3372f; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", "Noto Sans Gujarati", sans-serif; font-size: 15px; line-height: 1.45; }
+    header { background: var(--maroon); color: #fff; padding: calc(14px + env(safe-area-inset-top)) 16px 14px; }
+    header .biz { font-size: 13px; letter-spacing: .6px; text-transform: uppercase; opacity: .85; }
+    header h1 { margin: 2px 0 0; font-size: 21px; }
+    header .shop { font-size: 14px; opacity: .9; }
+    main { max-width: 560px; margin: 0 auto; padding: 14px 16px 30px; }
+    .langs { display: flex; gap: 6px; justify-content: flex-end; margin: 0 0 10px; }
+    .langs button { border: 1.5px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink); }
+    .langs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 3px rgba(40,20,30,.08), 0 4px 14px rgba(40,20,30,.05); padding: 13px 14px; margin: 0 0 12px; }
+    h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); margin: 18px 2px 8px; }
+    .pay { background: #fbf3e4; border: 1.5px solid #ecd9b4; font-weight: 700; }
+    .ord { display: flex; gap: 12px; }
+    .ord .pic { width: 64px; height: 64px; border-radius: 10px; background: #f3efe9; flex: none; object-fit: cover; cursor: zoom-in; }
+    .ord .body { flex: 1; min-width: 0; }
+    .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+    .top b { font-size: 15.5px; }
+    .step { color: var(--maroon); font-weight: 800; }
+    .step.done { color: var(--green); }
+    .its { font-size: 13.5px; color: var(--muted); margin: 2px 0; overflow-wrap: anywhere; }
+    .due { font-size: 13.5px; font-weight: 650; }
+    .due.late { color: var(--red); }
+    .bar { display: flex; gap: 3px; margin: 8px 0 2px; }
+    .bar i { flex: 1; height: 6px; border-radius: 3px; background: #e8e1db; }
+    .bar i.done { background: var(--green); }
+    .bar i.cur { background: var(--gold); }
+    .cad { display: block; margin: 10px 0 0; padding: 11px 13px; border-radius: 12px; background: var(--maroon); color: #fff; text-decoration: none; font-weight: 750; }
+    .cad span { display: block; font-weight: 500; font-size: 13px; opacity: .9; }
+    .row { padding: 8px 0; border-top: 1px solid var(--line); }
+    .row:first-child { border-top: 0; padding-top: 0; }
+    .row:last-child { padding-bottom: 0; }
+    .row b { display: block; }
+    .row span { font-size: 13.5px; color: var(--muted); }
+    .ok { color: var(--green); font-weight: 750; }
+    .contact { text-align: center; color: var(--muted); font-size: 13.5px; margin-top: 18px; }
+    .contact a { color: var(--maroon); font-weight: 700; text-decoration: none; }
+    .msg { text-align: center; padding: 40px 10px; color: var(--muted); }
+    .msg .big { font-size: 40px; }
+    .zoom { position: fixed; inset: 0; background: rgba(10, 8, 12, .92); display: flex; align-items: center; justify-content: center; z-index: 9; }
+    .zoom img { max-width: 100%; max-height: 100%; }
+  </style>
+</head>
+<body>
+  <header><div class="biz" id="biz">&nbsp;</div><h1 id="title">Your orders</h1><div class="shop" id="shop"></div></header>
+  <main id="main"><div class="msg">Loading…</div></main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+  /* A shop's own page (no login): its orders in work with the step and
+     delivery date, a CAD waiting for its OK, pieces on approval, repairs
+     and the next payment date. */
+  (function () {
+    'use strict';
+    var T = {
+      hi: {
+        'Your orders with us': 'हमारे साथ आपके ऑर्डर', 'Orders in work': 'काम चल रहे ऑर्डर', 'Delivered in the last 60 days': 'पिछले 60 दिनों में डिलीवर हुए',
+        'Delivery by': 'डिलीवरी', 'Delivered on': 'डिलीवर हुआ', 'Running late — new date soon': 'थोड़ी देरी — नई तारीख जल्द', 'Quotation': 'कोटेशन',
+        'Order confirmed': 'ऑर्डर पक्का', 'CAD design': 'CAD डिज़ाइन', 'Wax model': 'वैक्स मॉडल', 'Being made': 'बन रहा है', 'Diamond setting': 'डायमंड सेटिंग',
+        'Finished': 'तैयार', 'IGI certification': 'IGI सर्टिफिकेशन', 'Delivered': 'डिलीवर हो गया',
+        'CAD design waiting for your OK': 'CAD डिज़ाइन आपकी मंज़ूरी का इंतज़ार कर रहा है', 'See the CAD and approve': 'CAD देखें और मंज़ूर करें',
+        'Pieces with you on approval': 'अप्रूवल पर आपके पास पीस', 'Given on': 'दिए गए', 'Return by': 'वापस करें',
+        'Repairs': 'रिपेयर', 'Received': 'मिल गया', 'Being repaired': 'रिपेयर हो रहा है', 'Ready — you can collect it': 'तैयार — आप ले जा सकते हैं', 'Ready by': 'तैयार होगा',
+        'Payment due by': 'पेमेंट की तारीख', 'Nothing running right now.': 'अभी कुछ चालू नहीं है।', 'more': 'और',
+        'Questions? Call or WhatsApp': 'कोई सवाल? कॉल या WhatsApp करें', 'This link is not active any more.': 'यह लिंक अब चालू नहीं है।',
+        'Please ask us for a new link.': 'कृपया हमसे नया लिंक मांगें।', 'Could not load — check the internet and open the link again.': 'लोड नहीं हुआ — इंटरनेट देखें और लिंक फिर से खोलें।',
+        'Loading…': 'लोड हो रहा है…'
+      },
+      gu: {
+        'Your orders with us': 'અમારી સાથે તમારા ઓર્ડર', 'Orders in work': 'કામ ચાલુ ઓર્ડર', 'Delivered in the last 60 days': 'છેલ્લા 60 દિવસમાં ડિલિવર થયેલા',
+        'Delivery by': 'ડિલિવરી', 'Delivered on': 'ડિલિવર થયો', 'Running late — new date soon': 'થોડું મોડું — નવી તારીખ જલ્દી', 'Quotation': 'ક્વોટેશન',
+        'Order confirmed': 'ઓર્ડર પાકો', 'CAD design': 'CAD ડિઝાઇન', 'Wax model': 'વેક્સ મોડલ', 'Being made': 'બની રહ્યું છે', 'Diamond setting': 'ડાયમંડ સેટિંગ',
+        'Finished': 'તૈયાર', 'IGI certification': 'IGI સર્ટિફિકેશન', 'Delivered': 'ડિલિવર થઈ ગયો',
+        'CAD design waiting for your OK': 'CAD ડિઝાઇન તમારી મંજૂરીની રાહ જુએ છે', 'See the CAD and approve': 'CAD જુઓ અને મંજૂર કરો',
+        'Pieces with you on approval': 'અપ્રૂવલ પર તમારી પાસે પીસ', 'Given on': 'આપ્યા', 'Return by': 'પરત કરો',
+        'Repairs': 'રિપેર', 'Received': 'મળી ગયું', 'Being repaired': 'રિપેર થઈ રહ્યું છે', 'Ready — you can collect it': 'તૈયાર — તમે લઈ જઈ શકો છો', 'Ready by': 'તૈયાર થશે',
+        'Payment due by': 'પેમેન્ટની તારીખ', 'Nothing running right now.': 'હમણાં કંઈ ચાલુ નથી.', 'more': 'વધુ',
+        'Questions? Call or WhatsApp': 'કોઈ પ્રશ્ન? કૉલ અથવા WhatsApp કરો', 'This link is not active any more.': 'આ લિંક હવે ચાલુ નથી.',
+        'Please ask us for a new link.': 'કૃપા કરીને અમારી પાસે નવી લિંક માંગો.', 'Could not load — check the internet and open the link again.': 'લોડ ન થયું — ઇન્ટરનેટ તપાસો અને લિંક ફરી ખોલો.',
+        'Loading…': 'લોડ થાય છે…'
+      }
+    };
+    var lang = 'en';
+    var stored = null;
+    try { stored = localStorage.getItem('statusLang') || localStorage.getItem('lang'); } catch (e) { /* private mode */ }
+    if (stored === 'hi' || stored === 'gu' || stored === 'en') lang = stored;
+    else { var nl = String(navigator.language || '').slice(0, 2); if (nl === 'hi' || nl === 'gu') lang = nl; }
+    function t(s) { return (T[lang] && T[lang][s]) || s; }
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    var MONTHS = { en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+      hi: ['जन', 'फ़र', 'मार्च', 'अप्रै', 'मई', 'जून', 'जुला', 'अग', 'सित', 'अक्टू', 'नव', 'दिस'],
+      gu: ['જાન્યુ', 'ફેબ્રુ', 'માર્ચ', 'એપ્રિ', 'મે', 'જૂન', 'જુલા', 'ઑગ', 'સપ્ટે', 'ઑક્ટો', 'નવે', 'ડિસે'] };
+    function day(iso) {
+      if (!iso) return '';
+      var d = new Date(String(iso).length === 10 ? iso + 'T00:00:00' : iso);
+      return d.getDate() + ' ' + MONTHS[lang][d.getMonth()];
+    }
+    function no(pre, n) { return pre + '-' + String(n || 0).padStart(4, '0'); }
+    function teamPhone() {
+      try { for (var i = 0; i < localStorage.length; i++) { if (/^sb-.+-auth-token$/.test(localStorage.key(i) || '')) return true; } } catch (e) { /* private mode */ }
+      return false;
+    }
+    var STEP = { 'new': 'Order confirmed', cad: 'CAD design', wax: 'Wax model', in_production: 'Being made', setting: 'Diamond setting',
+      finished: 'Finished', ready: 'Finished', igi: 'IGI certification', delivered: 'Delivered', quote: 'Quotation' };
+    var ALL = ['cad', 'wax', 'in_production', 'setting', 'finished', 'igi'];
+    var REPAIR = { received: 'Received', at_work: 'Being repaired', ready: 'Ready — you can collect it' };
+
+    var c = window.APP_CONFIG || {};
+    var token = (location.hash || '').replace(/^#/, '').trim();
+    var main = document.getElementById('main');
+    var data = null, urls = {};
+    if (c.BUSINESS_NAME) document.getElementById('biz').textContent = c.BUSINESS_NAME;
+    function message(big, lines) {
+      main.innerHTML = '<div class="msg"><div class="big">' + big + '</div>' + lines.map(function (x) { return '<p>' + esc(t(x)) + '</p>'; }).join('') + '</div>';
+    }
+    if (!window.supabase || !c.SUPABASE_URL || !/^[0-9a-f-]{36}$/i.test(token)) { message('🔗', ['This link is not active any more.', 'Please ask us for a new link.']); return; }
+    var db = window.supabase.createClient(c.SUPABASE_URL, c.SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+
+    function langBar() {
+      return '<div class="langs">' + [['en', 'English'], ['hi', 'हिन्दी'], ['gu', 'ગુજરાતી']].map(function (x) {
+        return '<button data-l="' + x[0] + '" class="' + (lang === x[0] ? 'on' : '') + '">' + x[1] + '</button>';
+      }).join('') + '</div>';
+    }
+    function picKey(o) {
+      if (o.final_photo) return 'o:' + o.final_photo;
+      var it = (o.items || []).filter(function (x) { return x.photo || x.cat_photo; })[0];
+      return it ? (it.photo ? 'o:' + it.photo : 'c:' + it.cat_photo) : '';
+    }
+    function itemsLine(list) {
+      var a = (list || []).map(function (it) {
+        return [it.category || it.description || '', it.design_code || ''].filter(Boolean).join(' · ') + (it.qty > 1 ? ' × ' + it.qty : '');
+      }).filter(Boolean);
+      return a.length > 3 ? a.slice(0, 3).join(', ') + ' +' + (a.length - 3) + ' ' + t('more') : a.join(', ');
+    }
+
+    function orderCard(o, steps) {
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      var st = o.status === 'ready' ? 'finished' : o.status;
+      var key = picKey(o);
+      var h = '<div class="card ord">' + (key ? '<img class="pic" data-p="' + esc(key) + '" alt=""' + (urls[key] ? ' src="' + esc(urls[key]) + '"' : '') + '>' : '') +
+        '<div class="body"><div class="top"><b>' + esc(no('ORD', o.order_no)) + '</b><span class="step' + (st === 'delivered' ? ' done' : '') + '">' + esc(t(STEP[st] || st)) + '</span></div>';
+      var its = itemsLine(o.items);
+      if (its) h += '<div class="its">' + esc(its) + '</div>';
+      if (st === 'delivered') h += '<div class="due">' + esc(t('Delivered on') + ' ' + day(o.delivered_on)) + '</div>';
+      else if (st !== 'quote') {
+        var late = o.due_date && new Date(o.due_date + 'T00:00:00') < today;
+        if (late) h += '<div class="due late">' + esc(t('Running late — new date soon')) + '</div>';
+        else if (o.due_date) h += '<div class="due">' + esc(t('Delivery by') + ' ' + day(o.due_date)) + '</div>';
+        var used = steps.slice();
+        if (st !== 'new' && used.indexOf(st) === -1) used.push(st);
+        used.sort(function (a, z) { return ALL.indexOf(a) - ALL.indexOf(z); });
+        var list = ['new'].concat(used).concat(['delivered']);
+        var cur = list.indexOf(st);
+        h += '<div class="bar">' + list.map(function (k, i) { return '<i class="' + (i < cur ? 'done' : i === cur ? 'cur' : '') + '"></i>'; }).join('') + '</div>';
+      }
+      if (o.cad) h += '<a class="cad" href="cad.html#' + esc(o.cad) + '">✎ ' + esc(t('CAD design waiting for your OK')) + '<span>' + esc(t('See the CAD and approve')) + ' ›</span></a>';
+      return h + '</div></div>';
+    }
+
+    function draw() {
+      var d = data, b = d.business || {};
+      document.getElementById('biz').textContent = b.name || c.BUSINESS_NAME || '';
+      document.getElementById('title').textContent = d.shop || t('Your orders with us');
+      document.getElementById('shop').textContent = t('Your orders with us') + (d.city ? ' · ' + d.city : '');
+      document.title = (d.shop || '') + ' — ' + (b.name || '');
+      var steps = Array.isArray(b.steps) ? ALL.filter(function (k) { return b.steps.indexOf(k) > -1; }) : ALL.slice();
+      var open = (d.orders || []).filter(function (o) { return o.status !== 'delivered'; });
+      var done = (d.orders || []).filter(function (o) { return o.status === 'delivered'; });
+      var h = langBar();
+      if (d.payment && d.payment.due_by) h += '<div class="card pay">💳 ' + esc(t('Payment due by') + ' ' + day(d.payment.due_by)) + '</div>';
+      if (open.length) h += '<h2>' + esc(t('Orders in work')) + '</h2>' + open.map(function (o) { return orderCard(o, steps); }).join('');
+      if ((d.memos || []).length) {
+        var today = new Date(); today.setHours(0, 0, 0, 0);
+        h += '<h2>' + esc(t('Pieces with you on approval')) + '</h2>' + d.memos.map(function (m) {
+          var late = m.return_by && new Date(m.return_by + 'T00:00:00') < today;
+          return '<div class="card"><div class="top"><b>' + esc(no('APP', m.memo_no)) + '</b><span class="due' + (late ? ' late' : '') + '">' +
+            esc([m.given_on ? t('Given on') + ' ' + day(m.given_on) : '', m.return_by ? t('Return by') + ' ' + day(m.return_by) : ''].filter(Boolean).join(' · ')) + '</span></div>' +
+            (m.items || []).map(function (it) {
+              return '<div class="row"><span>' + esc([it.description, it.design_code].filter(Boolean).join(' · ') + (it.qty > 1 ? ' × ' + it.qty : '') + (it.net_wt ? ' · ' + it.net_wt + ' g' : '')) + '</span></div>';
+            }).join('') + '</div>';
+        }).join('');
+      }
+      if ((d.repairs || []).length) {
+        h += '<h2>' + esc(t('Repairs')) + '</h2><div class="card">' + d.repairs.map(function (r) {
+          return '<div class="row"><div class="top"><b>' + esc(no('REP', r.repair_no) + (r.piece ? ' · ' + r.piece : '')) + '</b>' +
+            '<span class="' + (r.status === 'ready' ? 'ok' : 'step') + '">' + esc(t(REPAIR[r.status] || r.status)) + '</span></div>' +
+            (r.status !== 'ready' && r.due_date ? '<span>' + esc(t('Ready by') + ' ' + day(r.due_date)) + '</span>' : '') + '</div>';
+        }).join('') + '</div>';
+      }
+      if (done.length) h += '<h2>' + esc(t('Delivered in the last 60 days')) + '</h2>' + done.map(function (o) { return orderCard(o, steps); }).join('');
+      if (!open.length && !done.length && !(d.memos || []).length && !(d.repairs || []).length && !(d.payment && d.payment.due_by)) {
+        h += '<div class="msg"><div class="big">🌤️</div><p>' + esc(t('Nothing running right now.')) + '</p></div>';
+      }
+      if (b.phone) {
+        var ph = String(b.phone).replace(/[^\d+]/g, '');
+        var wa = ph.replace(/\D/g, ''); if (wa.length === 10) wa = '91' + wa;
+        h += '<p class="contact">' + esc(t('Questions? Call or WhatsApp')) + '<br><a href="tel:' + esc(ph) + '">' + esc(b.phone) + '</a> · <a href="https://wa.me/' + esc(wa) + '" target="_blank" rel="noopener">WhatsApp</a></p>';
+      }
+      main.innerHTML = h;
+      main.querySelectorAll('.langs button').forEach(function (bt) {
+        bt.onclick = function () { lang = bt.dataset.l; try { localStorage.setItem('statusLang', lang); } catch (e) { /* ignore */ } draw(); };
+      });
+      main.querySelectorAll('img.pic').forEach(function (im) {
+        im.onclick = function () {
+          if (!im.src) return;
+          var z = document.createElement('div'); z.className = 'zoom';
+          z.innerHTML = '<img alt="">'; z.firstChild.src = im.src;
+          z.onclick = function () { z.remove(); };
+          document.body.appendChild(z);
+        };
+      });
+    }
+
+    db.rpc('shop_page', { p_token: token }).then(function (r) {
+      if (r.error) { message('⚠️', ['Could not load — check the internet and open the link again.']); return; }
+      if (!r.data) { message('🔗', ['This link is not active any more.', 'Please ask us for a new link.']); return; }
+      data = r.data;
+      draw();
+      if (!teamPhone()) { try { db.rpc('link_seen', { p_kind: 'shop', p_token: token }).then(function () {}, function () {}); } catch (e) { /* not counted */ } }
+      var paths = [], cat = [];
+      (data.orders || []).forEach(function (o) {
+        var k = picKey(o);
+        if (k.indexOf('o:') === 0) paths.push(k.slice(2)); else if (k.indexOf('c:') === 0) cat.push(k.slice(2));
+      });
+      function sign(bucket, list, pre) {
+        if (!list.length) return Promise.resolve();
+        return db.storage.from(bucket).createSignedUrls(list, 3600).then(function (s) {
+          (s.data || []).forEach(function (x) { if (x && x.signedUrl) urls[pre + x.path] = x.signedUrl; });
+        }, function () { /* the photos stay blank */ });
+      }
+      if (paths.length || cat.length) Promise.all([sign('orders', paths, 'o:'), sign('catalogue', cat, 'c:')]).then(draw);
+    }, function () { message('⚠️', ['Could not load — check the internet and open the link again.']); });
+  })();
+  </script>
+</body>
+</html>

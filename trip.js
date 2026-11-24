@@ -51,6 +51,7 @@ async function tripData() {
     sleeping: new Set(sleepingClients(clients, orders, 2).map((r) => r.c.id)),
     pay: typeof payIndex === 'function' ? payIndex(pay) : new Map(),
     metToday: new Set(((today && today.data) || []).map((r) => r.client_id)),
+    reorder: typeof reorderMap === 'function' && reorderOn() ? reorderMap(orders) : new Map(),   // usually orders again by now
   };
   return S.leadCache;
 }
@@ -65,6 +66,7 @@ function tripInfo(D, c) {
     today: D.metToday.has(c.id),
     vp: typeof visitInfo === 'function' && visitPlanOn() ? visitInfo(c, D.met.get(c.id)) : null,
     hold: !!c.credit_hold && typeof creditOn === 'function' && creditOn(),
+    ro: D.reorder ? D.reorder.get(c.id) || null : null,
   };
 }
 function tripSorted(list, D, how) {
@@ -97,6 +99,7 @@ function tripRowHTML(c, i, picked) {
     chipInterest(c.interest) +
     (i.open ? '<span class="chip chip-orders">' + esc(i.open === 1 ? '1 order in work' : i.open + ' orders in work') + '</span>' : '') +
     (i.due ? '<span class="chip pay-chip-' + (i.due < todayStr() ? 'late' : 'due') + '">' + esc('Payment due ' + fmtD(i.due)) + '</span>' : '') +
+    (i.ro && i.ro.show && !i.sleeping ? reorderChipHTML(i.ro) : '') +
     (i.sleeping ? '<span class="chip chip-trip-sleep">😴 Sleeping</span>' : '');
   return '<div class="list-item trip-item' + (picked ? ' picked' : '') + (i.today ? ' met' : '') + '" data-action="open-client" data-id="' + c.id + '">' +
     '<button class="trip-tick' + (picked ? ' on' : '') + '" data-action="trip-tick" data-id="' + c.id + '" aria-label="Add to the trip">' + (picked ? '✓' : '') + '</button>' +
