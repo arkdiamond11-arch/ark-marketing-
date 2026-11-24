@@ -445,7 +445,8 @@ async function renderToday() {
   if (!overdue.length && !today.length && !upcoming.length && !later.length) {
     html += '<div class="empty"><div class="big">🌤️</div>No pending reminders.<br>Log an interaction and add follow-ups — they will appear here.</div>';
   }
-  c.innerHTML = '<div id="today-late"></div><div id="today-stuck"></div><div id="today-summary"></div><div id="today-targets"></div><div id="today-wishes"></div>' +
+  c.innerHTML = (typeof eventBannerHTML === 'function' ? eventBannerHTML() : '') + '<div id="today-day"></div><div id="today-team"></div>' +
+    '<div id="today-late"></div><div id="today-stuck"></div><div id="today-summary"></div><div id="today-targets"></div><div id="today-wishes"></div>' +
     '<div id="today-pay"></div><div id="today-orders"></div><div id="today-repairs"></div><div id="today-approvals"></div>' + html +
     '<div id="today-reorder"></div><div id="today-visits"></div><div id="today-sleep"></div>';
   if (typeof renderTodaySummary === 'function') renderTodaySummary($('#today-summary'));
@@ -458,6 +459,8 @@ async function renderToday() {
   if (typeof loadTodayApprovals === 'function') loadTodayApprovals();
   if (typeof loadTodayVisits === 'function') loadTodayVisits();
   if (typeof loadTodayReorder === 'function') loadTodayReorder();
+  if (typeof loadTodayDay === 'function') loadTodayDay();
+  if (typeof loadTodayTeam === 'function') loadTodayTeam();
 }
 
 /* ============================================================
@@ -931,6 +934,7 @@ async function saveClient(editId) {
       if (error) { btn.disabled = false; btn.textContent = 'Save changes'; toast('Could not save — please try again.', 'err'); return; }
     } else {
       row.created_by = S.me.id;
+      if (typeof eventStamp === 'function') Object.assign(row, eventStamp());   // exhibition mode on this phone
       const { data, error } = await db.from('clients').insert(row).select('id').single();
       if (error) { btn.disabled = false; btn.textContent = 'Save client'; toast('Could not save — please try again.', 'err'); return; }
       clientId = data.id;
@@ -1313,6 +1317,7 @@ async function loadClientHistory(cl) {
       '<div class="t-meta"><span>' + esc(nameOf(it.exec_id)) + '</span><span>' + fmtDT(it.happened_at) + '</span></div>' +
       (it.outcome ? '<div style="margin:2px 0 5px">' + outcomeChip(it.outcome) + '</div>' : '') +
       '<div class="t-notes">' + esc(it.notes) + '</div>' +
+      (typeof voiceHTML === 'function' ? voiceHTML(it) : '') +
       (typeof visitLocHTML === 'function' ? visitLocHTML(it, cl) : '') +
       (it.interest_after ? '<div style="margin-top:7px">' + chipInterest(it.interest_after) + ' <span style="font-size:12px;color:var(--muted)">after this meeting</span></div>' : '') +
       (fuHtml ? '<div class="t-fus">' + fuHtml + '</div>' : '') +
@@ -1433,6 +1438,7 @@ onAct('cl-delete', (el) => clientDeleteStart(el.dataset.id, el));
 function openInteractionForm(client, replace) {
   S.interactionClient = client;
   S.fu = [];
+  S.voice = null;
   S.formState.int_interest = client.interest || null;
   S.formState.int_outcome = null;
   showSub('Record Meeting', renderInteractionForm, replace);
@@ -1454,6 +1460,7 @@ function renderInteractionForm() {
     '<div class="card">' +
     '<div class="field"><textarea id="int-notes" placeholder="e.g. Showed the new antique collection. Wants a quotation for 200 gm job work…"></textarea>' +
     (typeof dictRowHTML === 'function' ? dictRowHTML('int-notes') : '<div class="mic-hint">' + IC.mic + ' Tip: tap the mic on your keyboard and just speak.</div>') + '</div>' +
+    (typeof voiceBoxHTML === 'function' ? voiceBoxHTML() : '') +
     '</div>' +
 
     '<div class="section-label">Follow-ups (optional)</div>' +
@@ -1508,7 +1515,7 @@ async function saveInteraction() {
     notes: notes || (outcomeVal ? '(' + outcomeVal + ')' : '(follow-ups only)'),
     outcome: outcomeVal || null,
     interest_after: interestAfter !== cl.interest ? interestAfter : null,
-  }, typeof visitFields === 'function' ? visitFields(pos) : {})).select('id').single();
+  }, typeof visitFields === 'function' ? visitFields(pos) : {}, typeof eventStamp === 'function' ? eventStamp() : {})).select('id').single();
   if (!error && typeof maybeSaveShopLocation === 'function') await maybeSaveShopLocation(cl, pos);
   if (error) { btn.disabled = false; btn.textContent = 'Save meeting'; toast('Could not save — please try again.', 'err'); return; }
 
@@ -1525,6 +1532,8 @@ async function saveInteraction() {
   if (interestAfter && interestAfter !== cl.interest) {
     await db.from('clients').update({ interest: interestAfter }).eq('id', cl.id);
   }
+  if (S.voice && S.voice.rec && typeof voiceStop === 'function') { voiceStop(); await new Promise((ok) => setTimeout(ok, 400)); }   // still recording: keep what was said
+  if (S.voice && typeof voiceAfterSave === 'function' && !(await voiceAfterSave(intRow.id))) toast('Meeting saved — but the voice note could not be sent.', 'err');
 
   S.lastMet = null; S.leadCache = null; S.vpData = null;   // the client lists show the newest meeting
   toast(typeof offQueuedSince === 'function' && offQueuedSince(t0) ? 'Meeting saved on this phone — it will be sent when the internet is back' : 'Meeting recorded ✓', 'ok');
@@ -1870,6 +1879,10 @@ async function renderMore() {
     (typeof repairsOn === 'function' && repairsOn() ? mrow('rp-list', '🔧', 'Repairs', 'Pieces shops send back — resize, polish, repair') : '') +
     (typeof approvalsOn === 'function' && approvalsOn() ? mrow('ap-list', '💎', 'Pieces on approval', 'Given to shops to show their customers · sold or returned') : '') +
     (typeof campaignsOn === 'function' && campaignsOn() ? mrow('camp-open-list', '📣', 'Messages to shops', 'New designs or an offer to many shops on WhatsApp') : '') +
+    (typeof dayOn === 'function' && dayOn() && isOwner ? mrow('td-open', '👥', 'Team today', 'Who started, where they met shops, the route on the map') : '') +
+    (typeof expOn === 'function' && expOn() ? mrow('ex-open', '🧾', isOwner ? 'Expense claims' : 'My expenses', isOwner ? 'Approve what the team spent · mark paid' : 'What you spent, with the bill — the owner approves') : '') +
+    (typeof bagOn === 'function' && bagOn() ? mrow('bag-open', '👜', 'Sample bag', 'Catalogue pieces you carry to shops') : '') +
+    (typeof eventsOn === 'function' && eventsOn() ? mrow('ev-list', '🎪', 'Exhibitions', 'Visitors and meetings at a trade show, kept together') : '') +
     (typeof renderAlerts === 'function' && S.dbv9 ? mrow('al-open', '📳', 'Phone alerts', 'When your orders move · your day every morning') : '') +
     (isOwner && typeof renderAppSettings === 'function' ? mrow('opt-open', '⚙️', 'App settings', 'Order steps in use · show or hide sections') : '') +
     (isOwner && typeof renderBizForm === 'function' ? mrow('biz-open', '🏷️', 'Business details', 'Address, GSTIN — printed on PDFs') : '') +

@@ -209,7 +209,7 @@ async function loadBiz() {
   const [has8, has9, ver] = await Promise.all([v8, v9, v11]);
   if (has8 !== null) S.dbv8 = has8;
   if (has9 !== null) S.dbv9 = has9;
-  if (ver !== null) { S.dbv11 = ver >= 11; S.dbv12 = ver >= 12; S.dbv13 = ver >= 13; S.dbv14 = ver >= 14; }
+  if (ver !== null) { S.dbv11 = ver >= 11; S.dbv12 = ver >= 12; S.dbv13 = ver >= 13; S.dbv14 = ver >= 14; S.dbv15 = ver >= 15; }
   if (r.error || !r.data) { if (!S.biz) S.biz = {}; return null; }
   S.biz = r.data;
   S.bizAt = Date.now();
@@ -257,6 +257,11 @@ const APP_SECTIONS = [
   ['reorder', 'Re-order reminders', 'Shops that usually order again by now — on Today'],
   // database update 12
   ['credit', 'Credit rules', 'Check before taking orders from shops that are late to pay', 12],
+  // database update 15
+  ['workday', 'Day start / end', 'The team starts and ends the day in the app; the owner sees the team\'s day', 15],
+  ['expenses', 'Expense claims', 'The team claims what they spent, with the bill; the owner approves', 15],
+  ['samples', 'Sample bag', 'Catalogue pieces a team member carries to shops', 15],
+  ['events', 'Exhibitions', 'Visitors and meetings at a trade show, kept together', 15],
 ];
 function appSectionsShown() { return APP_SECTIONS.filter((s) => !s[3] || !!S['dbv' + s[3]]); }
 const STEP_CHOICES = ['cad', 'wax', 'in_production', 'setting', 'finished', 'igi'];   // between Approved and Delivered

@@ -83,7 +83,7 @@ async function recordFirstVisit(cl, posP) {
   try { pos = await posP; } catch (e) { pos = null; }
   const { error } = await db.from('interactions').insert(Object.assign({
     client_id: cl.id, exec_id: S.me.id, outcome: 'Meeting', notes: 'First visit — client added',
-  }, visitFields(pos)));
+  }, visitFields(pos), typeof eventStamp === 'function' ? eventStamp() : {}));
   if (!error) await maybeSaveShopLocation(cl, pos);
   if (ov) ov.remove();
   S.lastMet = null; S.leadCache = null; S.vpData = null;

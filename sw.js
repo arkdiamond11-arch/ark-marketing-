@@ -1,12 +1,12 @@
 /* Marketing app service worker — network-first, cache as offline fallback for the app shell.
    The database library (from the CDN) is kept too, so the app opens without internet.
    The app's own copies of lists and pages (offline.js, cache 'ark-data-…') are left alone. */
-const CACHE = 'app-shell-v24';
+const CACHE = 'app-shell-v25';
 const LIBS = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js'];
 const SHELL = ['index.html', 'styles.css', 'config.js', 'manifest.json', 'icon-192.png', 'icon.svg', 'badge-96.png',
   'app.js', 'i18n.js', 'jewel.js', 'orders.js', 'util.js', 'docs.js', 'payments.js', 'vendors.js',
   'notes.js', 'crop.js', 'reports.js', 'catalogue.js', 'karigars.js', 'visits.js', 'targets.js', 'summary.js', 'flow.js', 'leads.js',
-  'delivery.js', 'wishes.js', 'campaigns.js', 'repairs.js', 'approvals.js', 'offline.js', 'alerts.js', 'trip.js', 'plan.js', 'credit.js', 'picks.js', 'cad.js', 'shoplink.js', 'reorder.js', 'qr.js', 'workshop.js', 'cleanup.js'];
+  'delivery.js', 'wishes.js', 'campaigns.js', 'repairs.js', 'approvals.js', 'offline.js', 'alerts.js', 'trip.js', 'plan.js', 'credit.js', 'picks.js', 'cad.js', 'shoplink.js', 'reorder.js', 'qr.js', 'workshop.js', 'field.js', 'cleanup.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL).then(() => c.addAll(LIBS).catch(() => {}))).catch(() => {}));
