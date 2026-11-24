@@ -51,6 +51,8 @@
     .msg .big { font-size: 40px; }
     .zoom { position: fixed; inset: 0; background: rgba(10, 8, 12, .92); display: flex; align-items: center; justify-content: center; z-index: 9; }
     .zoom img { max-width: 100%; max-height: 100%; }
+    .design { display: block; margin: 6px 0 12px; padding: 12px 14px; border-radius: 14px; background: #fff; border: 1.5px dashed var(--gold); color: var(--maroon); text-decoration: none; font-weight: 750; }
+    .design span { display: block; font-weight: 500; font-size: 13px; color: var(--muted); }
   </style>
 </head>
 <body>
@@ -76,7 +78,8 @@
         'Payment due by': 'पेमेंट की तारीख', 'Nothing running right now.': 'अभी कुछ चालू नहीं है।', 'more': 'और',
         'Questions? Call or WhatsApp': 'कोई सवाल? कॉल या WhatsApp करें', 'This link is not active any more.': 'यह लिंक अब चालू नहीं है।',
         'Please ask us for a new link.': 'कृपया हमसे नया लिंक मांगें।', 'Could not load — check the internet and open the link again.': 'लोड नहीं हुआ — इंटरनेट देखें और लिंक फिर से खोलें।',
-        'Loading…': 'लोड हो रहा है…'
+        'Loading…': 'लोड हो रहा है…', 'Send us a design you want made': 'जो डिज़ाइन बनवाना है, हमें भेजें',
+        'Photos from a catalogue, Instagram or your own drawing': 'कैटलॉग, Instagram या आपकी अपनी ड्रॉइंग की फोटो'
       },
       gu: {
         'Your orders with us': 'અમારી સાથે તમારા ઓર્ડર', 'Orders in work': 'કામ ચાલુ ઓર્ડર', 'Delivered in the last 60 days': 'છેલ્લા 60 દિવસમાં ડિલિવર થયેલા',
@@ -89,7 +92,8 @@
         'Payment due by': 'પેમેન્ટની તારીખ', 'Nothing running right now.': 'હમણાં કંઈ ચાલુ નથી.', 'more': 'વધુ',
         'Questions? Call or WhatsApp': 'કોઈ પ્રશ્ન? કૉલ અથવા WhatsApp કરો', 'This link is not active any more.': 'આ લિંક હવે ચાલુ નથી.',
         'Please ask us for a new link.': 'કૃપા કરીને અમારી પાસે નવી લિંક માંગો.', 'Could not load — check the internet and open the link again.': 'લોડ ન થયું — ઇન્ટરનેટ તપાસો અને લિંક ફરી ખોલો.',
-        'Loading…': 'લોડ થાય છે…'
+        'Loading…': 'લોડ થાય છે…', 'Send us a design you want made': 'જે ડિઝાઇન બનાવડાવવી છે, અમને મોકલો',
+        'Photos from a catalogue, Instagram or your own drawing': 'કેટલોગ, Instagram કે તમારા પોતાના ડ્રોઇંગના ફોટા'
       }
     };
     var lang = 'en';
@@ -120,7 +124,7 @@
     var c = window.APP_CONFIG || {};
     var token = (location.hash || '').replace(/^#/, '').trim();
     var main = document.getElementById('main');
-    var data = null, urls = {};
+    var data = null, urls = {}, designOk = false;
     if (c.BUSINESS_NAME) document.getElementById('biz').textContent = c.BUSINESS_NAME;
     function message(big, lines) {
       main.innerHTML = '<div class="msg"><div class="big">' + big + '</div>' + lines.map(function (x) { return '<p>' + esc(t(x)) + '</p>'; }).join('') + '</div>';
@@ -200,6 +204,7 @@
         }).join('') + '</div>';
       }
       if (done.length) h += '<h2>' + esc(t('Delivered in the last 60 days')) + '</h2>' + done.map(function (o) { return orderCard(o, steps); }).join('');
+      if (designOk) h += '<a class="design" href="design.html#' + esc(token) + '">📷 ' + esc(t('Send us a design you want made')) + '<span>' + esc(t('Photos from a catalogue, Instagram or your own drawing')) + ' ›</span></a>';
       if (!open.length && !done.length && !(d.memos || []).length && !(d.repairs || []).length && !(d.payment && d.payment.due_by)) {
         h += '<div class="msg"><div class="big">🌤️</div><p>' + esc(t('Nothing running right now.')) + '</p></div>';
       }
@@ -241,6 +246,8 @@
         }, function () { /* the photos stay blank */ });
       }
       if (paths.length || cat.length) Promise.all([sign('orders', paths, 'o:'), sign('catalogue', cat, 'c:')]).then(draw);
+      // database update 16: the shop can send a design it wants made, from here
+      db.rpc('design_page', { p_token: token }).then(function (r2) { if (!r2.error && r2.data) { designOk = true; draw(); } }, function () { /* not offered */ });
     }, function () { message('⚠️', ['Could not load — check the internet and open the link again.']); });
   })();
   </script>

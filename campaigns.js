@@ -10,6 +10,8 @@
 'use strict';
 
 const CAMP_MAX_PHOTOS = 8;
+const CAMP_MAX_VIDEOS = 2, CAMP_VIDEO_MB = 50;   // videos need database update 16
+function campVideosOn() { return !!S.dbv16; }
 const CAMP_WHO = [['all', 'All clients'], ['hot', 'Hot'], ['warm', 'Warm'], ['cold', 'Cold'], ['ordered', 'Ordered before'], ['lead', 'No order yet'], ['sleep', 'Sleeping']];
 function campaignsOn() { return !!S.dbv8 && appOn('messages'); }
 /* the page the shops open; with the shop's own number (update 12) its choice comes back with its name */
@@ -18,7 +20,8 @@ function promoUrl(path) { return String((window.APP_CONFIG || {}).SUPABASE_URL |
 function campText(k, sendId) {
   const photos = k.photo_paths && k.photo_paths.length;
   const pick = photos && typeof picksOn === 'function' && picksOn();
-  return k.message + '\n\n' + (pick ? 'See the photos and tap the ones you like: ' : photos ? 'See the photos: ' : 'More: ') +
+  const vids = k.video_paths && k.video_paths.length;
+  return k.message + '\n\n' + (pick ? 'See the photos and tap the ones you like: ' : photos ? 'See the photos: ' : vids ? 'See the video: ' : 'More: ') +
     showUrl(k.id, pick ? sendId : null) + '\n— ' + bizName();
 }
 
@@ -54,6 +57,7 @@ async function renderCampaigns() {
       '<div class="li-sub">' + esc(fmtD(k.created_at) + ' · ' + nameOf(k.created_by)) + '</div>' +
       '<div class="li-chips"><span class="chip ' + (x.all && x.sent === x.all ? 'chip-st-delivered' : 'chip-st-new') + '">' + esc(x.sent + ' of ' + x.all + ' sent') + '</span>' +
       (k.photo_paths && k.photo_paths.length ? '<span class="chip">' + esc(k.photo_paths.length === 1 ? '1 photo' : k.photo_paths.length + ' photos') + '</span>' : '') +
+      (k.video_paths && k.video_paths.length ? '<span class="chip">' + esc(k.video_paths.length === 1 ? '1 video' : k.video_paths.length + ' videos') + '</span>' : '') +
       (y ? '<span class="chip ' + (y.fresh ? 'pk-st-new' : 'chip-st-delivered') + '">' + esc('🛍️ ' + (y.all === 1 ? '1 pick' : y.all + ' picks') + (y.fresh ? ' · ' + y.fresh + ' new' : '')) + '</span>' : '') + '</div>' +
       '</div>' + (k.photo_paths && k.photo_paths[0] ? '<img class="camp-thumb" src="' + esc(promoUrl(k.photo_paths[0])) + '" alt="">' : '<div class="li-go">›</div>') + '</div>';
   }).join('');
@@ -64,7 +68,8 @@ function campDefaultText() {
   return 'Namaste 🙏\nOur new designs are ready. Have a look at the photos — tell us which ones you like and we will send the details.';
 }
 function renderCampaignForm() {
-  const F = S.campForm || (S.campForm = { title: '', message: campDefaultText(), photos: [], who: 'all', city: '' });
+  const F = S.campForm || (S.campForm = { title: '', message: campDefaultText(), photos: [], videos: [], who: 'all', city: '' });
+  if (!F.videos) F.videos = [];
   const c = $('#content');
   c.innerHTML =
     '<div class="card">' +
@@ -75,7 +80,13 @@ function renderCampaignForm() {
     '<div class="section-label">Photos (' + F.photos.length + '/' + CAMP_MAX_PHOTOS + ')</div>' +
     '<div class="card"><div class="cf-photos" id="camp-photos">' +
     F.photos.map((p, i) => '<div class="cf-ph"><img src="' + URL.createObjectURL(p.blob) + '" alt=""><button type="button" class="cf-x" data-action="camp-ph-del" data-i="' + i + '" aria-label="Remove photo">✕</button></div>').join('') +
-    (F.photos.length < CAMP_MAX_PHOTOS ? '<button type="button" class="cf-add" data-action="camp-ph-add">＋<span>Photo</span></button>' : '') + '</div></div>' +
+    (F.photos.length < CAMP_MAX_PHOTOS ? '<button type="button" class="cf-add" data-action="camp-ph-add">＋<span>Photo</span></button>' : '') + '</div>' +
+    (typeof wmOn === 'function' && wmOn() && F.photos.length ? '<div class="hint">' + esc('Your name goes on the photos: ' + wmText()) + '</div>' : '') + '</div>' +
+    (campVideosOn() ? '<div class="section-label">Videos (' + F.videos.length + '/' + CAMP_MAX_VIDEOS + ')</div>' +
+      '<div class="card"><div class="cf-photos cf-videos">' +
+      F.videos.map((v, i) => '<div class="cf-ph cf-vid"><video src="' + v.url + '" muted playsinline preload="metadata"></video><button type="button" class="cf-x" data-action="camp-vid-del" data-i="' + i + '" aria-label="Remove video">✕</button></div>').join('') +
+      (F.videos.length < CAMP_MAX_VIDEOS ? '<button type="button" class="cf-add" data-action="camp-vid-add">＋<span>Video</span></button>' : '') + '</div>' +
+      '<div class="hint">' + esc('Up to ' + CAMP_VIDEO_MB + ' MB each — a short clip of a piece turning works best.') + '</div></div>' : '') +
     '<div class="section-label">Which shops?</div>' +
     '<div class="card"><div class="filter-chips camp-who">' + CAMP_WHO.map((x) => '<button class="' + (F.who === x[0] ? 'on' : '') + '" data-action="camp-who" data-v="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' +
     '<div class="field" style="margin:8px 0 0"><label>City</label><select id="cf-city"><option value="">All cities</option></select></div>' +
@@ -166,16 +177,28 @@ async function saveCampaign() {
   const paths = [];
   for (let i = 0; i < F.photos.length; i++) {
     const path = k.id + '/' + (i + 1) + '-' + Date.now() + '.jpg';
-    const r = await db.storage.from('promo').upload(path, F.photos[i].blob, { contentType: 'image/jpeg' });
+    const blob = typeof watermarkBlob === 'function' ? await watermarkBlob(F.photos[i].blob) : F.photos[i].blob;   // your name on the photo
+    const r = await db.storage.from('promo').upload(path, blob, { contentType: 'image/jpeg' });
     if (!r.error) paths.push(path);
   }
   if (paths.length) await db.from('campaigns').update({ photo_paths: paths }).eq('id', k.id);
+  const vpaths = [];
+  for (let i = 0; i < (F.videos || []).length; i++) {
+    if (btn) btn.textContent = 'Sending video ' + (i + 1) + '…';
+    const v = F.videos[i];
+    const ext = /webm/.test(v.type) ? 'webm' : /quicktime/.test(v.type) ? 'mov' : 'mp4';
+    const path = k.id + '/video-' + (i + 1) + '-' + Date.now() + '.' + ext;
+    const r = await db.storage.from('promo').upload(path, v.file, { contentType: v.type || 'video/mp4' });
+    if (!r.error) vpaths.push(path);
+  }
+  if (vpaths.length) await db.from('campaigns').update({ video_paths: vpaths }).eq('id', k.id);
   const rows = shops.map((c) => ({ campaign_id: k.id, client_id: c.id }));
   for (let i = 0; i < rows.length; i += 500) {
     const r = await db.from('campaign_sends').insert(rows.slice(i, i + 500));
     if (r.error) { fail('Saved, but the shop list could not be saved — open the message again.'); return; }
   }
-  if (paths.length < F.photos.length) toast('Saved — but ' + (F.photos.length - paths.length) + ' photo(s) could not be uploaded.', 'err');
+  if (vpaths.length < (F.videos || []).length) toast('Saved — but a video could not be uploaded (too big, or the internet dropped).', 'err');
+  else if (paths.length < F.photos.length) toast('Saved — but ' + (F.photos.length - paths.length) + ' photo(s) could not be uploaded.', 'err');
   else toast('Saved ✓ — now send it to each shop', 'ok');
   S.campForm = null;
   showSub(k.title, () => renderCampaign(k.id), true);
@@ -209,6 +232,7 @@ function drawCampaign() {
   c.innerHTML =
     '<div class="card camp-head">' +
     (k.photo_paths && k.photo_paths.length ? '<div class="camp-strip">' + k.photo_paths.map((p) => '<img src="' + esc(promoUrl(p)) + '" alt="">').join('') + '</div>' : '') +
+    (k.video_paths && k.video_paths.length ? '<div class="camp-strip camp-vids">' + k.video_paths.map((p) => '<video src="' + esc(promoUrl(p)) + '" controls playsinline preload="metadata"></video>').join('') + '</div>' : '') +
     '<div class="camp-msg noi18n">' + esc(k.message) + '</div>' +
     '<div class="photo-row"><a class="btn btn-small btn-secondary" href="' + esc(showUrl(k.id)) + '" target="_blank" rel="noopener">See the page the shops get</a>' +
     (S.me.role === 'owner' || k.created_by === S.me.id ? '<button class="btn btn-small btn-ghost" data-action="camp-del" data-id="' + k.id + '">Delete</button>' : '') + '</div></div>' +
@@ -248,7 +272,7 @@ async function campSend(rowId) {
 function deleteCampaign(id) {
   confirmModal('Delete this message?', 'The list of who got it and its photos will be removed. Shops who already got the link will not see the photos any more.', 'Delete', async () => {
     const C = S.camp;
-    const paths = (C && C.k.photo_paths) || [];
+    const paths = ((C && C.k.photo_paths) || []).concat((C && C.k.video_paths) || []);
     const { error } = await db.from('campaigns').delete().eq('id', id);
     if (error) { toast('Could not delete — try again.', 'err'); return; }
     if (paths.length) db.storage.from('promo').remove(paths).then(() => {}, () => {});
@@ -263,6 +287,24 @@ onAct('camp-open', (el) => { const t = el.querySelector('.li-title'); showSub(t 
 onAct('camp-who', (el) => { if (!S.campForm) return; S.campForm.who = el.dataset.v; document.querySelectorAll('[data-action="camp-who"]').forEach((b) => b.classList.toggle('on', b === el)); campCount(); });
 onAct('camp-ph-add', () => campAddPhoto());
 onAct('camp-ph-del', (el) => { if (!S.campForm) return; S.campForm.photos.splice(+el.dataset.i, 1); renderCampaignForm(); });
+onAct('camp-vid-add', () => {
+  const F = S.campForm;
+  if (!F || F.videos.length >= CAMP_MAX_VIDEOS) return;
+  const keep = () => { const t = $('#cf-title'), m = $('#cf-msg'); if (t) F.title = t.value; if (m) F.message = m.value; };
+  pickFile('video/*', (file) => {
+    keep();
+    if (file.size > CAMP_VIDEO_MB * 1024 * 1024) { toast('That video is too big (more than ' + CAMP_VIDEO_MB + ' MB) — send a shorter one.', 'err'); return; }
+    F.videos.push({ file, type: file.type || 'video/mp4', url: URL.createObjectURL(file) });
+    renderCampaignForm();
+  });
+});
+onAct('camp-vid-del', (el) => { if (!S.campForm) return; S.campForm.videos.splice(+el.dataset.i, 1); renderCampaignForm(); });
+/* a festival on the calendar (fest.js): a new message with its title and words ready */
+function campNewFrom(preset) {
+  S.campAud = null;
+  S.campForm = { title: preset.title || '', message: preset.message || campDefaultText(), photos: [], videos: [], who: 'all', city: '' };
+  showSub('New message', renderCampaignForm);
+}
 onAct('camp-save', () => saveCampaign());
 onAct('camp-show', (el) => { if (!S.camp) return; S.camp.show = el.dataset.v; drawCampaign(); });
 onAct('camp-send', (el) => campSend(el.dataset.id));

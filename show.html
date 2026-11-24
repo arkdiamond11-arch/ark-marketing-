@@ -57,6 +57,8 @@
     .msg .big { font-size: 40px; }
     .zoom { position: fixed; inset: 0; background: rgba(10, 8, 12, .94); display: flex; align-items: center; justify-content: center; z-index: 9; }
     .zoom img { max-width: 100%; max-height: 100%; }
+    .vids { display: grid; gap: 10px; margin: 0 0 10px; }
+    .vids video { width: 100%; max-height: 520px; border-radius: 12px; background: #000; display: block; }
   </style>
 </head>
 <body>
@@ -160,6 +162,8 @@
       } else if (canPick) {
         h += '<p class="lead">' + esc(t('Tap ♡ on the designs you like, choose how many, then send your choice.')) + '</p>';
       }
+      var vs = ((d.videos) || []).filter(Boolean);   // videos (update 16): to watch, not to pick
+      if (vs.length) h += '<div class="vids">' + vs.map(function (p) { return '<video src="' + esc(photoUrl(p)) + '" controls playsinline preload="metadata"></video>'; }).join('') + '</div>';
       h += ps.length ? '<div class="grid">' + ps.map(function (p, i) {
         var on = !!pick[p];
         return '<div class="pc' + (ps.length % 2 === 1 && i === 0 ? ' wide' : '') + (on ? ' on' : '') + '" data-p="' + esc(p) + '">' +

@@ -1174,3 +1174,49 @@ input.sw:disabled { cursor: default; }
 .ev-banner { display: block; width: 100%; text-align: left; border: 0; border-radius: 12px; padding: 11px 14px; margin: 0 0 12px; background: #efe6fb; color: #4b2a85; font: inherit; font-weight: 750; cursor: pointer; }
 .ev-on { background: #efe6fb; color: #4b2a85; }
 .ev-mode { padding: 12px 14px; }
+
+/* ---------- v26: designs from shops, ready-stock links, festival calendar, videos ---------- */
+.dl-card { padding: 12px 14px; border-left: 4px solid #c9c3cc; }
+.dl-card.on { border-left-color: var(--green); }
+.dl-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dl-row .hint { margin: 2px 0 0; }
+.dl-row .btn { flex: none; width: auto; }
+.dl-url { margin: 8px 0 0; padding: 8px 10px; background: #f6f2ee; border-radius: 9px; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; user-select: all; }
+.dl-card .photo-row, .dr-card .photo-row, .sl-pick .photo-row { flex-wrap: wrap; }
+.dl-card .photo-row .btn, .dr-card .photo-row .btn, .sl-pick .photo-row .btn { flex: none; width: auto; white-space: nowrap; }
+.dl-card .photo-row .btn svg, .dr-card .photo-row .btn svg { width: 16px; height: 16px; vertical-align: -3px; }
+.dr-card { padding: 12px 14px; }
+.dr-card.closed { opacity: .75; }
+.dr-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.dr-top a { font-weight: 750; color: var(--ink); text-decoration: none; }
+.dr-sub { font-size: 13px; color: var(--muted); margin: 3px 0 0; }
+.dr-photos { display: flex; gap: 8px; overflow-x: auto; margin: 8px 0 0; }
+.dr-ph { flex: none; width: 86px; height: 86px; border: 0; padding: 0; border-radius: 10px; overflow: hidden; background: #eee6df; cursor: zoom-in; }
+.dr-ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dr-note { margin: 8px 0 0; font-size: 14px; background: var(--maroon-soft); border-radius: 10px; padding: 8px 10px; white-space: pre-wrap; }
+.dr-ord { margin: 6px 0 0; font-size: 13.5px; font-weight: 700; }
+.dr-ord a { color: var(--maroon); text-decoration: none; }
+.dr-st-new { background: var(--maroon); color: #fff; }
+.dr-st-seen { background: var(--gold-soft); color: #8a6420; }
+.dr-st-done { background: #dcefe3; color: #0f4d2c; }
+.dr-st-declined { background: #eeeaf0; color: #5d5663; }
+.sl-pick { padding: 12px 14px; border-left: 4px solid var(--maroon); }
+.sl-tags { margin: 6px 0 0; font-weight: 650; font-size: 14px; }
+.fest-card { padding: 12px 14px; border-left: 4px solid var(--gold); }
+.fest-card.wish { border-left-color: #8f6bc9; }
+.fest-top { display: flex; align-items: flex-start; gap: 10px; }
+.fest-ic { font-size: 24px; line-height: 1.1; }
+.fest-t { flex: 1; min-width: 0; }
+.fest-t b { display: block; font-size: 16px; }
+.fest-t span { font-size: 13px; color: var(--muted); }
+.fest-x { border: 0; background: none; color: var(--muted); font-size: 15px; padding: 2px 4px; cursor: pointer; }
+.fest-line { font-size: 14px; margin: 6px 0 8px; }
+.fest-card .btn { width: auto; }
+.fest-row { align-items: center; }
+.fest-day { flex: none; width: 46px; text-align: center; }
+.fest-day b { display: block; font-size: 20px; line-height: 1.1; color: var(--maroon); }
+.fest-day span { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.fest-chip-sale { background: var(--gold-soft); color: #8a6420; }
+.fest-chip-wish { background: #efe6fb; color: #4b2a85; }
+.cf-vid video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+.camp-vids video { flex: none; width: 180px; height: 120px; border-radius: 10px; background: #000; }

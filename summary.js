@@ -26,10 +26,11 @@ async function summaryData() {
     owner && appOn('karigars') ? db.from('karigar_txns').select('kind, metal, fine_g').in('kind', ['issue', 'receive', 'wastage']).limit(20000) : Promise.resolve({ data: [] }),
     S.dbv6 && appOn('vendors') ? db.from('order_diamonds').select('id, orders!inner(status)').eq('given', false).in('orders.status', OPEN_STATUSES).limit(5000) : Promise.resolve({ data: [] }),
     typeof picksOn === 'function' && picksOn() ? db.from('campaign_picks').select('id').eq('status', 'new').limit(1000) : Promise.resolve({ data: [] }),
+    typeof inboxNew === 'function' ? inboxNew().catch(() => ({ designs: 0, stock: 0 })) : Promise.resolve({ designs: 0, stock: 0 }),   // update 16
   ]);
   const meet = res[0].data || [], newCl = res[1].data || [], yOrders = (res[2].data || []).filter((o) => o.status !== 'quote' && CLOSED_STATUSES.indexOf(o.status) === -1),
     due = res[3].data || [], rem = res[4].data || [], pays = res[5].data || [], quotes = res[6].data || [], kt = res[7].data || [],
-    dia = res[8].data || [], picksNew = (res[9] && res[9].data ? res[9].data : []).length;
+    dia = res[8].data || [], picksNew = (res[9] && res[9].data ? res[9].data : []).length, inbox = res[10] || { designs: 0, stock: 0 };
   const byExec = new Map();
   meet.forEach((m) => byExec.set(m.exec_id, (byExec.get(m.exec_id) || 0) + 1));
   const PG = typeof payDueGroups === 'function' ? payDueGroups(payIndex(pays)) : { late: [], today: [] };
@@ -42,6 +43,7 @@ async function summaryData() {
     dueToday: due.filter((d) => d.due_date === t).length, overdue: due.filter((d) => d.due_date < t).length,
     remToday: rem.filter((r) => r.due_date === t).length, remOverdue: rem.filter((r) => r.due_date < t).length,
     payLate: PG.late.length, payToday: PG.today.length, quotes: quotes.length, kGold, kSilver, diaToGive: dia.length, picksNew,
+    designsNew: inbox.designs || 0, stockNew: inbox.stock || 0,
   };
 }
 
@@ -66,6 +68,8 @@ async function renderTodaySummary(el) {
   if (owner && D.quotes) lines.push(line('📝', '<b>Quotations waiting</b> 3+ days: ' + D.quotes, ' data-action="o-goto" data-s="quote"'));
   if (D.diaToGive) lines.push(line('💎', '<b>Diamonds to give vendors:</b> ' + D.diaToGive, ' data-action="dia-todo"'));
   if (D.picksNew) lines.push(line('🛍️', '<b>New design picks:</b> ' + D.picksNew, ' data-action="pk-open"'));
+  if (D.designsNew) lines.push(line('📥', '<b>New designs from shops:</b> ' + D.designsNew, ' data-action="dr-open"'));
+  if (D.stockNew) lines.push(line('📦', '<b>Ready-stock choices:</b> ' + D.stockNew, ' data-action="sl-list"'));
   if (owner && (Math.abs(D.kGold) > 0.0005 || Math.abs(D.kSilver) > 0.0005)) {
     lines.push(line('🔨', '<b>With karigars:</b> ' + [Math.abs(D.kGold) > 0.0005 ? 'gold ' + grams(D.kGold) : '', Math.abs(D.kSilver) > 0.0005 ? 'silver ' + grams(D.kSilver) : ''].filter(Boolean).join(', ') + ' fine', ' data-action="k-list"'));
   }
@@ -91,6 +95,8 @@ function summaryText() {
   if (D.quotes) L.push('Quotations waiting 3+ days: ' + D.quotes);
   if (D.diaToGive) L.push('Diamonds to give vendors: ' + D.diaToGive);
   if (D.picksNew) L.push('New design picks: ' + D.picksNew);
+  if (D.designsNew) L.push('New designs from shops: ' + D.designsNew);
+  if (D.stockNew) L.push('Ready-stock choices: ' + D.stockNew);
   if (Math.abs(D.kGold) > 0.0005) L.push('Gold with karigars: ' + grams(D.kGold) + ' fine');
   if (Math.abs(D.kSilver) > 0.0005) L.push('Silver with karigars: ' + grams(D.kSilver) + ' fine');
   return L.join('\n');

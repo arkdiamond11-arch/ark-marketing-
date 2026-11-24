@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#7b1e3c">
+  <meta name="robots" content="noindex">
+  <title>Ready stock</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <style>
+    :root { --maroon: #7b1e3c; --gold: #c9973c; --bg: #f6f4f1; --card: #fff; --ink: #27222b; --muted: #857e8c; --line: #eae6e2; --green: #1a7f4e; --red: #b3372f; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", "Noto Sans Gujarati", sans-serif; font-size: 15px; line-height: 1.45; }
+    header { background: var(--maroon); color: #fff; padding: calc(14px + env(safe-area-inset-top)) 16px 14px; }
+    header .biz { font-size: 13px; letter-spacing: .6px; text-transform: uppercase; opacity: .85; }
+    header h1 { margin: 2px 0 0; font-size: 21px; }
+    header .shop { font-size: 14px; opacity: .9; }
+    main { max-width: 620px; margin: 0 auto; padding: 14px 16px 110px; }
+    .langs { display: flex; gap: 6px; justify-content: flex-end; margin: 0 0 10px; }
+    .langs button { border: 1.5px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink); }
+    .langs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 3px rgba(40,20,30,.08), 0 4px 14px rgba(40,20,30,.05); padding: 13px 14px; margin: 0 0 12px; }
+    .note { white-space: pre-wrap; }
+    .closed { background: #fbeceb; border: 1.5px solid #f0c9c5; color: var(--red); font-weight: 700; }
+    .mine { background: #eaf6ef; border: 1.5px solid #bfe3cd; color: var(--green); font-weight: 650; }
+    .hint { color: var(--muted); font-size: 13.5px; margin: 0 2px 10px; }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .pc { background: var(--card); border-radius: 14px; box-shadow: 0 1px 3px rgba(40,20,30,.08); overflow: hidden; border: 2.5px solid transparent; position: relative; }
+    .pc.on { border-color: var(--maroon); }
+    .pc.gone { opacity: .55; }
+    .ph { position: relative; aspect-ratio: 1; background: #f3efe9; cursor: zoom-in; }
+    .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .ph .none { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 34px; }
+    .ph .more { position: absolute; left: 6px; bottom: 6px; background: rgba(20, 15, 20, .6); color: #fff; font-size: 11.5px; padding: 2px 7px; border-radius: 999px; }
+    .wm { position: absolute; right: 6px; bottom: 6px; color: rgba(255, 255, 255, .85); font-size: 11px; font-weight: 800; letter-spacing: .4px; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); pointer-events: none; }
+    .zoom .wm { font-size: 15px; right: 14px; bottom: 14px; }
+    .badge { position: absolute; left: 6px; top: 6px; background: var(--red); color: #fff; font-size: 11.5px; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+    .tick { position: absolute; right: 6px; top: 6px; width: 28px; height: 28px; border-radius: 50%; background: rgba(255, 255, 255, .92); border: 2px solid var(--maroon); color: var(--maroon); font-weight: 900; display: flex; align-items: center; justify-content: center; }
+    .pc.on .tick { background: var(--maroon); color: #fff; }
+    .bd { padding: 8px 10px 10px; cursor: pointer; }
+    .bd b { display: block; font-size: 14.5px; }
+    .bd span { display: block; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+    .bar { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; box-shadow: 0 -4px 16px rgba(40, 20, 30, .12); padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
+    .bar .in { max-width: 620px; margin: 0 auto; display: flex; gap: 8px; align-items: center; }
+    .bar textarea { flex: 1; font: inherit; font-size: 14px; padding: 9px 10px; border: 1.5px solid var(--line); border-radius: 11px; min-height: 44px; max-height: 90px; resize: none; }
+    .bar button { padding: 12px 16px; border: 0; border-radius: 12px; background: var(--maroon); color: #fff; font: inherit; font-weight: 800; cursor: pointer; white-space: nowrap; }
+    .bar button:disabled { opacity: .5; }
+    .err { color: var(--red); font-weight: 650; font-size: 13.5px; max-width: 620px; margin: 6px auto 0; }
+    .contact { text-align: center; color: var(--muted); font-size: 13.5px; margin-top: 18px; }
+    .contact a { color: var(--maroon); font-weight: 700; text-decoration: none; }
+    .msg { text-align: center; padding: 40px 10px; color: var(--muted); }
+    .msg .big { font-size: 40px; }
+    .msg b { color: var(--ink); font-size: 18px; display: block; margin-bottom: 4px; }
+    .again { margin-top: 16px; padding: 11px 18px; border-radius: 12px; border: 1.5px solid var(--maroon); background: #fff; color: var(--maroon); font: inherit; font-weight: 750; cursor: pointer; }
+    .zoom { position: fixed; inset: 0; background: rgba(10, 8, 12, .94); display: flex; align-items: center; justify-content: center; z-index: 9; }
+    .zoom .fr { position: relative; max-width: 100%; max-height: 100%; }
+    .zoom img { max-width: 100vw; max-height: 100vh; display: block; }
+    .zoom .nav { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .2); color: #fff; font-size: 22px; cursor: pointer; }
+    .zoom .prev { left: 8px; } .zoom .next { right: 8px; }
+  </style>
+</head>
+<body>
+  <header><div class="biz" id="biz">&nbsp;</div><h1 id="title">Ready stock</h1><div class="shop" id="shop"></div></header>
+  <main id="main"><div class="msg">Loading…</div></main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+  /* A ready-stock list for one shop (no login): the pieces we chose for it, with
+     photos and weights (never rates); the shop taps the ones it wants and sends. */
+  (function () {
+    'use strict';
+    var T = {
+      hi: {
+        'Ready stock': 'रेडी स्टॉक', 'Ready stock for you': 'आपके लिए रेडी स्टॉक', 'For': 'के लिए',
+        'Tap the pieces you want, then send your choice.': 'जो पीस चाहिए उन पर टैप करें, फिर अपनी पसंद भेजें।',
+        'Send my choice': 'मेरी पसंद भेजें', 'Sending…': 'भेज रहे हैं…', 'A note (optional)': 'नोट (वैकल्पिक)',
+        'Not available': 'उपलब्ध नहीं', 'Gross': 'कुल', 'Net': 'नेट', 'Choose at least one piece': 'कम से कम एक पीस चुनें',
+        'Your choice was sent on': 'आपकी पसंद भेजी गई', 'you can change it and send again.': 'आप इसे बदलकर फिर से भेज सकते हैं।',
+        'This list is closed — please message us on WhatsApp': 'यह सूची बंद हो गई है — कृपया हमें WhatsApp करें',
+        'Thank you — we got your choice': 'धन्यवाद — हमें आपकी पसंद मिल गई', 'We will call you soon.': 'हम जल्द ही आपको कॉल करेंगे।',
+        'See the list again': 'सूची फिर देखें', 'Questions? Call or WhatsApp': 'कोई सवाल? कॉल या WhatsApp करें',
+        'This link is not active any more.': 'यह लिंक अब चालू नहीं है।', 'Please ask us for a new link.': 'कृपया हमसे नया लिंक मांगें।',
+        'This link does not work any more': 'यह लिंक अब काम नहीं करता',
+        'Could not load — check the internet and open the link again.': 'लोड नहीं हुआ — इंटरनेट देखें और लिंक फिर से खोलें।',
+        'Could not send — check the internet and try again.': 'भेजा नहीं जा सका — इंटरनेट देखें और फिर से कोशिश करें।',
+        'pieces': 'पीस', 'piece': 'पीस', 'photos': 'फोटो', 'Loading…': 'लोड हो रहा है…',
+        'Gold': 'सोना', 'Silver': 'चांदी', 'Platinum': 'प्लैटिनम', 'Yellow': 'पीला', 'Rose': 'रोज़', 'White': 'सफ़ेद', 'Two tone': 'दो रंग',
+        'Natural': 'नैचुरल', 'Lab-grown': 'लैब-ग्रोन', 'diamonds': 'डायमंड'
+      },
+      gu: {
+        'Ready stock': 'રેડી સ્ટોક', 'Ready stock for you': 'તમારા માટે રેડી સ્ટોક', 'For': 'માટે',
+        'Tap the pieces you want, then send your choice.': 'જે પીસ જોઈએ તેના પર ટૅપ કરો, પછી તમારી પસંદ મોકલો.',
+        'Send my choice': 'મારી પસંદ મોકલો', 'Sending…': 'મોકલી રહ્યા છીએ…', 'A note (optional)': 'નોંધ (વૈકલ્પિક)',
+        'Not available': 'ઉપલબ્ધ નથી', 'Gross': 'કુલ', 'Net': 'નેટ', 'Choose at least one piece': 'ઓછામાં ઓછો એક પીસ પસંદ કરો',
+        'Your choice was sent on': 'તમારી પસંદ મોકલાઈ', 'you can change it and send again.': 'તમે તેને બદલીને ફરી મોકલી શકો છો.',
+        'This list is closed — please message us on WhatsApp': 'આ યાદી બંધ થઈ ગઈ છે — કૃપા કરીને અમને WhatsApp કરો',
+        'Thank you — we got your choice': 'આભાર — અમને તમારી પસંદ મળી ગઈ', 'We will call you soon.': 'અમે જલ્દી તમને કૉલ કરીશું.',
+        'See the list again': 'યાદી ફરી જુઓ', 'Questions? Call or WhatsApp': 'કોઈ પ્રશ્ન? કૉલ અથવા WhatsApp કરો',
+        'This link is not active any more.': 'આ લિંક હવે ચાલુ નથી.', 'Please ask us for a new link.': 'કૃપા કરીને અમારી પાસે નવી લિંક માંગો.',
+        'This link does not work any more': 'આ લિંક હવે કામ કરતી નથી',
+        'Could not load — check the internet and open the link again.': 'લોડ ન થયું — ઇન્ટરનેટ તપાસો અને લિંક ફરી ખોલો.',
+        'Could not send — check the internet and try again.': 'મોકલી ન શકાયું — ઇન્ટરનેટ તપાસો અને ફરી પ્રયત્ન કરો.',
+        'pieces': 'પીસ', 'piece': 'પીસ', 'photos': 'ફોટા', 'Loading…': 'લોડ થાય છે…',
+        'Gold': 'સોનું', 'Silver': 'ચાંદી', 'Platinum': 'પ્લેટિનમ', 'Yellow': 'પીળું', 'Rose': 'રોઝ', 'White': 'સફેદ', 'Two tone': 'બે રંગ',
+        'Natural': 'નેચરલ', 'Lab-grown': 'લેબ-ગ્રોન', 'diamonds': 'ડાયમંડ'
+      }
+    };
+    var lang = 'en';
+    var stored = null;
+    try { stored = localStorage.getItem('statusLang') || localStorage.getItem('lang'); } catch (e) { /* private mode */ }
+    if (stored === 'hi' || stored === 'gu' || stored === 'en') lang = stored;
+    else { var nl = String(navigator.language || '').slice(0, 2); if (nl === 'hi' || nl === 'gu') lang = nl; }
+    function t(s) { return (T[lang] && T[lang][s]) || s; }
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    var MONTHS = { en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+      hi: ['जन', 'फ़र', 'मार्च', 'अप्रै', 'मई', 'जून', 'जुला', 'अग', 'सित', 'अक्टू', 'नव', 'दिस'],
+      gu: ['જાન્યુ', 'ફેબ્રુ', 'માર્ચ', 'એપ્રિ', 'મે', 'જૂન', 'જુલા', 'ઑગ', 'સપ્ટે', 'ઑક્ટો', 'નવે', 'ડિસે'] };
+    function day(iso) { if (!iso) return ''; var d = new Date(iso); return d.getDate() + ' ' + MONTHS[lang][d.getMonth()]; }
+    function g(n) { return (Math.round(Number(n) * 1000) / 1000).toLocaleString('en-IN', { maximumFractionDigits: 3 }) + ' g'; }
+    function kt(p) { var n = Number(p); if (!n) return ''; var m = { 99.9: '24K', 91.6: '22K', 91.7: '22K', 75: '18K', 58.5: '14K', 58.3: '14K', 41.7: '10K', 37.5: '9K', 92.5: '925' }; return m[n] || (n + '%'); }
+    function teamPhone() {
+      try { for (var i = 0; i < localStorage.length; i++) { if (/^sb-.+-auth-token$/.test(localStorage.key(i) || '')) return true; } } catch (e) { /* private mode */ }
+      return false;
+    }
+
+    var c = window.APP_CONFIG || {};
+    var token = (location.hash || '').replace(/^#/, '').trim().toLowerCase();
+    var main = document.getElementById('main');
+    var data = null, urls = {}, sel = {}, note = '', busy = false, errMsg = '';
+    if (c.BUSINESS_NAME) document.getElementById('biz').textContent = c.BUSINESS_NAME;
+    function message(big, lines, extra) {
+      var bar = document.getElementById('bar'); if (bar) bar.remove();
+      main.innerHTML = '<div class="msg"><div class="big">' + big + '</div>' + lines.map(function (x, i) { return i === 0 && extra ? '<b>' + esc(t(x)) + '</b>' : '<p>' + esc(t(x)) + '</p>'; }).join('') + (extra || '') + '</div>';
+    }
+    if (!window.supabase || !c.SUPABASE_URL || !/^[0-9a-f-]{36}$/.test(token)) { message('🔗', ['This link is not active any more.', 'Please ask us for a new link.']); return; }
+    var db = window.supabase.createClient(c.SUPABASE_URL, c.SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+
+    function langBar() {
+      return '<div class="langs">' + [['en', 'English'], ['hi', 'हिन्दी'], ['gu', 'ગુજરાતી']].map(function (x) {
+        return '<button data-l="' + x[0] + '" class="' + (lang === x[0] ? 'on' : '') + '">' + x[1] + '</button>';
+      }).join('') + '</div>';
+    }
+    function contact() {
+      var b = (data && data.business) || {};
+      if (!b.phone) return '';
+      var ph = String(b.phone).replace(/[^\d+]/g, '');
+      var wa = ph.replace(/\D/g, ''); if (wa.length === 10) wa = '91' + wa;
+      return '<p class="contact">' + esc(t('Questions? Call or WhatsApp')) + '<br><a href="tel:' + esc(ph) + '">' + esc(b.phone) + '</a> · <a href="https://wa.me/' + esc(wa) + '" target="_blank" rel="noopener">WhatsApp</a></p>';
+    }
+    function wmHTML() { var w = data && data.business && data.business.wm; return w ? '<span class="wm">' + esc(w) + '</span>' : ''; }
+    function lines(it) {
+      var a = [];
+      a.push([it.category, it.title].filter(Boolean).join(' · '));
+      a.push([t(it.metal || 'Gold') + (kt(it.purity) ? ' ' + kt(it.purity) : ''), it.metal_color ? t(it.metal_color) : ''].filter(Boolean).join(' · '));
+      var w = [];
+      if (it.gross_wt != null) w.push(t('Gross') + ' ' + g(it.gross_wt));
+      if (it.net_wt != null) w.push(t('Net') + ' ' + g(it.net_wt));
+      if (w.length) a.push(w.join(' · '));
+      if (it.diamond_type || it.diamond_ct) a.push([it.diamond_type ? t(it.diamond_type) + ' ' + t('diamonds') : t('diamonds'), it.diamond_ct ? Number(it.diamond_ct) + ' ct' : '', it.diamond_pcs ? it.diamond_pcs + ' pcs' : '', it.diamond_quality || ''].filter(Boolean).join(' · '));
+      if (it.stones) a.push(it.stones);
+      return a.filter(Boolean);
+    }
+    function count() { return Object.keys(sel).filter(function (k) { return sel[k]; }).length; }
+    function draw() {
+      var d = data, b = d.business || {};
+      document.getElementById('biz').textContent = b.name || c.BUSINESS_NAME || '';
+      document.getElementById('title').textContent = d.title || t('Ready stock for you');
+      document.getElementById('shop').textContent = d.shop ? t('For') + ' ' + d.shop : (b.city || '');
+      document.title = (d.title || t('Ready stock')) + ' — ' + (b.name || '');
+      var h = langBar();
+      if (!d.open) h += '<div class="card closed">🔒 ' + esc(t('This list is closed — please message us on WhatsApp')) + '</div>';
+      else if (d.mine && d.mine.at) h += '<div class="card mine">✓ ' + esc(t('Your choice was sent on') + ' ' + day(d.mine.at) + ' — ' + t('you can change it and send again.')) + '</div>';
+      if (d.note) h += '<div class="card note">' + esc(d.note) + '</div>';
+      if (d.open) h += '<p class="hint">' + esc(t('Tap the pieces you want, then send your choice.')) + '</p>';
+      h += '<div class="grid">' + (d.items || []).map(function (it, i) {
+        var ph = (it.photos || [])[0], u = ph ? urls[ph] : '';
+        var can = d.open && it.available;
+        return '<div class="pc' + (sel[it.id] ? ' on' : '') + (it.available ? '' : ' gone') + '" data-i="' + i + '">' +
+          '<div class="ph" data-z="' + i + '">' + (ph ? '<img alt=""' + (u ? ' src="' + esc(u) + '"' : '') + '>' + wmHTML() : '<span class="none">💍</span>') +
+          ((it.photos || []).length > 1 ? '<span class="more">' + it.photos.length + ' ' + esc(t('photos')) + '</span>' : '') +
+          (it.available ? '' : '<span class="badge">' + esc(t('Not available')) + '</span>') +
+          (can ? '<span class="tick">' + (sel[it.id] ? '✓' : '') + '</span>' : '') + '</div>' +
+          '<div class="bd" data-s="' + i + '"><b>' + esc(it.tag_no || it.title || '') + '</b>' + lines(it).map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div></div>';
+      }).join('') + '</div>' + contact();
+      main.innerHTML = h;
+      main.querySelectorAll('.langs button').forEach(function (bt) {
+        bt.onclick = function () { lang = bt.dataset.l; try { localStorage.setItem('statusLang', lang); } catch (e) { /* ignore */ } draw(); };
+      });
+      main.querySelectorAll('[data-s]').forEach(function (el) { el.onclick = function () { toggle(+el.dataset.s); }; });
+      main.querySelectorAll('.tick').forEach(function (el) { el.onclick = function (e) { e.stopPropagation(); toggle(+el.closest('.pc').dataset.i); }; });
+      main.querySelectorAll('[data-z]').forEach(function (el) { el.onclick = function () { zoom(+el.dataset.z, 0); }; });
+      drawBar();
+    }
+    function toggle(i) {
+      var it = data.items[i];
+      if (!it || !data.open || !it.available) return;
+      sel[it.id] = !sel[it.id];
+      errMsg = '';
+      draw();
+    }
+    function drawBar() {
+      var bar = document.getElementById('bar');
+      if (!data.open) { if (bar) bar.remove(); return; }
+      if (!bar) {
+        bar = document.createElement('div'); bar.className = 'bar'; bar.id = 'bar';
+        bar.innerHTML = '<div class="in"><textarea id="note" maxlength="500"></textarea><button id="go"></button></div><div class="err" id="err"></div>';
+        document.body.appendChild(bar);
+        bar.querySelector('#note').oninput = function (e) { note = e.target.value; };
+        bar.querySelector('#go').onclick = send;
+      }
+      var n = count();
+      bar.querySelector('#note').placeholder = t('A note (optional)');
+      if (document.activeElement !== bar.querySelector('#note')) bar.querySelector('#note').value = note;
+      var go = bar.querySelector('#go');
+      go.disabled = busy || !n;
+      go.textContent = busy ? t('Sending…') : t('Send my choice') + (n ? ' (' + n + ')' : '');
+      bar.querySelector('#err').textContent = errMsg ? t(errMsg) : '';
+    }
+    function zoom(i, k) {
+      var it = data.items[i], ps = (it && it.photos) || [];
+      if (!ps.length) return;
+      var old = document.querySelector('.zoom'); if (old) old.remove();
+      var z = document.createElement('div'); z.className = 'zoom';
+      var u = urls[ps[k]] || '';
+      z.innerHTML = '<div class="fr"><img alt=""' + (u ? ' src="' + esc(u) + '"' : '') + '>' + wmHTML() + '</div>' +
+        (ps.length > 1 ? '<button class="nav prev" aria-label="‹">‹</button><button class="nav next" aria-label="›">›</button>' : '');
+      z.onclick = function (e) {
+        if (e.target.classList.contains('prev')) { zoom(i, (k + ps.length - 1) % ps.length); return; }
+        if (e.target.classList.contains('next')) { zoom(i, (k + 1) % ps.length); return; }
+        z.remove();
+      };
+      document.body.appendChild(z);
+    }
+    function send() {
+      var ids = data.items.filter(function (it) { return sel[it.id] && it.available; }).map(function (it) { return it.id; });
+      if (!ids.length) { errMsg = 'Choose at least one piece'; drawBar(); return; }
+      busy = true; errMsg = ''; drawBar();
+      db.rpc('stock_pick', { p_token: token, p_items: ids, p_note: note || null }).then(function (r) {
+        busy = false;
+        if (r.error) { errMsg = String(r.error.message || '').replace(/\.$/, '') || 'Could not send — check the internet and try again.'; drawBar(); return; }
+        data.mine = { items: ids, note: note, at: new Date().toISOString() };
+        message('✅', ['Thank you — we got your choice', 'We will call you soon.'], '<button class="again" id="again">' + esc(t('See the list again')) + '</button>' + contact());
+        document.getElementById('again').onclick = function () { main.innerHTML = ''; draw(); };
+      }, function () { busy = false; errMsg = 'Could not send — check the internet and try again.'; drawBar(); });
+    }
+
+    db.rpc('stock_page', { p_token: token }).then(function (r) {
+      if (r.error) { message('⚠️', [/function|schema cache/i.test(String(r.error.message || '')) ? 'This link is not active any more.' : 'Could not load — check the internet and open the link again.']); return; }
+      if (!r.data) { message('🔗', ['This link is not active any more.', 'Please ask us for a new link.']); return; }
+      data = r.data;
+      if (data.mine && Array.isArray(data.mine.items)) { data.mine.items.forEach(function (id) { sel[id] = true; }); note = data.mine.note || ''; }
+      draw();
+      if (!teamPhone()) { try { db.rpc('link_seen', { p_kind: 'stock', p_token: token }).then(function () {}, function () {}); } catch (e) { /* not counted */ } }
+      var paths = [];
+      (data.items || []).forEach(function (it) { (it.photos || []).forEach(function (p) { if (paths.indexOf(p) === -1) paths.push(p); }); });
+      if (paths.length) {
+        db.storage.from('catalogue').createSignedUrls(paths, 3600).then(function (s) {
+          (s.data || []).forEach(function (x) { if (x && x.signedUrl) urls[x.path] = x.signedUrl; });
+          draw();
+        }, function () { /* the photos stay blank */ });
+      }
+    }, function () { message('⚠️', ['Could not load — check the internet and open the link again.']); });
+  })();
+  </script>
+</body>
+</html>

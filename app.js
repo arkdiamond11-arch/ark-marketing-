@@ -446,7 +446,7 @@ async function renderToday() {
     html += '<div class="empty"><div class="big">🌤️</div>No pending reminders.<br>Log an interaction and add follow-ups — they will appear here.</div>';
   }
   c.innerHTML = (typeof eventBannerHTML === 'function' ? eventBannerHTML() : '') + '<div id="today-day"></div><div id="today-team"></div>' +
-    '<div id="today-late"></div><div id="today-stuck"></div><div id="today-summary"></div><div id="today-targets"></div><div id="today-wishes"></div>' +
+    '<div id="today-late"></div><div id="today-stuck"></div><div id="today-summary"></div><div id="today-targets"></div><div id="today-fest"></div><div id="today-wishes"></div>' +
     '<div id="today-pay"></div><div id="today-orders"></div><div id="today-repairs"></div><div id="today-approvals"></div>' + html +
     '<div id="today-reorder"></div><div id="today-visits"></div><div id="today-sleep"></div>';
   if (typeof renderTodaySummary === 'function') renderTodaySummary($('#today-summary'));
@@ -461,6 +461,7 @@ async function renderToday() {
   if (typeof loadTodayReorder === 'function') loadTodayReorder();
   if (typeof loadTodayDay === 'function') loadTodayDay();
   if (typeof loadTodayTeam === 'function') loadTodayTeam();
+  if (typeof loadTodayFest === 'function') loadTodayFest();
 }
 
 /* ============================================================
@@ -938,6 +939,8 @@ async function saveClient(editId) {
       const { data, error } = await db.from('clients').insert(row).select('id').single();
       if (error) { btn.disabled = false; btn.textContent = 'Save client'; toast('Could not save — please try again.', 'err'); return; }
       clientId = data.id;
+      if (typeof S.onClientAdded === 'function') { try { S.onClientAdded(clientId); } catch (e) { /* not linked */ } }   // e.g. a design a shop sent (inbox.js)
+      S.onClientAdded = null;
       if (noteText) {
         const { error: nErr } = await db.from('client_notes').insert({ client_id: clientId, body: noteText, created_by: S.me.id });
         noteFailed = !!nErr;
@@ -1214,6 +1217,7 @@ async function openClient(id, replace) {
     if (typeof loadClientApprovals === 'function') loadClientApprovals(cl);
     if (typeof loadClientCredit === 'function') loadClientCredit(cl);
     if (typeof loadClientPicks === 'function') loadClientPicks(cl);
+    if (typeof loadClientInbox === 'function') loadClientInbox(cl);
     if (typeof loadClientVisit === 'function') loadClientVisit(cl);
     if (typeof loadClientReorder === 'function') loadClientReorder(cl);
   }, replace);
@@ -1239,6 +1243,7 @@ function renderClientPage(cl) {
   if (typeof repairsOn === 'function' && repairsOn()) more.push('<button class="btn btn-small btn-secondary" data-action="rp-new-for" data-id="' + cl.id + '">🔧 Repair job</button>');
   if (typeof approvalsOn === 'function' && approvalsOn()) more.push('<button class="btn btn-small btn-secondary" data-action="ap-new-for" data-id="' + cl.id + '">💎 Give on approval</button>');
   if (typeof shopLinkOn === 'function' && shopLinkOn()) more.push('<button class="btn btn-small btn-secondary" data-action="cl-shoplink" data-id="' + cl.id + '">🔗 Shop\'s own page</button>');
+  if (typeof stockOn === 'function' && stockOn()) more.push('<button class="btn btn-small btn-secondary" data-action="sl-new-for" data-id="' + cl.id + '">📦 Ready-stock link</button>');
 
   $('#content').innerHTML =
     '<div class="client-head"><h2>' + esc(cl.trade_name) + '</h2>' +
@@ -1258,6 +1263,7 @@ function renderClientPage(cl) {
     '<div id="client-pay"></div>' +
     '<div id="client-credit"></div>' +
     '<div id="client-picks"></div>' +
+    '<div id="client-inbox"></div>' +
 
     '<div class="card">' + (rows.join('') || '<div class="empty" style="padding:6px">No details yet</div>') +
     (typeof clientLocRowHTML === 'function' && appOn('location') ? clientLocRowHTML(cl) : '') + '</div>' +
@@ -1879,6 +1885,9 @@ async function renderMore() {
     (typeof repairsOn === 'function' && repairsOn() ? mrow('rp-list', '🔧', 'Repairs', 'Pieces shops send back — resize, polish, repair') : '') +
     (typeof approvalsOn === 'function' && approvalsOn() ? mrow('ap-list', '💎', 'Pieces on approval', 'Given to shops to show their customers · sold or returned') : '') +
     (typeof campaignsOn === 'function' && campaignsOn() ? mrow('camp-open-list', '📣', 'Messages to shops', 'New designs or an offer to many shops on WhatsApp') : '') +
+    (typeof designOn === 'function' && designOn() ? mrow('dr-open', '📥', 'Designs from shops', 'Photos of designs shops want made · the link for any shop') : '') +
+    (typeof stockOn === 'function' && stockOn() ? mrow('sl-list', '📦', 'Ready-stock links', 'Pieces chosen for one shop — it taps what it wants') : '') +
+    (typeof festOn === 'function' && festOn() ? mrow('fest-open-list', '🪔', 'Festival calendar', 'Selling days and days to send wishes') : '') +
     (typeof dayOn === 'function' && dayOn() && isOwner ? mrow('td-open', '👥', 'Team today', 'Who started, where they met shops, the route on the map') : '') +
     (typeof expOn === 'function' && expOn() ? mrow('ex-open', '🧾', isOwner ? 'Expense claims' : 'My expenses', isOwner ? 'Approve what the team spent · mark paid' : 'What you spent, with the bill — the owner approves') : '') +
     (typeof bagOn === 'function' && bagOn() ? mrow('bag-open', '👜', 'Sample bag', 'Catalogue pieces you carry to shops') : '') +

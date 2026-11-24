@@ -435,7 +435,8 @@ async function shareFinalPhotos(orderId) {
       if (!u) continue;
       const r = await fetch(u);
       if (!r.ok) continue;
-      const b = await r.blob();
+      const b0 = await r.blob();
+      const b = typeof watermarkBlob === 'function' ? await watermarkBlob(b0) : b0;   // your name on the photo
       files.push(new File([b], safeFileName(ordNo(o.order_no) + ' ' + (i + 1)) + '.jpg', { type: b.type || 'image/jpeg' }));
     }
   } catch (e) { /* below */ }
@@ -502,6 +503,9 @@ function renderAppSettings() {
     (S.dbv12 && typeof creditDaysDefault === 'function' ? '<div class="section-label">Credit rules</div>' +
       '<div class="card sd-card"><p class="hint" style="margin:0 0 8px">A new approved order needs your OK when the shop\'s payment is late by more than this. A shop can have its own number: its page → Credit rules.</p>' +
       '<label class="sd-row"><span>Payment can be late by up to</span><input type="number" inputmode="numeric" min="0" max="365" id="cd-days" value="' + creditDaysDefault() + '"><span class="sd-unit">days</span></label></div>' : '') +
+    '<div class="section-label">Name on shared photos</div>' +
+    '<div class="card sd-card"><p class="hint" style="margin:0 0 8px">Photos you share from the catalogue or send in a message to shops get this at the bottom right. Empty = your business name. Switch it off below.</p>' +
+    '<div class="field" style="margin:0"><input type="text" id="wm-text" maxlength="40" autocomplete="off" placeholder="' + esc(bizName()) + '" value="' + esc(appOpts().wm_text || '') + '"></div></div>' +
     '<div class="section-label">Sections of the app</div>' +
     '<div class="card sw-card">' + appSectionsShown().map((s) => sw('sw-' + s[0], !off.has(s[0]), s[1], s[2])).join('') + '</div>' +
     '<button class="btn btn-primary" data-action="opt-save" id="opt-save">Save settings</button><div style="height:10px"></div>';
@@ -526,6 +530,8 @@ async function saveAppSettings() {
     VISIT_CATS.forEach((k) => { const el = $('#vd-' + k), v = el ? parseInt(el.value, 10) : NaN; visit[k] = isFinite(v) && v >= 0 ? Math.min(v, 365) : visitDays(k); });
     opts.visit = visit;
   }
+  const wt = $('#wm-text');   // the name on shared photos (util.js)
+  if (wt) opts.wm_text = wt.value.trim().slice(0, 40);
   const cd = $('#cd-days');   // credit rules (credit.js)
   if (cd) { const v = parseInt(cd.value, 10); opts.credit_days = isFinite(v) && v >= 0 ? Math.min(v, 365) : creditDaysDefault(); }
   const btn = $('#opt-save');

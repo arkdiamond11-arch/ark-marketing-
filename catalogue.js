@@ -20,7 +20,8 @@ async function renderCatalogue() {
   $('#content').innerHTML =
     '<div class="action-row cat-top-row" style="margin-bottom:12px"><button class="btn btn-primary" data-action="cat-new">＋ Add design</button>' +
     (typeof catStickers === 'function' ? '<button class="btn btn-secondary" data-action="cat-stickers">QR stickers</button>' : '') +
-    (typeof qrScanOn === 'function' && qrScanOn() ? '<button class="btn btn-secondary" data-action="qr-scan">Scan QR</button>' : '') + '</div>' +
+    (typeof qrScanOn === 'function' && qrScanOn() ? '<button class="btn btn-secondary" data-action="qr-scan">Scan QR</button>' : '') +
+    (typeof stockOn === 'function' && stockOn() ? '<button class="btn btn-secondary" data-action="sl-new">Ready-stock link</button>' : '') + '</div>' +
     '<div class="search-box"><input type="text" id="cat-search" placeholder="Search tag no., design, stones…" autocomplete="off" value="' + esc(C.q) + '"></div>' +
     '<div class="filter-chips">' + chip('status', 'available', 'Available') + chip('status', 'reserved', 'Reserved') + chip('status', 'sold', 'Sold') + chip('status', 'all', 'All') + '</div>' +
     '<div class="filter-chips" id="cat-cats"></div>' +
@@ -334,7 +335,8 @@ async function shareCatItem(id) {
       if (!u) continue;
       const r = await fetch(u);
       if (!r.ok) continue;
-      const b = await r.blob();
+      const b0 = await r.blob();
+      const b = typeof watermarkBlob === 'function' ? await watermarkBlob(b0) : b0;   // your name on the photo
       files.push(new File([b], safeFileName((it.tag_no || 'design') + '-' + (files.length + 1)) + '.jpg', { type: b.type || 'image/jpeg' }));
     }
   } catch (e) { /* share text only */ }
@@ -395,7 +397,10 @@ function renderCatPicker() {
 }
 function updatePickBar() {
   const b = $('#cp-done');
-  if (b) b.textContent = S.catPick.sel.size ? 'Add ' + S.catPick.sel.size + ' piece' + (S.catPick.sel.size === 1 ? '' : 's') + ' to the order' : 'Tap pieces to select them';
+  const n = S.catPick.sel.size;
+  if (b) b.textContent = !n ? 'Tap pieces to select them'
+    : S.catPick.mode === 'stock' ? 'Make a link with ' + n + ' piece' + (n === 1 ? '' : 's')   // a ready-stock link (inbox.js)
+      : 'Add ' + n + ' piece' + (n === 1 ? '' : 's') + ' to the order';
 }
 function catToItem(c) {
   return Object.assign(blankItem(), jewelForm(c), {
@@ -422,6 +427,7 @@ function addCatItemsToOrder(list) {
   S.formState.o_color = commonColor(S.ord.items) || null;
 }
 function catPickDone() {
+  if (S.catPick.mode === 'stock' && typeof stockPicked === 'function') { stockPicked(); return; }
   if (!S.catPick.sel.size) { toast('Tap the pieces you want first.', 'err'); return; }
   const chosen = S.catPick.items.filter((i) => S.catPick.sel.has(i.id));
   addCatItemsToOrder(chosen);

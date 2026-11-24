@@ -79,7 +79,9 @@ async function renderAlerts() {
         sw('today', 'Morning summary, 8:30 am', 'Reminders, orders due or late, repairs ready, pieces to collect') +
         (S.dbv11 ? sw('evening', owner ? 'Evening summary, 7 pm' : 'Evening reminder, 7 pm',   // database update 11
           owner ? 'Who logged meetings today' : 'Log today\'s meetings — how many you have logged so far') : '') +
-        (S.dbv12 ? sw('picks', 'Shops picking designs', owner ? 'When a shop sends the designs it likes' : 'When a shop you sent a message to picks designs') : '') + '</div>' +
+        (S.dbv12 ? (S.dbv16 ? sw('picks', 'Shops: picks, designs, ready stock', owner ? 'When a shop picks designs, sends a design it wants made, or chooses from ready stock'   // update 16
+            : 'When your shops pick designs, send a design they want made, or choose from your ready-stock list')
+          : sw('picks', 'Shops picking designs', owner ? 'When a shop sends the designs it likes' : 'When a shop you sent a message to picks designs')) : '') + '</div>' +
         '<div class="action-row"><button class="btn btn-secondary" data-action="al-test" id="al-test">Send a test alert</button>' +
         '<button class="btn btn-ghost" data-action="al-off">Turn off on this phone</button></div>';
     } else {
@@ -220,11 +222,13 @@ document.addEventListener('visibilitychange', () => {
 
 /* a tapped alert opens its order (index.html#o=<order id>) or its message with the shops' picks (#k=<message id>) */
 function alertOpenUrl(u) {
-  const m = /#([okc])=([0-9a-f-]{36})/i.exec(String(u || ''));
+  const m = /#(dr|sl|[okc])=([0-9a-f-]{36})/i.exec(String(u || ''));
   if (!m || !S.me) return false;
   try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { /* ignore */ }
   const k = m[1].toLowerCase();
-  if (k === 'o') openOrder(m[2]);
+  if (k === 'dr') { if (typeof renderDesigns === 'function') { S.dr = null; showSub('Designs from shops', renderDesigns); } }   // a shop sent a design (update 16)
+  else if (k === 'sl') { if (typeof renderStockLink === 'function') showSub('Ready stock', () => renderStockLink(m[2])); }   // a shop chose from ready stock
+  else if (k === 'o') openOrder(m[2]);
   else if (k === 'c') { if (typeof openCatItem === 'function') openCatItem(m[2]); }   // a catalogue sticker's QR
   else if (typeof renderCampaign === 'function') showSub('Messages to shops', () => renderCampaign(m[2]));
   return true;
@@ -232,7 +236,7 @@ function alertOpenUrl(u) {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open') alertOpenUrl(e.data.url); });
 }
-window.addEventListener('hashchange', () => { if (/#[okc]=/.test(location.hash)) alertOpenUrl(location.hash); });
+window.addEventListener('hashchange', () => { if (/#(dr|sl|[okc])=/.test(location.hash)) alertOpenUrl(location.hash); });
 
 onAct('al-open', () => showSub('Phone alerts', renderAlerts));
 onAct('al-setup', (el) => alertSetup(el.dataset.again === '1'));

@@ -209,7 +209,7 @@ async function loadBiz() {
   const [has8, has9, ver] = await Promise.all([v8, v9, v11]);
   if (has8 !== null) S.dbv8 = has8;
   if (has9 !== null) S.dbv9 = has9;
-  if (ver !== null) { S.dbv11 = ver >= 11; S.dbv12 = ver >= 12; S.dbv13 = ver >= 13; S.dbv14 = ver >= 14; S.dbv15 = ver >= 15; }
+  if (ver !== null) { S.dbv11 = ver >= 11; S.dbv12 = ver >= 12; S.dbv13 = ver >= 13; S.dbv14 = ver >= 14; S.dbv15 = ver >= 15; S.dbv16 = ver >= 16; }
   if (r.error || !r.data) { if (!S.biz) S.biz = {}; return null; }
   S.biz = r.data;
   S.bizAt = Date.now();
@@ -262,6 +262,11 @@ const APP_SECTIONS = [
   ['expenses', 'Expense claims', 'The team claims what they spent, with the bill; the owner approves', 15],
   ['samples', 'Sample bag', 'Catalogue pieces a team member carries to shops', 15],
   ['events', 'Exhibitions', 'Visitors and meetings at a trade show, kept together', 15],
+  // database update 16
+  ['designs', 'Designs from shops', 'Shops send photos of a design they want made', 16],
+  ['stock', 'Ready-stock links', 'Chosen catalogue pieces on a page for one shop — it taps what it wants', 16],
+  ['festivals', 'Festival calendar', 'Selling days and days to send wishes, on Today', 16],
+  ['watermark', 'Name on shared photos', 'Your business name on the photos you share or send to shops'],
 ];
 function appSectionsShown() { return APP_SECTIONS.filter((s) => !s[3] || !!S['dbv' + s[3]]); }
 const STEP_CHOICES = ['cad', 'wax', 'in_production', 'setting', 'finished', 'igi'];   // between Approved and Delivered
@@ -278,6 +283,44 @@ function stepsOn() {
   return Array.isArray(s) ? STEP_CHOICES.filter((k) => s.indexOf(k) > -1) : STEP_CHOICES.slice();
 }
 function bizName() { return String((S.biz && S.biz.legal_name) || BRAND).trim(); }
+
+/* ---------------- your name on the photos you share (App settings: "Name on shared photos") ---------------- */
+function wmOn() { return appOn('watermark'); }
+function wmText() { const t = String(appOpts().wm_text || '').trim(); return t || bizName(); }
+/* the photo with the name at the bottom right, as a JPEG — the photo as it was if it cannot be drawn */
+async function watermarkBlob(blob) {
+  if (!blob || !wmOn()) return blob;
+  const text = wmText();
+  if (!text) return blob;
+  let url = null;
+  try {
+    url = URL.createObjectURL(blob);
+    const img = await new Promise((ok, bad) => { const im = new Image(); im.onload = () => ok(im); im.onerror = bad; im.src = url; });
+    const w = img.naturalWidth, h = img.naturalHeight;
+    if (!w || !h) return blob;
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const g = cv.getContext('2d');
+    g.drawImage(img, 0, 0);
+    let fs = Math.max(14, Math.round(Math.min(w, h) * 0.045));
+    const font = (n) => '700 ' + n + 'px -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", "Noto Sans Gujarati", sans-serif';
+    g.font = font(fs);
+    while (fs > 10 && g.measureText(text).width > w * 0.8) { fs -= 2; g.font = font(fs); }
+    const pad = Math.round(fs * 0.7);
+    g.textAlign = 'right';
+    g.textBaseline = 'bottom';
+    g.shadowColor = 'rgba(0, 0, 0, .55)';
+    g.shadowBlur = Math.max(2, Math.round(fs * 0.25));
+    g.shadowOffsetY = Math.max(1, Math.round(fs * 0.06));
+    g.fillStyle = 'rgba(255, 255, 255, .85)';
+    g.fillText(text, w - pad, h - pad);
+    return await new Promise((ok) => cv.toBlob((b) => ok(b || blob), 'image/jpeg', 0.9));
+  } catch (e) {
+    return blob;
+  } finally {
+    if (url) URL.revokeObjectURL(url);
+  }
+}
 
 function renderBizForm() {
   const b = S.biz || {};

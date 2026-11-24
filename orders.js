@@ -347,10 +347,12 @@ function itemPhotoRef(it) {
 async function shotUrls(refs) {
   const own = refs.filter((f) => f[0] === 'orders').map((f) => f[1]);
   const cat = refs.filter((f) => f[0] === 'catalogue').map((f) => f[1]);
-  const [a, b] = await Promise.all([signedUrls('orders', own), signedUrls('catalogue', cat)]);
+  const inb = refs.filter((f) => f[0] === 'inbox').map((f) => f[1]);   // a design a shop sent (update 16)
+  const [a, b, d] = await Promise.all([signedUrls('orders', own), signedUrls('catalogue', cat), inb.length ? signedUrls('inbox', inb) : new Map()]);
   const m = new Map();
   a.forEach((u, p) => m.set('orders|' + p, u));
   b.forEach((u, p) => m.set('catalogue|' + p, u));
+  d.forEach((u, p) => m.set('inbox|' + p, u));
   if (typeof promoUrl === 'function') refs.filter((f) => f[0] === 'promo').forEach((f) => m.set('promo|' + f[1], promoUrl(f[1])));   // design picks
   return m;
 }
@@ -494,7 +496,8 @@ function startNewOrder(client, typeKey, replace) {
   S.pendingPick = null;
   if (pending && pending.length && !typeKey) typeKey = 'ready_stock';
   S.ord = {
-    id: null, orderNo: null, status: null, oldItemIds: [], oldCatIds: [], fromPick: pick ? pick.id : null,
+    id: null, orderNo: null, status: null, oldItemIds: [], oldCatIds: [], fromPick: pick && !pick.kind ? pick.id : null,
+    fromDesign: pick && pick.kind === 'design' ? pick.id : null, fromStock: pick && pick.kind === 'stock' ? pick.id : null,   // update 16 (inbox.js)
     client: { id: client.id, trade_name: client.trade_name, city: client.city },
     items: pick && pick.items.length ? pick.items : [blankItem()],
     o: { order_date: todayStr(), due_date: '', karigar_id: '', vendor_id: '', notes: pick && pick.note ? pick.note : '' },
@@ -1034,11 +1037,14 @@ async function saveOrder(asQuote, credit) {
   await db.from('order_updates').insert({
     order_id: id, status: isNew ? status : null,
     note: isNew ? (asQuote ? 'Quotation created' : 'Order created') + (S.ord.repeatOf ? ' · ' + ordNo(S.ord.repeatOf) + ' repeated' : '') +
-      (S.ord.fromPick ? ' · From the designs the shop picked' : '') + crNote
+      (S.ord.fromPick ? ' · From the designs the shop picked' : '') + (S.ord.fromDesign ? ' · From a design the shop sent' : '') +
+      (S.ord.fromStock ? ' · From the shop\'s ready-stock choice' : '') + crNote
       : 'Details edited' + (dueMoved ? ' · ' + (typeof dueChangeText === 'function' ? dueChangeText(S.ord.origDue, row.due_date) : 'Delivery date changed') : ''),
     created_by: S.me.id,
   });
   if (isNew && S.ord.fromPick && typeof pickOrdered === 'function') await pickOrdered(S.ord.fromPick, id, S.ord.client.id);
+  if (isNew && S.ord.fromDesign && typeof designOrdered === 'function') await designOrdered(S.ord.fromDesign, id, S.ord.client.id);
+  if (isNew && S.ord.fromStock && typeof stockOrdered === 'function') await stockOrdered(S.ord.fromStock, id);
 
   if (!itErr) {
     toast(photoFail ? 'Saved — but a design photo could not be uploaded.' : (isNew ? (asQuote ? 'Quotation saved ✓' : 'Order saved ✓') : 'Saved ✓'), photoFail ? 'err' : 'ok');
