@@ -18,7 +18,9 @@ async function renderCatalogue() {
   const C = S.cat;
   const chip = (g, v, label) => '<button class="' + (C[g] === v ? 'on' : '') + '" data-action="cat-filter" data-g="' + g + '" data-v="' + esc(v) + '">' + esc(label) + '</button>';
   $('#content').innerHTML =
-    '<button class="btn btn-primary" data-action="cat-new" style="margin-bottom:12px">＋ Add design</button>' +
+    '<div class="action-row cat-top-row" style="margin-bottom:12px"><button class="btn btn-primary" data-action="cat-new">＋ Add design</button>' +
+    (typeof catStickers === 'function' ? '<button class="btn btn-secondary" data-action="cat-stickers">QR stickers</button>' : '') +
+    (typeof qrScanOn === 'function' && qrScanOn() ? '<button class="btn btn-secondary" data-action="qr-scan">Scan QR</button>' : '') + '</div>' +
     '<div class="search-box"><input type="text" id="cat-search" placeholder="Search tag no., design, stones…" autocomplete="off" value="' + esc(C.q) + '"></div>' +
     '<div class="filter-chips">' + chip('status', 'available', 'Available') + chip('status', 'reserved', 'Reserved') + chip('status', 'sold', 'Sold') + chip('status', 'all', 'All') + '</div>' +
     '<div class="filter-chips" id="cat-cats"></div>' +
@@ -80,7 +82,7 @@ async function loadCatGrid(sel, picking) {
       (picking ? '<span class="cat-check">' + (on ? '✓' : '') + '</span>' : '') + '</div>' +
       '<div class="cat-body"><div class="cat-tag">' + esc(it.tag_no || it.title || 'Design') + '</div>' +
       '<div class="cat-sub">' + esc([it.category, num(it.net_wt) ? grams(it.net_wt) : '', it.metal_color || '',
-        it.diamond_type ? it.diamond_type + (num(it.diamond_ct) ? ' ' + num(it.diamond_ct) + ' ct' : '') : ''].filter(Boolean).join(' · ')) + '</div>' +
+        it.diamond_type ? diamondLabel(it.diamond_type) + (num(it.diamond_ct) ? ' ' + num(it.diamond_ct) + ' ct' : '') : ''].filter(Boolean).join(' · ')) + '</div>' +
       '</div></div>';
   }).join('') + '</div>' + (rows.length >= 400 ? '<div class="notice">Showing the newest 400 — search to find older pieces.</div>' : '');
   fillCatImages(box);
@@ -137,6 +139,7 @@ function renderCatItem(it) {
     '<div class="action-row">' +
     '<button class="btn btn-secondary" data-action="cat-share" data-id="' + it.id + '">Share</button>' +
     '<button class="btn btn-secondary" data-action="cat-edit" data-id="' + it.id + '">Edit</button>' +
+    (typeof catStickers === 'function' ? '<button class="btn btn-secondary" data-action="cat-sticker" data-id="' + it.id + '">QR sticker</button>' : '') +
     '</div>' +
 
     '<div class="card">' + rows.join('') + '</div>' +

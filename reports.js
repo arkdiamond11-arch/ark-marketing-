@@ -5,7 +5,7 @@
    a period) · Order items (weights, purity, colour, diamonds,
    certificates) · Orders · Diamonds & stones · Month summary ·
    Stock (catalogue) · Karigar metal · Quotations not approved (why) ·
-   Shop feedback (stars).
+   Shop feedback (stars) · Karigar report card.
    Each one can be filtered, grouped and downloaded (Excel / PDF).
    ============================================================ */
 'use strict';
@@ -13,7 +13,7 @@
 const REP_TYPES = [
   ['pay', 'Payment status'], ['payhist', 'Payment dates'], ['items', 'Order items'], ['orders', 'Orders'], ['steps', 'Step times'],
   ['diamonds', 'Diamonds & stones'], ['summary', 'Month summary'], ['stock', 'Stock (catalogue)'], ['karigars', 'Karigar metal'],
-  ['lost', 'Quotations not approved'], ['feedback', 'Shop feedback'],
+  ['lost', 'Quotations not approved'], ['feedback', 'Shop feedback'], ['kcard', 'Karigar report card'],
 ];
 const LIVE_STATUSES = OPEN_STATUSES.concat(['delivered']);   // approved orders (in work, finished or delivered)
 const REP_STATUS = [['booked', 'Booked (open + delivered)'], ['open', 'Open'], ['finished', 'Finished'], ['delivered', 'Delivered'], ['quote', 'Quotations'],
@@ -31,6 +31,7 @@ const REP_GROUPS = {
   steps: [['stage', 'Step'], ['vendor', 'Vendor'], ['party', 'Party'], ['month', 'Month'], ['', 'No grouping']],
   lost: [['reason', 'Reason'], ['', 'No grouping'], ['party', 'Party'], ['exec', 'Executive'], ['city', 'City'], ['month', 'Month']],
   feedback: [['', 'No grouping'], ['stars', 'Stars'], ['party', 'Party'], ['exec', 'Executive'], ['city', 'City'], ['month', 'Month']],
+  kcard: [['', 'No grouping']],
 };
 /* reports that are "as on today" (no period) */
 const REP_NO_PERIOD = { pay: 1, stock: 1, karigars: 1 };
@@ -39,7 +40,7 @@ const REP_NO_PERIOD = { pay: 1, stock: 1, karigars: 1 };
 function repTypeOn(t) {
   if (t === 'pay' || t === 'payhist') return appOn('payments');
   if (t === 'stock') return appOn('catalogue');
-  if (t === 'karigars') return appOn('karigars');
+  if (t === 'karigars' || t === 'kcard') return appOn('karigars');
   if (t === 'lost' || t === 'feedback') return !!S.dbv13;   // database update 13
   return true;
 }
@@ -99,6 +100,13 @@ async function repLoad() {
   } else if (T === 'feedback') {
     data = { orders: await repFetchAll(() => inRangeTs(db.from('orders').select('id, order_no, order_date, delivered_on, client_id, created_by, feedback_stars, feedback_note, feedback_at, clients(trade_name, city)')
       .not('feedback_stars', 'is', null), 'feedback_at', r).order('feedback_at', { ascending: true }).order('id', { ascending: true })) };
+  } else if (T === 'kcard') {
+    const [ks, os] = await Promise.all([
+      repFetchAll(() => db.from('karigars').select('*').order('name', { ascending: true }).order('id', { ascending: true })),
+      repFetchAll(() => db.from('orders').select('id, karigar_id, status, due_date, karigar_issued_g, karigar_issued_on, karigar_received_g, karigar_received_on' + (S.dbv14 ? ', karigar_due' : ''))
+        .not('karigar_id', 'is', null).order('id', { ascending: true })),
+    ]);
+    data = { ks, os };
   } else if (T === 'stock') {
     data = { items: await repFetchAll(() => db.from('catalogue_items').select('*').order('created_at', { ascending: true }).order('id', { ascending: true })) };
   } else {
@@ -387,6 +395,40 @@ function feedbackBuild(D, f) {
   };
 }
 
+/* ---------------- karigar report card: jobs back in the period, days, on time, metal loss ---------------- */
+function kcardBuild(D, f) {
+  const r = D.range || [null, null];
+  const by = new Map();
+  D.os.forEach((o) => { if (!by.has(o.karigar_id)) by.set(o.karigar_id, []); by.get(o.karigar_id).push(o); });
+  let rows = D.ks.map((k) => {
+    const list = by.get(k.id) || [];
+    const done = list.filter((o) => o.karigar_received_on && (!r[0] || o.karigar_received_on >= r[0]) && (!r[1] || o.karigar_received_on <= r[1]) && o.karigar_issued_g != null && o.karigar_received_g != null);
+    return { k, c: karigarCardOf(list, r[0], r[1]), given: done.reduce((a, o) => a + num(o.karigar_issued_g), 0), back: done.reduce((a, o) => a + num(o.karigar_received_g), 0) };
+  });
+  if (f.kshow !== 'all') rows = rows.filter((x) => x.k.active || x.c.n || x.c.now);
+  rows.sort((a, b) => b.c.n - a.c.n || b.c.now - a.c.now || a.k.name.localeCompare(b.k.name));
+  const agg = (list) => {
+    const n = list.reduce((a, x) => a + x.c.n, 0), given = list.reduce((a, x) => a + x.given, 0), back = list.reduce((a, x) => a + x.back, 0);
+    const dsum = list.reduce((a, x) => a + (x.c.avg != null ? x.c.avg * x.c.n : 0), 0), dn = list.reduce((a, x) => a + (x.c.avg != null ? x.c.n : 0), 0);
+    return { n, avg: dn ? dsum / dn : null, loss: given > 0 ? (given - back) / given * 100 : null, now: list.reduce((a, x) => a + x.c.now, 0), late: list.reduce((a, x) => a + x.c.late, 0) };
+  };
+  const tot = agg(rows);
+  const pct = (v) => (v == null ? '—' : fmt1(v) + '%');
+  const days = (v) => (v == null ? '—' : fmt1(v));
+  return {
+    rows, tot, agg, tiles: [['Jobs back', String(tot.n)], ['Days per job', days(tot.avg)], ['Metal loss', pct(tot.loss)], ['Jobs with karigars now', String(tot.now)]],
+    groupKey: () => '', gcols: [],
+    lines: (x) => [x.k.name + (x.k.active ? '' : ' (off)'), [x.c.n === 1 ? '1 job back' : x.c.n + ' jobs back', x.c.avg != null ? days(x.c.avg) + ' days per job' : '', x.c.onTime != null ? x.c.onTime + '% on time' : '',
+      x.c.now ? x.c.now + ' with him now' + (x.c.late ? ' (' + x.c.late + ' late)' : '') : ''].filter(Boolean).join(' · ')],
+    amount: (x) => (x.c.loss != null ? 'Loss ' + pct(x.c.loss) : ''), open: () => null, karigar: (x) => x.k.id,
+    csvHead: ['Karigar', 'Jobs back', 'Days per job', 'On time %', 'Metal given (g)', 'Metal back (g)', 'Loss (g)', 'Loss %', 'Jobs with him now', 'Late now', 'Oldest metal out (days)'],
+    csv: (x) => [x.k.name, x.c.n, x.c.avg != null ? Math.round(x.c.avg * 10) / 10 : '', x.c.onTime != null ? x.c.onTime : '', round3(x.given), round3(x.back), round3(x.given - x.back),
+      x.c.loss != null ? Math.round(x.c.loss * 100) / 100 : '', x.c.now, x.c.late, x.c.oldest != null ? x.c.oldest : ''],
+    pdfCols: [['Karigar', 0], ['Jobs back', 18, 'right'], ['Days / job', 18, 'right'], ['On time', 18, 'right'], ['Given (g)', 22, 'right'], ['Back (g)', 22, 'right'], ['Loss', 16, 'right'], ['Now', 14, 'right']],
+    pdfRow: (x) => [x.k.name, String(x.c.n), days(x.c.avg), x.c.onTime != null ? x.c.onTime + '%' : '-', pG(x.given), pG(x.back), pct(x.c.loss).replace('—', '-'), String(x.c.now)],
+  };
+}
+
 /* rows + columns + totals for the chosen report */
 function repBuild(D) {
   const R = repState();
@@ -398,6 +440,7 @@ function repBuild(D) {
   if (T === 'payhist') return payHistBuild(D, f);
   if (T === 'lost') return lostBuild(D, f);
   if (T === 'feedback') return feedbackBuild(D, f);
+  if (T === 'kcard') return kcardBuild(D, f);
   if (T === 'items' || T === 'diamonds') {
     let rows = repItems(D.orders.filter((o) => repOrderPass(o, f))).filter((x) => repItemPass(x, f));
     if (T === 'diamonds') rows = rows.filter((x) => x.it.diamond_type);
@@ -576,6 +619,7 @@ function repFilterDefs() {
     return d;
   }
   if (T === 'karigars') { d.push(['kshow', 'Show', [['active', 'Working karigars'], ['bal', 'Only with metal'], ['all', 'Everyone']], true]); return d; }
+  if (T === 'kcard') { d.push(['kshow', 'Show', [['active', 'Working karigars'], ['all', 'Everyone']], true]); return d; }
   if (T === 'stock') {
     d.push(['cstatus', 'Status', [['available', 'In stock'], ['reserved', 'Reserved'], ['sold', 'Sold'], ['all', 'All']], true], ['metal', 'Metal', metals]);
     itemFilters();
@@ -650,6 +694,7 @@ function repPeriodText() {
   if (R.type === 'steps') return 'Steps finished: ' + rangeLabel(S.repData.range);
   if (R.type === 'lost') return 'Quotation date: ' + rangeLabel(S.repData.range);
   if (R.type === 'feedback') return 'Rated: ' + rangeLabel(S.repData.range);
+  if (R.type === 'kcard') return 'Jobs back: ' + rangeLabel(S.repData.range);
   return REP_NO_PERIOD[R.type] ? 'As on ' + fmtDLong(todayStr()) : rangeLabel(S.repData.range);
 }
 

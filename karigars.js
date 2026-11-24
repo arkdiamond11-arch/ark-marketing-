@@ -101,6 +101,7 @@ async function openKarigar(id, replace) {
 
 function renderKarigarPage(K) {
   S.kpage = K;
+  setTimeout(() => { if (typeof loadKarigarCard === 'function' && S.kpage === K) loadKarigarCard(K.k.id); }, 0);
   const k = K.k, b = K.bal;
   const btn = (kind, label) => '<button class="btn btn-small btn-secondary" data-action="k-txn" data-kind="' + kind + '">' + label + '</button>';
   $('#content').innerHTML =
@@ -118,6 +119,8 @@ function renderKarigarPage(K) {
     '<button class="btn btn-secondary" data-action="k-wa">WhatsApp</button>' +
     (k.phone ? '<a class="btn btn-secondary" href="' + esc(telHref(k.phone)) + '">Call</a>' : '') +
     '</div>' +
+    (typeof karigarLinkOn === 'function' && karigarLinkOn() && k.active ? '<div class="o-more-acts"><button class="btn btn-small btn-secondary" data-action="k-link" data-id="' + k.id + '">🔗 Karigar\'s link (his jobs)</button></div>' : '') +
+    '<div id="k-card"></div>' +
 
     '<div class="card">' +
     '<div class="o-lrow"><span>Fine gold issued</span><b>' + grams(b.issued) + '</b></div>' +

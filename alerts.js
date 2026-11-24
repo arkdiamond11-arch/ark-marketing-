@@ -220,17 +220,19 @@ document.addEventListener('visibilitychange', () => {
 
 /* a tapped alert opens its order (index.html#o=<order id>) or its message with the shops' picks (#k=<message id>) */
 function alertOpenUrl(u) {
-  const m = /#([ok])=([0-9a-f-]{36})/i.exec(String(u || ''));
+  const m = /#([okc])=([0-9a-f-]{36})/i.exec(String(u || ''));
   if (!m || !S.me) return false;
   try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { /* ignore */ }
-  if (m[1].toLowerCase() === 'o') openOrder(m[2]);
+  const k = m[1].toLowerCase();
+  if (k === 'o') openOrder(m[2]);
+  else if (k === 'c') { if (typeof openCatItem === 'function') openCatItem(m[2]); }   // a catalogue sticker's QR
   else if (typeof renderCampaign === 'function') showSub('Messages to shops', () => renderCampaign(m[2]));
   return true;
 }
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open') alertOpenUrl(e.data.url); });
 }
-window.addEventListener('hashchange', () => { if (/#[ok]=/.test(location.hash)) alertOpenUrl(location.hash); });
+window.addEventListener('hashchange', () => { if (/#[okc]=/.test(location.hash)) alertOpenUrl(location.hash); });
 
 onAct('al-open', () => showSub('Phone alerts', renderAlerts));
 onAct('al-setup', (el) => alertSetup(el.dataset.again === '1'));

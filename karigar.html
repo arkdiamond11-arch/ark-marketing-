@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#7b1e3c">
+  <meta name="robots" content="noindex">
+  <title>Your jobs</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <style>
+    :root { --maroon: #7b1e3c; --gold: #c9973c; --bg: #f6f4f1; --card: #fff; --ink: #27222b; --muted: #857e8c; --line: #eae6e2; --green: #1a7f4e; --red: #b3372f; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", "Noto Sans Gujarati", sans-serif; font-size: 15px; line-height: 1.45; }
+    header { background: var(--maroon); color: #fff; padding: calc(14px + env(safe-area-inset-top)) 16px 14px; }
+    header .biz { font-size: 13px; letter-spacing: .6px; text-transform: uppercase; opacity: .85; }
+    header h1 { margin: 2px 0 0; font-size: 21px; }
+    header .shop { font-size: 14px; opacity: .9; }
+    main { max-width: 560px; margin: 0 auto; padding: 14px 16px 30px; }
+    .langs { display: flex; gap: 6px; justify-content: flex-end; margin: 0 0 10px; }
+    .langs button { border: 1.5px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink); }
+    .langs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 3px rgba(40,20,30,.08), 0 4px 14px rgba(40,20,30,.05); padding: 13px 14px; margin: 0 0 12px; }
+    h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); margin: 18px 2px 8px; }
+    .bal { display: flex; gap: 10px; flex-wrap: wrap; }
+    .bal div { flex: 1; min-width: 140px; background: #fbf3e4; border-radius: 12px; padding: 9px 11px; }
+    .bal b { display: block; font-size: 18px; }
+    .bal span { font-size: 12.5px; color: var(--muted); }
+    .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+    .top b { font-size: 16px; }
+    .step { color: var(--maroon); font-weight: 800; }
+    .due { font-weight: 700; margin: 2px 0 6px; }
+    .due.late { color: var(--red); }
+    .pics { display: flex; gap: 8px; overflow-x: auto; margin: 8px 0; }
+    .pics img { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; background: #f3efe9; flex: none; cursor: zoom-in; }
+    .pics a { flex: none; width: 96px; height: 96px; border-radius: 10px; background: #f7e9ee; color: var(--maroon); font-weight: 800; font-size: 13px; display: flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; padding: 6px; }
+    .pics small { display: block; }
+    .it { padding: 7px 0; border-top: 1px solid var(--line); font-size: 14px; }
+    .it:first-of-type { border-top: 0; }
+    .it b { display: block; }
+    .it span { color: var(--muted); font-size: 13.5px; }
+    .meta { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+    .btn { display: block; width: 100%; border: 0; border-radius: 12px; padding: 12px; margin: 10px 0 0; font: inherit; font-weight: 800; font-size: 15.5px; cursor: pointer; }
+    .btn.ok { background: var(--green); color: #fff; }
+    .btn.plain { background: transparent; color: var(--maroon); padding: 6px; font-size: 14px; }
+    .btn:disabled { opacity: .55; }
+    .said { margin-top: 10px; color: var(--green); font-weight: 750; }
+    textarea { width: 100%; min-height: 64px; border: 1.5px solid var(--line); border-radius: 12px; padding: 9px 11px; font: inherit; resize: vertical; margin-top: 10px; color: var(--ink); background: #fff; }
+    .err { color: var(--red); font-weight: 650; margin: 8px 0 0; }
+    .contact { text-align: center; color: var(--muted); font-size: 13.5px; margin-top: 18px; }
+    .contact a { color: var(--maroon); font-weight: 700; text-decoration: none; }
+    .msg { text-align: center; padding: 40px 10px; color: var(--muted); }
+    .msg .big { font-size: 40px; }
+    .zoom { position: fixed; inset: 0; background: rgba(10, 8, 12, .94); display: flex; align-items: center; justify-content: center; z-index: 9; }
+    .zoom img { max-width: 100%; max-height: 100%; }
+  </style>
+</head>
+<body>
+  <header><div class="biz" id="biz">&nbsp;</div><h1 id="title">Your jobs</h1><div class="shop" id="shop"></div></header>
+  <main id="main"><div class="msg">Loading…</div></main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+  /* The page a karigar opens from his link (no login): the jobs he has from
+     us — designs, CAD, sizes, weights, the date to give back — and the metal
+     with him. He taps "Ready" when a job is done. No shop names here. */
+  (function () {
+    'use strict';
+    var T = {
+      hi: {
+        'Your jobs': 'आपके काम', 'Jobs with you': 'आपके पास काम', 'Give back by': 'वापस देने की तारीख', 'Late — please give it back soon': 'देरी — कृपया जल्दी वापस दें',
+        'Metal given': 'दिया गया मेटल', 'Gold with you (fine)': 'आपके पास सोना (फाइन)', 'Silver with you (fine)': 'आपके पास चांदी (फाइन)',
+        'Ready — tell us': 'तैयार है — हमें बताएं', 'Anything to tell us? (optional)': 'कुछ कहना है? (ज़रूरी नहीं)', 'Send': 'भेजें', 'Cancel': 'रद्द करें',
+        'You said it is ready': 'आपने बताया कि तैयार है', 'Tell again': 'फिर से बताएं', 'Thank you — we will collect it.': 'धन्यवाद — हम ले लेंगे।',
+        'No jobs with you right now.': 'अभी आपके पास कोई काम नहीं है।', 'Size': 'साइज़', 'Open the CAD (PDF)': 'CAD खोलें (PDF)', 'Design': 'डिज़ाइन',
+        'diamonds': 'हीरे', 'stones': 'स्टोन', 'pcs': 'पीस',
+        'Order confirmed': 'ऑर्डर पक्का', 'CAD design': 'CAD डिज़ाइन', 'Wax model': 'वैक्स मॉडल', 'Being made': 'बन रहा है', 'Diamond setting': 'डायमंड सेटिंग',
+        'Finished': 'तैयार', 'IGI certification': 'IGI सर्टिफिकेशन',
+        'Questions? Call or WhatsApp': 'कोई सवाल? कॉल या WhatsApp करें', 'This link is not active any more.': 'यह लिंक अब चालू नहीं है।',
+        'Please ask us for a new link.': 'कृपया हमसे नया लिंक मांगें।', 'Could not load — check the internet and open the link again.': 'लोड नहीं हुआ — इंटरनेट देखें और लिंक फिर से खोलें।',
+        'Could not send — check the internet and try again.': 'भेजा नहीं गया — इंटरनेट देखें और फिर से कोशिश करें।', 'Sending…': 'भेज रहे हैं…', 'Loading…': 'लोड हो रहा है…',
+        'This job is not with you any more.': 'यह काम अब आपके पास नहीं है।', 'Gold': 'सोना', 'Silver': 'चांदी'
+      },
+      gu: {
+        'Your jobs': 'તમારા કામ', 'Jobs with you': 'તમારી પાસે કામ', 'Give back by': 'પાછું આપવાની તારીખ', 'Late — please give it back soon': 'મોડું — કૃપા કરી જલ્દી પાછું આપો',
+        'Metal given': 'આપેલી ધાતુ', 'Gold with you (fine)': 'તમારી પાસે સોનું (ફાઇન)', 'Silver with you (fine)': 'તમારી પાસે ચાંદી (ફાઇન)',
+        'Ready — tell us': 'તૈયાર છે — અમને જણાવો', 'Anything to tell us? (optional)': 'કંઈ કહેવું છે? (જરૂરી નથી)', 'Send': 'મોકલો', 'Cancel': 'રદ કરો',
+        'You said it is ready': 'તમે જણાવ્યું કે તૈયાર છે', 'Tell again': 'ફરી જણાવો', 'Thank you — we will collect it.': 'આભાર — અમે લઈ જઈશું.',
+        'No jobs with you right now.': 'હમણાં તમારી પાસે કોઈ કામ નથી.', 'Size': 'સાઇઝ', 'Open the CAD (PDF)': 'CAD ખોલો (PDF)', 'Design': 'ડિઝાઇન',
+        'diamonds': 'હીરા', 'stones': 'સ્ટોન', 'pcs': 'પીસ',
+        'Order confirmed': 'ઓર્ડર પાકો', 'CAD design': 'CAD ડિઝાઇન', 'Wax model': 'વેક્સ મોડલ', 'Being made': 'બની રહ્યું છે', 'Diamond setting': 'ડાયમંડ સેટિંગ',
+        'Finished': 'તૈયાર', 'IGI certification': 'IGI સર્ટિફિકેશન',
+        'Questions? Call or WhatsApp': 'કોઈ પ્રશ્ન? કૉલ અથવા WhatsApp કરો', 'This link is not active any more.': 'આ લિંક હવે ચાલુ નથી.',
+        'Please ask us for a new link.': 'કૃપા કરીને અમારી પાસે નવી લિંક માંગો.', 'Could not load — check the internet and open the link again.': 'લોડ ન થયું — ઇન્ટરનેટ તપાસો અને લિંક ફરી ખોલો.',
+        'Could not send — check the internet and try again.': 'મોકલાયું નહીં — ઇન્ટરનેટ તપાસો અને ફરી પ્રયાસ કરો.', 'Sending…': 'મોકલી રહ્યા છીએ…', 'Loading…': 'લોડ થાય છે…',
+        'This job is not with you any more.': 'આ કામ હવે તમારી પાસે નથી.', 'Gold': 'સોનું', 'Silver': 'ચાંદી'
+      }
+    };
+    var lang = 'en';
+    var stored = null;
+    try { stored = localStorage.getItem('statusLang') || localStorage.getItem('lang'); } catch (e) { /* private mode */ }
+    if (stored === 'hi' || stored === 'gu' || stored === 'en') lang = stored;
+    else { var nl = String(navigator.language || '').slice(0, 2); if (nl === 'hi' || nl === 'gu') lang = nl; }
+    function t(s) { return (T[lang] && T[lang][s]) || s; }
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    var MONTHS = { en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+      hi: ['जन', 'फ़र', 'मार्च', 'अप्रै', 'मई', 'जून', 'जुला', 'अग', 'सित', 'अक्टू', 'नव', 'दिस'],
+      gu: ['જાન્યુ', 'ફેબ્રુ', 'માર્ચ', 'એપ્રિ', 'મે', 'જૂન', 'જુલા', 'ઑગ', 'સપ્ટે', 'ઑક્ટો', 'નવે', 'ડિસે'] };
+    function day(iso) {
+      if (!iso) return '';
+      var d = new Date(String(iso).length === 10 ? iso + 'T00:00:00' : iso);
+      return d.getDate() + ' ' + MONTHS[lang][d.getMonth()];
+    }
+    function g3(x) { return (Math.round(Number(x || 0) * 1000) / 1000).toLocaleString('en-IN', { maximumFractionDigits: 3 }); }
+    function teamPhone() {
+      try { for (var i = 0; i < localStorage.length; i++) { if (/^sb-.+-auth-token$/.test(localStorage.key(i) || '')) return true; } } catch (e) { /* private mode */ }
+      return false;
+    }
+    var STEP = { 'new': 'Order confirmed', cad: 'CAD design', wax: 'Wax model', in_production: 'Being made', setting: 'Diamond setting',
+      finished: 'Finished', ready: 'Finished', igi: 'IGI certification' };
+    var PUR = { 99.9: '24K', 91.6: '22K', 91.7: '22K', 75: '18K', 58.5: '14K', 58.3: '14K', 41.7: '10K', 37.5: '9K', 92.5: '925' };
+
+    var c = window.APP_CONFIG || {};
+    var token = (location.hash || '').replace(/^#/, '').trim();
+    var main = document.getElementById('main');
+    var data = null, urls = {}, open = null, note = '', err = '', busy = false, thanks = 0;
+    if (c.BUSINESS_NAME) document.getElementById('biz').textContent = c.BUSINESS_NAME;
+    function message(big, lines) {
+      main.innerHTML = '<div class="msg"><div class="big">' + big + '</div>' + lines.map(function (x) { return '<p>' + esc(t(x)) + '</p>'; }).join('') + '</div>';
+    }
+    if (!window.supabase || !c.SUPABASE_URL || !/^[0-9a-f-]{36}$/i.test(token)) { message('🔗', ['This link is not active any more.', 'Please ask us for a new link.']); return; }
+    var db = window.supabase.createClient(c.SUPABASE_URL, c.SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+
+    function langBar() {
+      return '<div class="langs">' + [['en', 'English'], ['hi', 'हिन्दी'], ['gu', 'ગુજરાતી']].map(function (x) {
+        return '<button data-l="' + x[0] + '" class="' + (lang === x[0] ? 'on' : '') + '">' + x[1] + '</button>';
+      }).join('') + '</div>';
+    }
+    function keepNote() { var el = document.getElementById('k-note'); if (el) note = el.value; }
+    function itemLine(it, i) {
+      var head = (i + 1) + '. ' + [it.category || it.description || '', it.design_code || ''].filter(Boolean).join(' · ') + (it.qty > 1 ? ' × ' + it.qty : '');
+      var bits = [it.size ? t('Size') + ' ' + it.size : '', it.net_wt != null ? g3(it.net_wt) + ' g' : '', it.color || '',
+        it.diamond ? t('diamonds') + (it.ct ? ' ' + it.ct + ' ct' : '') + (it.pcs ? ' (' + it.pcs + ' ' + t('pcs') + ')' : '') : '',
+        it.stones ? t('stones') + ': ' + it.stones : ''].filter(Boolean);
+      return '<div class="it"><b>' + esc(head) + '</b>' + (it.category && it.description ? '<span>' + esc(it.description) + '</span><br>' : '') +
+        (bits.length ? '<span>' + esc(bits.join(' · ')) + '</span>' : '') + '</div>';
+    }
+    function jobCard(j) {
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      var late = j.due && new Date(j.due + 'T00:00:00') < today;
+      var pics = [];
+      (j.cad || []).forEach(function (p) { if (p) pics.push({ k: 'o:' + p, pdf: /\.pdf$/i.test(p), cap: 'CAD' }); });
+      (j.items || []).forEach(function (it) { var k = it.photo ? 'o:' + it.photo : it.cat_photo ? 'c:' + it.cat_photo : ''; if (k) pics.push({ k: k, cap: t('Design') }); });
+      var h = '<div class="card"><div class="top"><b>ORD-' + String(j.order_no).padStart(4, '0') + '</b><span class="step">' + esc(t(STEP[j.status] || j.status)) + '</span></div>' +
+        (j.due ? '<div class="due' + (late ? ' late' : '') + '">' + esc(late ? t('Late — please give it back soon') + ' (' + day(j.due) + ')' : t('Give back by') + ' ' + day(j.due)) + '</div>' : '');
+      if (pics.length) h += '<div class="pics">' + pics.map(function (p) {
+        if (p.pdf) return '<a href="' + esc(urls[p.k] || '#') + '" target="_blank" rel="noopener">📄 ' + esc(t('Open the CAD (PDF)')) + '</a>';
+        return '<img data-k="' + esc(p.k) + '" alt="' + esc(p.cap) + '"' + (urls[p.k] ? ' src="' + esc(urls[p.k]) + '"' : '') + '>';
+      }).join('') + '</div>';
+      h += (j.items || []).map(itemLine).join('');
+      var pur = j.purity != null ? (PUR[Number(j.purity)] || Number(j.purity) + '%') : '';
+      if (j.issued_g != null) h += '<div class="meta">' + esc(t('Metal given') + ': ' + g3(j.issued_g) + ' g ' + [t(j.metal === 'Silver' ? 'Silver' : 'Gold'), pur].filter(Boolean).join(' ') + (j.issued_on ? ' · ' + day(j.issued_on) : '')) + '</div>';
+      var recent = j.ready_at && (Date.now() - new Date(j.ready_at).getTime()) < 10 * 60000;
+      if (j.ready_at) h += '<div class="said">✓ ' + esc(t('You said it is ready') + ' · ' + day(j.ready_at)) + '</div>';
+      if (open === j.order_no) {
+        h += '<textarea id="k-note" maxlength="300" placeholder="' + esc(t('Anything to tell us? (optional)')) + '">' + esc(note) + '</textarea>' +
+          (err ? '<p class="err">' + esc(t(err)) + '</p>' : '') +
+          '<button class="btn ok" data-a="send" data-n="' + j.order_no + '"' + (busy ? ' disabled' : '') + '>' + esc(t(busy ? 'Sending…' : 'Send')) + '</button>' +
+          '<button class="btn plain" data-a="cancel">' + esc(t('Cancel')) + '</button>';
+      } else if (!recent) {
+        h += '<button class="btn ' + (j.ready_at ? 'plain' : 'ok') + '" data-a="ready" data-n="' + j.order_no + '">' + (j.ready_at ? esc(t('Tell again')) : '✓ ' + esc(t('Ready — tell us'))) + '</button>';
+      }
+      if (thanks === j.order_no) h += '<p class="said">' + esc(t('Thank you — we will collect it.')) + '</p>';
+      return h + '</div>';
+    }
+    function draw() {
+      var d = data, b = d.business || {};
+      document.getElementById('biz').textContent = b.name || c.BUSINESS_NAME || '';
+      document.getElementById('title').textContent = d.karigar || t('Your jobs');
+      document.getElementById('shop').textContent = t('Your jobs') + (d.city ? ' · ' + d.city : '');
+      document.title = t('Your jobs') + ' — ' + (b.name || '');
+      var bal = d.balance || {};
+      var h = langBar();
+      if (Math.abs(Number(bal.gold || 0)) > 0.0005 || Math.abs(Number(bal.silver || 0)) > 0.0005) {
+        h += '<div class="card bal">' + (Math.abs(Number(bal.gold || 0)) > 0.0005 ? '<div><b>' + esc(g3(bal.gold)) + ' g</b><span>' + esc(t('Gold with you (fine)')) + '</span></div>' : '') +
+          (Math.abs(Number(bal.silver || 0)) > 0.0005 ? '<div><b>' + esc(g3(bal.silver)) + ' g</b><span>' + esc(t('Silver with you (fine)')) + '</span></div>' : '') + '</div>';
+      }
+      var jobs = d.jobs || [];
+      h += '<h2>' + esc(t('Jobs with you')) + ' (' + jobs.length + ')</h2>' +
+        (jobs.length ? jobs.map(jobCard).join('') : '<div class="msg"><div class="big">🌤️</div><p>' + esc(t('No jobs with you right now.')) + '</p></div>');
+      if (b.phone) {
+        var ph = String(b.phone).replace(/[^\d+]/g, '');
+        var wa = ph.replace(/\D/g, ''); if (wa.length === 10) wa = '91' + wa;
+        h += '<p class="contact">' + esc(t('Questions? Call or WhatsApp')) + '<br><a href="tel:' + esc(ph) + '">' + esc(b.phone) + '</a> · <a href="https://wa.me/' + esc(wa) + '" target="_blank" rel="noopener">WhatsApp</a></p>';
+      }
+      main.innerHTML = h;
+      main.querySelectorAll('.langs button').forEach(function (bt) {
+        bt.onclick = function () { keepNote(); lang = bt.dataset.l; try { localStorage.setItem('statusLang', lang); } catch (e) { /* ignore */ } draw(); };
+      });
+      main.querySelectorAll('.pics img').forEach(function (im) {
+        im.onclick = function () {
+          if (!im.src) return;
+          var z = document.createElement('div'); z.className = 'zoom';
+          z.innerHTML = '<img alt="">'; z.firstChild.src = im.src;
+          z.onclick = function () { z.remove(); };
+          document.body.appendChild(z);
+        };
+      });
+      main.querySelectorAll('[data-a]').forEach(function (bt) {
+        bt.onclick = function () {
+          var a = bt.dataset.a;
+          if (a === 'ready') { open = +bt.dataset.n; note = ''; err = ''; thanks = 0; draw(); var tx = document.getElementById('k-note'); if (tx) tx.focus(); }
+          else if (a === 'cancel') { open = null; err = ''; draw(); }
+          else if (a === 'send') { keepNote(); send(+bt.dataset.n); }
+        };
+      });
+    }
+    function send(no) {
+      if (busy) return;
+      busy = true; err = ''; draw();
+      db.rpc('karigar_ready', { p_token: token, p_order_no: no, p_note: note.trim() || null }).then(function (r) {
+        busy = false;
+        if (r.error) {
+          var m = String(r.error.message || '');
+          if (/not active/i.test(m)) { message('🔗', ['This link is not active any more.', 'Please ask us for a new link.']); return; }
+          err = /not with you/i.test(m) ? 'This job is not with you any more.' : 'Could not send — check the internet and try again.';
+          draw(); return;
+        }
+        (data.jobs || []).forEach(function (j) { if (j.order_no === no) j.ready_at = new Date().toISOString(); });
+        open = null; thanks = no; draw();
+      }, function () { busy = false; err = 'Could not send — check the internet and try again.'; draw(); });
+    }
+
+    db.rpc('karigar_page', { p_token: token }).then(function (r) {
+      if (r.error) { message('⚠️', ['Could not load — check the internet and open the link again.']); return; }
+      if (!r.data) { message('🔗', ['This link is not active any more.', 'Please ask us for a new link.']); return; }
+      data = r.data;
+      draw();
+      if (!teamPhone()) { try { db.rpc('link_seen', { p_kind: 'karigar', p_token: token }).then(function () {}, function () {}); } catch (e) { /* not counted */ } }
+      var paths = [], cat = [];
+      (data.jobs || []).forEach(function (j) {
+        (j.cad || []).forEach(function (p) { if (p) paths.push(p); });
+        (j.items || []).forEach(function (it) { if (it.photo) paths.push(it.photo); else if (it.cat_photo) cat.push(it.cat_photo); });
+      });
+      function sign(bucket, list, pre) {
+        if (!list.length) return Promise.resolve();
+        return db.storage.from(bucket).createSignedUrls(list, 3600).then(function (s) {
+          (s.data || []).forEach(function (x) { if (x && x.signedUrl) urls[pre + x.path] = x.signedUrl; });
+        }, function () { /* the photos stay blank */ });
+      }
+      if (paths.length || cat.length) Promise.all([sign('orders', paths, 'o:'), sign('catalogue', cat, 'c:')]).then(function () { keepNote(); draw(); });
+    }, function () { message('⚠️', ['Could not load — check the internet and open the link again.']); });
+  })();
+  </script>
+</body>
+</html>

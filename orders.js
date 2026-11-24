@@ -134,7 +134,9 @@ function karigarHTML(o) {
   const pending = numOrNull(o.karigar_received_g) == null;
   return '<div class="o-ledger">' +
     (o.karigar_name ? '<div class="o-lrow"><span>Karigar</span><b>' + (o.karigar_id ? '<a href="#" data-action="k-open" data-id="' + o.karigar_id + '">' + esc(o.karigar_name) + ' ›</a>' : esc(o.karigar_name)) + '</b></div>' : '') +
+    (o.karigar_due && pending ? '<div class="o-lrow"><span>Due back on</span><b' + (o.karigar_due < todayStr() ? ' class="o-red"' : '') + '>' + esc(fmtD(o.karigar_due)) + '</b></div>' : '') +
     '<div class="o-lrow"><span>' + (o.metal === 'Silver' ? 'Silver issued' : 'Gold issued') + (o.karigar_issued_on ? ' · ' + esc(fmtD(o.karigar_issued_on)) : '') + '</span><b>' + grams(issued) + '</b></div>' +
+    (pending && o.karigar_ready_at ? '<div class="o-lnote kg-ready">🔨 ' + esc('The karigar says it is ready — ' + fmtD(o.karigar_ready_at) + ', ' + fmtTime(o.karigar_ready_at)) + '</div>' : '') +
     (pending ? '<div class="o-lnote">Still with the karigar — nothing received yet.</div>' :
       '<div class="o-lrow"><span>Received back' + (o.karigar_received_on ? ' · ' + esc(fmtD(o.karigar_received_on)) : '') + '</span><b>' + grams(recd) + '</b></div>' +
       '<div class="o-lnote ' + (issued - recd > 0.0005 ? 'neg' : '') + '">Difference (loss / wastage): <b>' + grams(issued - recd) + '</b></div>') +
@@ -208,6 +210,8 @@ async function renderOrders() {
     (typeof renderBoard === 'function' && !boardIsTab() ? '<button class="btn btn-secondary" data-action="bd-open">Board</button>' : '') +
     (typeof renderVendors === 'function' && appOn('vendors') ? '<button class="btn btn-secondary" data-action="v-list">Vendors</button>' : '') +
     (typeof renderPayDues === 'function' && appOn('payments') ? '<button class="btn btn-secondary" data-action="dues-open">Payment dues</button>' : '') +
+    (typeof renderWorkload === 'function' ? '<button class="btn btn-secondary" data-action="wl-open">Workload</button>' : '') +
+    (typeof qrScanOn === 'function' && qrScanOn() ? '<button class="btn btn-secondary" data-action="qr-scan">Scan QR</button>' : '') +
     '</div>' +
     '<div class="search-box"><input type="text" id="o-search" placeholder="Search client or order no…" autocomplete="off" value="' + esc(L.q) + '"></div>' +
     '<div class="filter-chips">' + chip('status', 'open', 'Open') + chip('status', 'quote', 'Quotations') + (finUsed ? chip('status', 'finished', 'Finished') : '') +
@@ -530,7 +534,7 @@ async function startEditOrder(id) {
       order_date: s(o.order_date), due_date: s(o.due_date), wastage_pct: s(o.wastage_pct),
       client_metal_g: s(o.client_metal_g), client_metal_on: s(o.client_metal_on), karigar_id: s(o.karigar_id), vendor_id: s(o.vendor_id),
       karigar_issued_g: s(o.karigar_issued_g), karigar_issued_on: s(o.karigar_issued_on),
-      karigar_received_g: s(o.karigar_received_g), karigar_received_on: s(o.karigar_received_on),
+      karigar_received_g: s(o.karigar_received_g), karigar_received_on: s(o.karigar_received_on), karigar_due: s(o.karigar_due),
       notes: s(o.notes), legacy_karigar: o.karigar_id ? '' : s(o.karigar_name),
     },
   };
@@ -701,6 +705,7 @@ function renderOrderForm() {
     '<div class="field"><label>Issued on</label>' + dateIn('karigar_issued_on') + '</div>' +
     '<div class="field"><label>Received back (g)</label>' + numIn('karigar_received_g') + '</div>' +
     '<div class="field"><label>Received on</label>' + dateIn('karigar_received_on') + '</div>' +
+    (S.dbv14 ? '<div class="field"><label>Due back from karigar</label>' + dateIn('karigar_due') + '</div>' : '') +
     '</div>' +
     '<div id="o-kg-ledger"></div>' +
     '</div></div>' +
@@ -957,6 +962,7 @@ async function saveOrder(asQuote, credit) {
     notes: String(o.notes || '').trim() || null,
   };
   if (S.dbv6) row.vendor_id = o.vendor_id || null;
+  if (S.dbv14) row.karigar_due = kid ? (o.karigar_due || null) : null;   // update 14: when the karigar gives it back
 
   const btns = [$('#o-save-btn'), $('#o-quote-btn')].filter(Boolean);
   const labels = btns.map((b) => b.textContent);
@@ -1121,6 +1127,7 @@ function renderOrderPage(o) {
     '<div class="doc-row">' +
     (quote || o.status === 'declined' ? docBtn('quote', 'Quotation') : docBtn('slip', 'Order slip')) +
     (approved ? docBtn('challan', o.order_type === 'job_work' ? 'Job-work challan' : 'Delivery challan') : '') +
+    (isOpenStatus(o.status) && typeof buildJobCardPdf === 'function' ? '<button class="btn btn-small btn-secondary" data-action="d-jobcard" data-id="' + o.id + '">Job card (QR)</button>' : '') +
     (o.order_type === 'job_work' && numOrNull(o.client_metal_g) != null ? docBtn('receipt', 'Gold receipt') : '') +
     (o.karigar_id && numOrNull(o.karigar_issued_g) != null && appOn('karigars') ? '<button class="btn btn-small btn-secondary" data-action="o-kchallan" data-id="' + o.id + '">Karigar challan</button>' : '') +
     '</div>' +
@@ -1239,7 +1246,7 @@ async function loadOrderDetails(o) {
   // timeline
   const tv = $('#o-timeline');
   if (tv) tv.innerHTML = ups.length ? '<div class="section-label">History</div>' + ups.map((u) =>
-    '<div class="timeline-item"><div class="t-meta"><span>' + esc(!u.created_by && /^The shop /.test(u.note || '') ? 'The shop' : nameOf(u.created_by)) + '</span><span>' + fmtDT(u.created_at) + '</span></div>' +
+    '<div class="timeline-item"><div class="t-meta"><span>' + esc(!u.created_by && /^The shop /.test(u.note || '') ? 'The shop' : !u.created_by && /^The karigar /.test(u.note || '') ? (o.karigar_name || 'The karigar') : nameOf(u.created_by)) + '</span><span>' + fmtDT(u.created_at) + '</span></div>' +
     (u.status ? '<div style="margin:2px 0 4px">' + chipStatus(u.status) + '</div>' : '') +
     (u.note ? '<div class="t-notes">' + esc(u.note) + '</div>' : '') + '</div>').join('') : '';
 }
