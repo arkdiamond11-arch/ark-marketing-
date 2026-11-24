@@ -1220,3 +1220,33 @@ input.sw:disabled { cursor: default; }
 .fest-chip-wish { background: #efe6fb; color: #4b2a85; }
 .cf-vid video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
 .camp-vids video { flex: none; width: 180px; height: 120px; border-radius: 10px; background: #000; }
+
+/* ---------- v27: app lock, the week ---------- */
+.lock { position: fixed; inset: 0; z-index: 200; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); overflow-y: auto; }
+.lock.lk-shield { z-index: 199; }
+.lk-box { width: 100%; max-width: 340px; text-align: center; }
+.lk-logo { font-size: 34px; }
+.lk-biz { font-size: 12.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+.lk-title { font-size: 21px; margin: 10px 0 4px; }
+.lk-sub { color: var(--muted); font-size: 14px; min-height: 20px; }
+.lk-sub.err { color: var(--red); font-weight: 650; }
+.lk-dots { display: flex; justify-content: center; gap: 16px; margin: 18px 0 22px; }
+.lk-dots i { width: 15px; height: 15px; border-radius: 50%; border: 2px solid var(--maroon); }
+.lk-dots i.on { background: var(--maroon); }
+.lk-dots.shake { animation: lkshake .35s; }
+@keyframes lkshake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+.lk-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; max-width: 280px; margin: 0 auto; }
+.lk-k { aspect-ratio: 1.35; border: 0; border-radius: 16px; background: var(--card); box-shadow: var(--shadow); font: inherit; font-size: 24px; font-weight: 650; color: var(--ink); cursor: pointer; }
+.lk-k:active { background: var(--maroon-soft); }
+.lk-del, .lk-bio { background: transparent; box-shadow: none; }
+.lk-link { margin-top: 18px; border: 0; background: none; color: var(--maroon); font: inherit; font-weight: 700; cursor: pointer; }
+.lk-acts { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+.lk-danger { background: #b3372f; }
+.lk-card { padding: 12px 14px; border-left: 4px solid #c9c3cc; }
+.lk-card.on { border-left-color: var(--green); }
+.wk-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 12px; }
+.wk-nav .btn { width: 44px; font-size: 20px; }
+.wk-t { text-align: center; }
+.wk-t b { display: block; font-size: 18px; }
+.wk-t span { font-size: 13px; color: var(--muted); }
+.wk-tiles { margin-bottom: 10px; }

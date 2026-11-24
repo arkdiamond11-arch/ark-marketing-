@@ -3,8 +3,9 @@
    offline). Order slip · Quotation · Job-work delivery challan ·
    Gold receipt · Karigar issue challan · Karigar statement.
    Weights only — no prices or payments.
-   PDFs use the standard Helvetica font, so text in Hindi/Gujarati
-   letters prints as "?".
+   PDFs use the standard Helvetica font; text in Hindi / Gujarati
+   (and other Indian) letters is drawn by the phone and placed in
+   the PDF as a sharp picture of the words.
    ============================================================ */
 'use strict';
 
@@ -19,20 +20,31 @@ const C_INK = [0.15, 0.13, 0.17], C_MUTED = [0.45, 0.43, 0.48], C_LINE = [0.85, 
 const C_MAROON = [0.482, 0.118, 0.235], C_GOLD = [0.79, 0.59, 0.24], C_SOFT = [0.968, 0.937, 0.945];
 const C_RED = [0.7, 0.2, 0.18], C_GREEN = [0.1, 0.5, 0.31], C_WHITE = [1, 1, 1];
 
-/* keep only characters the standard PDF font can show */
+/* Indian letters (Devanagari … Malayalam): drawn by the phone, not by the PDF font */
+const PDF_INDIC = /[\u0900-\u0D7F]/;
+const PDF_FONT = 'Helvetica, Arial, "Noto Sans", "Noto Sans Devanagari", "Noto Sans Gujarati", "Shruti", "Mangal", FreeSans, sans-serif';
+/* keep only characters the standard PDF font can show — or, with Indian letters, what the phone can draw */
 function pdfText(s) {
-  return String(s == null ? '' : s)
+  const t = String(s == null ? '' : s)
     .replace(/₹\s?/g, 'Rs. ')
     .replace(/[‘’‚′]/g, "'")
     .replace(/[“”„″]/g, '"')
     .replace(/[–—−]/g, '-')
     .replace(/•/g, '*').replace(/…/g, '...')
     .replace(/[   ]/g, ' ')
-    .replace(/[\r\t]/g, ' ')
-    .replace(/[^\x20-\x7E\n\xA0-\xFF]/g, '?');
+    .replace(/[\r\t]/g, ' ');
+  if (PDF_INDIC.test(t)) return t.replace(/[^\x20-\x7E\n\xA0-\xFF\u0900-\u0D7F\u200C\u200D]/g, '');   // emoji and the like are left out
+  return t.replace(/[^\x20-\x7E\n\xA0-\xFF]/g, '?');
 }
+let PDF_CTX = null;
+function pdfCtx() { if (!PDF_CTX) PDF_CTX = document.createElement('canvas').getContext('2d'); return PDF_CTX; }
 function pdfEsc(s) { return s.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)'); }
 function pdfWidth(s, size, bold) {
+  if (PDF_INDIC.test(s)) {   // measured with the phone's own font, as it will be drawn
+    const g = pdfCtx();
+    g.font = (bold ? '700 ' : '400 ') + '100px ' + PDF_FONT;
+    return g.measureText(s).width / 100 * size * 0.3528;
+  }
   const t = PDF_WIDTHS[bold ? 1 : 0];
   let w = 0;
   for (let i = 0; i < s.length; i++) {
@@ -42,6 +54,23 @@ function pdfWidth(s, size, bold) {
   return w * size / 1000 / MM;   // in mm
 }
 function f2(n) { return (Math.round(n * 100) / 100).toString(); }
+/* PDF RunLengthDecode: runs of the same byte, or up to 128 bytes as they are */
+function pdfRle(b) {
+  const out = [];
+  let i = 0;
+  while (i < b.length) {
+    let r = 1;
+    while (i + r < b.length && r < 128 && b[i + r] === b[i]) r++;
+    if (r >= 2) { out.push(257 - r, b[i]); i += r; continue; }
+    let j = i + 1;
+    while (j < b.length && j - i < 128 && !(j + 1 < b.length && b[j] === b[j + 1])) j++;
+    out.push(j - i - 1);
+    for (let k = i; k < j; k++) out.push(b[k]);
+    i = j;
+  }
+  out.push(128);
+  return Uint8Array.from(out);
+}
 function latin1Bytes(s) {
   const b = new Uint8Array(s.length);
   for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i) & 255;
@@ -51,6 +80,7 @@ function latin1Bytes(s) {
 function PDF() {
   this.pages = [];
   this.imgs = [];
+  this.masks = [];   // words in Indian letters, as 1-bit pictures
   this.y = PM;
   this.footerText = '';
   this.addPage();
@@ -69,8 +99,33 @@ PDF.prototype.text = function (x, y, s, o) {
   s = pdfText(s).replace(/\n/g, ' ');
   const w = pdfWidth(s, size, bold);
   const xx = o.align === 'right' ? x - w : o.align === 'center' ? x - w / 2 : x;
+  if (PDF_INDIC.test(s)) return this.textPic(xx, y, s, size, bold, o.color || C_INK, w);
   this.color(o.color || C_INK);
   this.op('BT /' + (bold ? 'F2' : 'F1') + ' ' + f2(size) + ' Tf ' + f2(xx * MM) + ' ' + f2((PG_H - y) * MM) + ' Td (' + pdfEsc(s) + ') Tj ET');
+  return w;
+};
+/* the words drawn by the phone (its fonts shape Hindi / Gujarati correctly), placed as a stencil in the text colour */
+PDF.prototype.textPic = function (x, y, s, size, bold, color, w) {
+  const SC = 16;   // dots per mm (about 400 dpi)
+  const em = size * 0.3528, asc = em * 1.05, desc = em * 0.5, padX = 0.4;
+  const cw = Math.max(1, Math.ceil((w + padX * 2) * SC)), ch = Math.max(1, Math.ceil((asc + desc) * SC));
+  const cv = document.createElement('canvas');
+  cv.width = cw; cv.height = ch;
+  const g = cv.getContext('2d');
+  g.font = (bold ? '700 ' : '400 ') + (em * SC).toFixed(1) + 'px ' + PDF_FONT;
+  g.fillStyle = '#000';
+  g.textBaseline = 'alphabetic';
+  g.fillText(s, padX * SC, Math.round(asc * SC));
+  const px = g.getImageData(0, 0, cw, ch).data;
+  const rowB = Math.ceil(cw / 8), bits = new Uint8Array(rowB * ch);
+  for (let yy = 0; yy < ch; yy++) {
+    for (let xx = 0; xx < cw; xx++) if (px[(yy * cw + xx) * 4 + 3] >= 110) bits[yy * rowB + (xx >> 3)] |= 0x80 >> (xx & 7);
+  }
+  const id = this.masks.length;
+  this.masks.push({ w: cw, h: ch, data: pdfRle(bits) });
+  this.op('q');
+  this.color(color);
+  this.op(f2(cw / SC * MM) + ' 0 0 ' + f2(ch / SC * MM) + ' ' + f2((x - padX) * MM) + ' ' + f2((PG_H - (y - asc) - ch / SC) * MM) + ' cm /Mk' + id + ' Do Q');
   return w;
 };
 PDF.prototype.lineH = function (size) { return size * 0.3528 * 1.32; };
@@ -178,7 +233,7 @@ PDF.prototype.blob = function () {
   const push = (x) => { const b = typeof x === 'string' ? latin1Bytes(x) : x; chunks.push(b); len += b.length; };
   const obj = (k) => { offsets[k] = len; push(k + ' 0 obj\n'); };
   push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
-  const imgBase = 5, pageBase = imgBase + this.imgs.length;
+  const imgBase = 5, mkBase = imgBase + this.imgs.length, pageBase = mkBase + this.masks.length;
   obj(1); push('<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
   obj(2); push('<< /Type /Pages /Kids [' + this.pages.map((_, i) => (pageBase + i * 2) + ' 0 R').join(' ') + '] /Count ' + n + ' >>\nendobj\n');
   obj(3); push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n');
@@ -189,7 +244,14 @@ PDF.prototype.blob = function () {
     push(im.bytes);
     push('\nendstream\nendobj\n');
   });
-  const xo = this.imgs.length ? ' /XObject << ' + this.imgs.map((_, k) => '/Im' + k + ' ' + (imgBase + k) + ' 0 R').join(' ') + ' >>' : '';
+  this.masks.forEach((m, k) => {
+    obj(mkBase + k);
+    push('<< /Type /XObject /Subtype /Image /Width ' + m.w + ' /Height ' + m.h + ' /ImageMask true /BitsPerComponent 1 /Decode [1 0] /Filter /RunLengthDecode /Length ' + m.data.length + ' >>\nstream\n');
+    push(m.data);
+    push('\nendstream\nendobj\n');
+  });
+  const xo = this.imgs.length || this.masks.length ? ' /XObject << ' + this.imgs.map((_, k) => '/Im' + k + ' ' + (imgBase + k) + ' 0 R').join(' ') +
+    (this.imgs.length && this.masks.length ? ' ' : '') + this.masks.map((_, k) => '/Mk' + k + ' ' + (mkBase + k) + ' 0 R').join(' ') + ' >>' : '';
   this.pages.forEach((pg, i) => {
     obj(pageBase + i * 2);
     push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>' + xo + ' >> /Contents ' + (pageBase + i * 2 + 1) + ' 0 R >>\nendobj\n');

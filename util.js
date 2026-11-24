@@ -209,7 +209,7 @@ async function loadBiz() {
   const [has8, has9, ver] = await Promise.all([v8, v9, v11]);
   if (has8 !== null) S.dbv8 = has8;
   if (has9 !== null) S.dbv9 = has9;
-  if (ver !== null) { S.dbv11 = ver >= 11; S.dbv12 = ver >= 12; S.dbv13 = ver >= 13; S.dbv14 = ver >= 14; S.dbv15 = ver >= 15; S.dbv16 = ver >= 16; }
+  if (ver !== null) { S.dbv11 = ver >= 11; S.dbv12 = ver >= 12; S.dbv13 = ver >= 13; S.dbv14 = ver >= 14; S.dbv15 = ver >= 15; S.dbv16 = ver >= 16; S.dbv17 = ver >= 17; }
   if (r.error || !r.data) { if (!S.biz) S.biz = {}; return null; }
   S.biz = r.data;
   S.bizAt = Date.now();
@@ -326,7 +326,7 @@ function renderBizForm() {
   const b = S.biz || {};
   const v = (k) => esc(b[k] == null ? '' : b[k]);
   $('#content').innerHTML =
-    '<div class="notice">These details are printed on order slips, quotations and challans. Type them in English letters — PDFs cannot print Hindi or Gujarati letters.</div>' +
+    '<div class="notice">These details are printed on order slips, quotations and challans.</div>' +
     '<div class="card">' +
     '<div class="field"><label>Business / legal name</label><input type="text" id="biz-name" value="' + esc(b.legal_name || BRAND) + '"></div>' +
     '<div class="field"><label>Address</label><textarea id="biz-address" style="min-height:70px" placeholder="Shop no., building, street, area">' + v('address') + '</textarea></div>' +

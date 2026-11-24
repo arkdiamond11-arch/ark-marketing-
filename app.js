@@ -167,6 +167,10 @@ function confirmModal(title, text, yesLabel, onYes, danger) {
    AUTH
    ============================================================ */
 async function showAuth() {
+  try {   // signed out on all phones (lock.js): say so once
+    const m = sessionStorage.getItem('signedOutMsg');
+    if (m) { sessionStorage.removeItem('signedOutMsg'); setTimeout(() => toast(m, 'err'), 400); }
+  } catch (e) { /* ignore */ }
   const app = $('#app');
   app.innerHTML =
     '<div class="auth-wrap"><div class="auth-head">' +
@@ -196,7 +200,8 @@ function renderLogin() {
   $('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = $('#li-btn'); btn.disabled = true; btn.textContent = 'Signing in…';
-    const { error } = await db.auth.signInWithPassword({ email: $('#li-email').value.trim(), password: $('#li-pass').value });
+    const { data: li, error } = await db.auth.signInWithPassword({ email: $('#li-email').value.trim(), password: $('#li-pass').value });
+    if (!error && typeof noteSignIn === 'function') noteSignIn(li && li.session);   // "sign out on all phones" (lock.js)
     if (error) {
       btn.disabled = false; btn.textContent = 'Sign in';
       toast(error.message === 'Invalid login credentials' ? 'Wrong email or password.' : error.message, 'err');
@@ -220,7 +225,8 @@ function renderOwnerSetup() {
     const email = $('#su-email').value.trim(), pass = $('#su-pass').value, name = $('#su-name').value.trim();
     const r = await callAdmin('bootstrap', { email, password: pass, full_name: name });
     if (r.error) { btn.disabled = false; btn.textContent = 'Create owner account'; toast(r.error, 'err'); return; }
-    const { error } = await db.auth.signInWithPassword({ email, password: pass });
+    const { data: li, error } = await db.auth.signInWithPassword({ email, password: pass });
+    if (!error && typeof noteSignIn === 'function') noteSignIn(li && li.session);
     if (error) { toast('Account created — please sign in.', 'ok'); renderLogin(); }
   });
 }
@@ -1893,6 +1899,8 @@ async function renderMore() {
     (typeof bagOn === 'function' && bagOn() ? mrow('bag-open', '👜', 'Sample bag', 'Catalogue pieces you carry to shops') : '') +
     (typeof eventsOn === 'function' && eventsOn() ? mrow('ev-list', '🎪', 'Exhibitions', 'Visitors and meetings at a trade show, kept together') : '') +
     (typeof renderAlerts === 'function' && S.dbv9 ? mrow('al-open', '📳', 'Phone alerts', 'When your orders move · your day every morning') : '') +
+    (isOwner && typeof renderWeek === 'function' ? mrow('wk-open', '📅', 'The week', 'Meetings, new clients, orders — this week and the weeks before') : '') +
+    (typeof renderLock === 'function' ? mrow('lk-open', '🔒', 'App lock', S.dbv17 ? 'A PIN or fingerprint on this phone · sign out a lost phone' : 'A PIN or fingerprint on this phone') : '') +
     (isOwner && typeof renderAppSettings === 'function' ? mrow('opt-open', '⚙️', 'App settings', 'Order steps in use · show or hide sections') : '') +
     (isOwner && typeof renderBizForm === 'function' ? mrow('biz-open', '🏷️', 'Business details', 'Address, GSTIN — printed on PDFs') : '') +
     (typeof renderLangPicker === 'function' ? mrow('lang-open', '🌐', 'Language / भाषा / ભાષા', 'English, हिन्दी, ગુજરાતી') : '') +
@@ -1919,6 +1927,7 @@ async function renderTeamList() {
         '<div class="m-actions">' +
         '<button class="btn btn-small btn-ghost" data-action="member-resetpw" data-id="' + p.id + '">Reset PW</button>' +
         '<button class="btn btn-small ' + (p.active ? 'btn-danger-ghost' : 'btn-ghost') + '" data-action="member-toggle" data-id="' + p.id + '" data-active="' + p.active + '">' + (p.active ? 'Deactivate' : 'Activate') + '</button>' +
+        (S.dbv17 ? '<button class="btn btn-small btn-ghost" data-action="so-member" data-id="' + p.id + '">Sign out on all phones</button>' : '') +   // a lost phone (lock.js)
         '</div>') +
       // database update 10: the owner lets a team member delete clients added by mistake
       (!me && p.role !== 'owner' && Object.prototype.hasOwnProperty.call(p, 'can_delete_clients')

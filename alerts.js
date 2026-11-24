@@ -81,7 +81,8 @@ async function renderAlerts() {
           owner ? 'Who logged meetings today' : 'Log today\'s meetings — how many you have logged so far') : '') +
         (S.dbv12 ? (S.dbv16 ? sw('picks', 'Shops: picks, designs, ready stock', owner ? 'When a shop picks designs, sends a design it wants made, or chooses from ready stock'   // update 16
             : 'When your shops pick designs, send a design they want made, or choose from your ready-stock list')
-          : sw('picks', 'Shops picking designs', owner ? 'When a shop sends the designs it likes' : 'When a shop you sent a message to picks designs')) : '') + '</div>' +
+          : sw('picks', 'Shops picking designs', owner ? 'When a shop sends the designs it likes' : 'When a shop you sent a message to picks designs')) : '') +
+        (S.dbv17 && owner ? sw('weekly', 'Monday summary, 9 am', 'Last week: meetings, new clients, orders, deliveries') : '') + '</div>' +
         '<div class="action-row"><button class="btn btn-secondary" data-action="al-test" id="al-test">Send a test alert</button>' +
         '<button class="btn btn-ghost" data-action="al-off">Turn off on this phone</button></div>';
     } else {
@@ -222,6 +223,11 @@ document.addEventListener('visibilitychange', () => {
 
 /* a tapped alert opens its order (index.html#o=<order id>) or its message with the shops' picks (#k=<message id>) */
 function alertOpenUrl(u) {
+  if (/#wk=1/.test(String(u || '')) && S.me) {   // the Monday summary (update 17)
+    try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { /* ignore */ }
+    if (typeof renderWeek === 'function') { S.wk = { back: 1 }; showSub('The week', renderWeek); }
+    return true;
+  }
   const m = /#(dr|sl|[okc])=([0-9a-f-]{36})/i.exec(String(u || ''));
   if (!m || !S.me) return false;
   try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { /* ignore */ }
@@ -236,7 +242,7 @@ function alertOpenUrl(u) {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open') alertOpenUrl(e.data.url); });
 }
-window.addEventListener('hashchange', () => { if (/#(dr|sl|[okc])=/.test(location.hash)) alertOpenUrl(location.hash); });
+window.addEventListener('hashchange', () => { if (/#(dr|sl|wk|[okc])=/.test(location.hash)) alertOpenUrl(location.hash); });
 
 onAct('al-open', () => showSub('Phone alerts', renderAlerts));
 onAct('al-setup', (el) => alertSetup(el.dataset.again === '1'));

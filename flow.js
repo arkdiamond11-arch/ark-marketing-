@@ -503,6 +503,9 @@ function renderAppSettings() {
     (S.dbv12 && typeof creditDaysDefault === 'function' ? '<div class="section-label">Credit rules</div>' +
       '<div class="card sd-card"><p class="hint" style="margin:0 0 8px">A new approved order needs your OK when the shop\'s payment is late by more than this. A shop can have its own number: its page → Credit rules.</p>' +
       '<label class="sd-row"><span>Payment can be late by up to</span><input type="number" inputmode="numeric" min="0" max="365" id="cd-days" value="' + creditDaysDefault() + '"><span class="sd-unit">days</span></label></div>' : '') +
+    '<div class="section-label">Safety</div>' +
+    '<div class="card sw-card"><label class="sw-row"><span class="sw-t"><b>Ask everyone to lock the app</b><span>Each phone must set a 4-digit PIN (or fingerprint) before using the app</span></span>' +
+    '<input type="checkbox" class="sw" id="sw-lockreq"' + (appOpts().lock_required ? ' checked' : '') + '></label></div>' +
     '<div class="section-label">Name on shared photos</div>' +
     '<div class="card sd-card"><p class="hint" style="margin:0 0 8px">Photos you share from the catalogue or send in a message to shops get this at the bottom right. Empty = your business name. Switch it off below.</p>' +
     '<div class="field" style="margin:0"><input type="text" id="wm-text" maxlength="40" autocomplete="off" placeholder="' + esc(bizName()) + '" value="' + esc(appOpts().wm_text || '') + '"></div></div>' +
@@ -530,6 +533,8 @@ async function saveAppSettings() {
     VISIT_CATS.forEach((k) => { const el = $('#vd-' + k), v = el ? parseInt(el.value, 10) : NaN; visit[k] = isFinite(v) && v >= 0 ? Math.min(v, 365) : visitDays(k); });
     opts.visit = visit;
   }
+  const lr = $('#sw-lockreq');   // everyone sets an app lock (lock.js)
+  if (lr) opts.lock_required = lr.checked;
   const wt = $('#wm-text');   // the name on shared photos (util.js)
   if (wt) opts.wm_text = wt.value.trim().slice(0, 40);
   const cd = $('#cd-days');   // credit rules (credit.js)
