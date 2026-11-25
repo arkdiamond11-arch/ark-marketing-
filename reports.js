@@ -532,14 +532,14 @@ function repBuild(D) {
       groupKey: (c, k) => ({ cat: c.category || '—', metal: c.metal || 'Gold', dtype: c.diamond_type ? diamondLabel(c.diamond_type) : 'No diamonds',
         color: c.metal_color ? colorLabel(c.metal, c.metal_color) : '—', status: CAT_STATUS_LABEL[c.status] || c.status }[k]),
       gcols: [['Pieces', (a) => String(a.n)], ['Gold (g)', (a) => (a.netG ? fmtG(a.netG) : '')], ['Silver (g)', (a) => (a.netS ? fmtG(a.netS) : '')], ['Ct', (a) => (a.ct ? fmtCt(a.ct) : '')]],
-      lines: (c) => [(c.tag_no || '—') + (c.title ? ' · ' + c.title : ''), [c.category, (c.metal || 'Gold') + (c.purity ? ' ' + (purityKey(c.purity) || '') : ''),
+      lines: (c) => [(c.tag_no || '—') + (c.design_no ? ' · ' + c.design_no : '') + (c.title ? ' · ' + c.title : ''), [c.category, (c.metal || 'Gold') + (c.purity ? ' ' + (purityKey(c.purity) || '') : ''),
         c.metal_color ? colorLabel(c.metal, c.metal_color) : '', c.diamond_type ? diamondLabel(c.diamond_type) + (num(c.diamond_ct) ? ' ' + fmtCt(c.diamond_ct) + ' ct' : '') : '',
         c.diamond_cert_lab || '', c.jewel_cert_type ? (c.jewel_cert_type.indexOf('HUID') > -1 ? 'HUID' : c.jewel_cert_type) : '', CAT_STATUS_LABEL[c.status] || ''].filter(Boolean).join(' · ')],
       amount: (c) => (num(c.net_wt) ? fmtG(c.net_wt) + ' g' : ''), open: () => null, cat: (c) => c.id,
-      csvHead: ['Tag no', 'Design', 'Piece', 'Metal', 'Purity', 'Colour / finish', 'Gross wt (g)', 'Net wt (g)', 'Diamonds / stones', 'Carats', 'Diamond pcs', 'Diamond quality',
-        'Diamond certificate', 'Diamond cert no', 'Jewellery certificate', 'Jewellery cert / HUID no', 'Other stones', 'Status'],
-      csv: (c) => [c.tag_no, c.title, c.category, c.metal, c.purity, c.metal_color, c.gross_wt, c.net_wt, diamondLabel(c.diamond_type), c.diamond_ct, c.diamond_pcs, c.diamond_quality,
-        c.diamond_type ? (c.diamond_cert_lab || 'Not certified') : '', c.diamond_cert_no, c.jewel_cert_type || '', c.jewel_cert_no, c.stone_details, CAT_STATUS_LABEL[c.status] || c.status],
+      csvHead: ['Tag no', 'Design no', 'Design', 'Piece', 'Metal', 'Purity', 'Colour / finish', 'Gross wt (g)', 'Net wt (g)', 'Diamonds / stones', 'Carats', 'Diamond pcs', 'Diamond quality',
+        'Diamond certificate', 'Diamond cert no', 'Jewellery certificate', 'Jewellery cert / HUID no', 'Other stones', 'Colour stone ct', 'Colour stone pcs', 'Status'],
+      csv: (c) => [c.tag_no, c.design_no, c.title, c.category, c.metal, c.purity, c.metal_color, c.gross_wt, c.net_wt, diamondLabel(c.diamond_type), c.diamond_ct, c.diamond_pcs, c.diamond_quality,
+        c.diamond_type ? (c.diamond_cert_lab || 'Not certified') : '', c.diamond_cert_no, c.jewel_cert_type || '', c.jewel_cert_no, c.stone_details, c.cs_ct, c.cs_pcs, CAT_STATUS_LABEL[c.status] || c.status],
       pdfCols: [['Tag', 22], ['Piece', 0], ['Metal', 22], ['Net (g)', 18, 'right'], ['Diamonds', 40], ['Status', 20]],
       pdfRow: (c) => [c.tag_no || '', [c.category, c.title].filter(Boolean).join(' - '), (c.metal || 'Gold') + (c.purity ? ' ' + (purityKey(c.purity) || '') : ''),
         num(c.net_wt) ? pG(c.net_wt) : '', c.diamond_type ? diamondLabel(c.diamond_type) + (num(c.diamond_ct) ? ' ' + fmtCt(c.diamond_ct) + ' ct' : '') : '', CAT_STATUS_LABEL[c.status] || ''],
@@ -621,7 +621,7 @@ function repFilterDefs() {
   if (T === 'karigars') { d.push(['kshow', 'Show', [['active', 'Working karigars'], ['bal', 'Only with metal'], ['all', 'Everyone']], true]); return d; }
   if (T === 'kcard') { d.push(['kshow', 'Show', [['active', 'Working karigars'], ['all', 'Everyone']], true]); return d; }
   if (T === 'stock') {
-    d.push(['cstatus', 'Status', [['available', 'In stock'], ['reserved', 'Reserved'], ['sold', 'Sold'], ['all', 'All']], true], ['metal', 'Metal', metals]);
+    d.push(['cstatus', 'Status', [['available', 'In stock']].concat(S.dbv18 ? [['approval', 'On approval']] : [], [['reserved', 'Reserved'], ['sold', 'Sold'], ['all', 'All']]), true], ['metal', 'Metal', metals]);
     itemFilters();
     return d;
   }

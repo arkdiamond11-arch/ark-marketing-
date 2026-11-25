@@ -209,7 +209,7 @@ async function loadBiz() {
   const [has8, has9, ver] = await Promise.all([v8, v9, v11]);
   if (has8 !== null) S.dbv8 = has8;
   if (has9 !== null) S.dbv9 = has9;
-  if (ver !== null) { S.dbv11 = ver >= 11; S.dbv12 = ver >= 12; S.dbv13 = ver >= 13; S.dbv14 = ver >= 14; S.dbv15 = ver >= 15; S.dbv16 = ver >= 16; S.dbv17 = ver >= 17; }
+  if (ver !== null) { S.dbv11 = ver >= 11; S.dbv12 = ver >= 12; S.dbv13 = ver >= 13; S.dbv14 = ver >= 14; S.dbv15 = ver >= 15; S.dbv16 = ver >= 16; S.dbv17 = ver >= 17; S.dbv18 = ver >= 18; }
   if (r.error || !r.data) { if (!S.biz) S.biz = {}; return null; }
   S.biz = r.data;
   S.bizAt = Date.now();
@@ -242,7 +242,7 @@ async function probeTable(name) {
    business_settings.app_options = { off: [section keys], steps: [order steps in use] }
    Nothing set (or before database update 07) = everything on, as before. */
 const APP_SECTIONS = [
-  ['catalogue', 'Catalogue', 'Designs with photos — pick them into orders'],
+  ['catalogue', 'Stock', 'Your ready stock and designs with photos, tags and weights'],
   ['vendors', 'Vendors & diamonds', 'Who makes each order · diamonds to give them'],
   ['karigars', 'Karigars', 'Metal given to karigars and received back'],
   ['payments', 'Payment dues', 'Which party has to pay and by when'],
@@ -267,6 +267,8 @@ const APP_SECTIONS = [
   ['stock', 'Ready-stock links', 'Chosen catalogue pieces on a page for one shop — it taps what it wants', 16],
   ['festivals', 'Festival calendar', 'Selling days and days to send wishes, on Today', 16],
   ['watermark', 'Name on shared photos', 'Your business name on the photos you share or send to shops'],
+  // database update 18
+  ['bills', 'Ready-stock bills', 'Sale bills, quotations and payments for pieces from your stock', 18],
 ];
 function appSectionsShown() { return APP_SECTIONS.filter((s) => !s[3] || !!S['dbv' + s[3]]); }
 const STEP_CHOICES = ['cad', 'wax', 'in_production', 'setting', 'finished', 'igi'];   // between Approved and Delivered

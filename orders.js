@@ -159,6 +159,11 @@ async function releaseCatalogue(ids, orderId) {
   if (free.length) await db.from('catalogue_items').update({ status: 'available' }).in('id', free);
 }
 async function syncCatalogueStatus(orderStatus, ids, removedIds, orderId) {
+  if (S.dbv18) {   // update 18: the database works out where each piece is (orders, approval memos, bills)
+    const all = (ids || []).concat(removedIds || []);
+    if (all.length) await db.rpc('stock_refresh', { p_ids: all });
+    return;
+  }
   if (HOLDING_STATUSES.indexOf(orderStatus) > -1 && removedIds && removedIds.length) await releaseCatalogue(removedIds, orderId);
   const st = catStatusFor(orderStatus);
   if (!st || !ids || !ids.length) return;
@@ -213,6 +218,7 @@ async function renderOrders() {
     (typeof renderWorkload === 'function' ? '<button class="btn btn-secondary" data-action="wl-open">Workload</button>' : '') +
     (typeof qrScanOn === 'function' && qrScanOn() ? '<button class="btn btn-secondary" data-action="qr-scan">Scan QR</button>' : '') +
     '</div>' +
+    (typeof billsOn === 'function' && billsOn() ? '<button class="o-bills-bar" data-action="bl-list"><span>🧾</span><span><b>Ready-stock bills</b><span>Sale bills, quotations and what shops owe</span></span><span>›</span></button>' : '') +
     '<div class="search-box"><input type="text" id="o-search" placeholder="Search client or order no…" autocomplete="off" value="' + esc(L.q) + '"></div>' +
     '<div class="filter-chips">' + chip('status', 'open', 'Open') + chip('status', 'quote', 'Quotations') + (finUsed ? chip('status', 'finished', 'Finished') : '') +
     chip('status', 'delivered', 'Delivered') + chip('status', 'closed', 'Not approved') + chip('status', 'all', 'All') + '</div>' +
@@ -653,7 +659,8 @@ function renderOrderForm() {
     (S.ord.repeatOf ? '<div class="hint" style="margin-top:4px">Repeat of ' + ordNo(S.ord.repeatOf) + ' — check the items and the delivery date, then save.</div>' : '') + '</div>' +
 
     '<div class="section-label">Order type <span class="req-dot">*</span></div>' +
-    '<div class="card"><div class="field" style="margin-bottom:2px">' + segHTML('o_type', ['Job work', 'Ready stock', 'Custom order'], S.formState.o_type) +
+    '<div class="card"><div class="field" style="margin-bottom:2px">' + segHTML('o_type', (typeof billsOn === 'function' && billsOn() && S.formState.o_type !== 'Ready stock'
+      ? ['Job work', 'Custom order'] : ['Job work', 'Ready stock', 'Custom order']), S.formState.o_type) +   // ready stock: bills.js (update 18)
     '<div class="hint" id="o-type-hint"></div></div></div>' +
 
     '<div class="section-label">Dates</div>' +
@@ -1442,8 +1449,20 @@ async function orderKarigarChallan(orderId) {
 /* delegated clicks with data-action starting "o-" */
 async function onOrderAction(a, el) {
   if (a === 'o-tab-new') { S.pendingCatItems = null; showSub('Choose client', renderPickClient); }
-  else if (a === 'o-pick-client') { const c = await fetchClient(el.dataset.id); if (c) startNewOrder(c, null, true); }
-  else if (a === 'o-new') { S.pendingCatItems = null; const c = await fetchClient(el.dataset.id); if (c) startNewOrder(c, el.dataset.type || null); }
+  else if (a === 'o-pick-client') {
+    const c = await fetchClient(el.dataset.id);
+    if (!c) return;
+    // ready stock or an order to make (update 18: ready stock goes on a bill)
+    if (!S.pendingCatItems && typeof orderOrStock === 'function') orderOrStock(c, () => startNewOrder(c, null, true), true);
+    else startNewOrder(c, null, true);
+  }
+  else if (a === 'o-new') {
+    S.pendingCatItems = null;
+    const c = await fetchClient(el.dataset.id);
+    if (!c) return;
+    if (!el.dataset.type && typeof orderOrStock === 'function') orderOrStock(c, () => startNewOrder(c, null));
+    else startNewOrder(c, el.dataset.type || null);
+  }
   else if (a === 'o-open') openOrder(el.dataset.id);
   else if (a === 'o-photos') openOrderPhotos(el.dataset.id);
   else if (a === 'o-filter') { S.olist[el.dataset.g] = el.dataset.v; renderOrders(); }

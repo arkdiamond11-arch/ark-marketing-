@@ -1,31 +1,42 @@
 /* ============================================================
-   DESIGN CATALOGUE — ready-stock pieces and designs with photos,
-   tag numbers and weights. Show them to clients in a meeting,
+   STOCK (was "Catalogue") — ready-stock pieces and designs with
+   photos, tag numbers and weights. Show them to clients in a meeting,
    share on WhatsApp, and add them to an order with one tap.
    A piece in an open order shows as Reserved; when the order is
    delivered it becomes Sold.
+   Database update 18: pieces are added by a photo of their tag
+   (tags.js), have a design no. and colour stones, can be On approval
+   with a shop, and are sold on ready-stock bills (bills.js).
    ============================================================ */
 'use strict';
 
 const CAT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/></svg>';
-const CAT_STATUS_LABEL = { available: 'Available', reserved: 'Reserved', sold: 'Sold' };
+const CAT_STATUS_LABEL = { available: 'In stock', reserved: 'Reserved', approval: 'On approval', sold: 'Sold' };
 const CAT_MAX_PHOTOS = 6;
 
 /* ---------------- tab: grid ---------------- */
 async function renderCatalogue() {
-  setHeader('Catalogue', false);
+  setHeader('Stock', false);
   S.cat = S.cat || { q: '', status: 'available', cat: 'all' };
   const C = S.cat;
+  const tags = typeof tagsOn === 'function' && tagsOn();
+  if (C.status === 'approval' && !tags) C.status = 'available';
   const chip = (g, v, label) => '<button class="' + (C[g] === v ? 'on' : '') + '" data-action="cat-filter" data-g="' + g + '" data-v="' + esc(v) + '">' + esc(label) + '</button>';
   $('#content').innerHTML =
-    '<div class="action-row cat-top-row" style="margin-bottom:12px"><button class="btn btn-primary" data-action="cat-new">＋ Add design</button>' +
+    '<div class="action-row cat-top-row" style="margin-bottom:12px">' +
+    (tags ? '<button class="btn btn-primary" data-action="st-new">＋ Add stock</button><button class="btn btn-secondary" data-action="st-find">Find a piece</button>' +
+      '<button class="btn btn-secondary" data-action="cat-new">＋ Design</button>' : '<button class="btn btn-primary" data-action="cat-new">＋ Add design</button>') +
+    (typeof billsOn === 'function' && billsOn() ? '<button class="btn btn-secondary" data-action="bl-list">Bills</button>' : '') +
     (typeof catStickers === 'function' ? '<button class="btn btn-secondary" data-action="cat-stickers">QR stickers</button>' : '') +
-    (typeof qrScanOn === 'function' && qrScanOn() ? '<button class="btn btn-secondary" data-action="qr-scan">Scan QR</button>' : '') +
+    (!tags && typeof qrScanOn === 'function' && qrScanOn() ? '<button class="btn btn-secondary" data-action="qr-scan">Scan QR</button>' : '') +
     (typeof stockOn === 'function' && stockOn() ? '<button class="btn btn-secondary" data-action="sl-new">Ready-stock link</button>' : '') + '</div>' +
-    '<div class="search-box"><input type="text" id="cat-search" placeholder="Search tag no., design, stones…" autocomplete="off" value="' + esc(C.q) + '"></div>' +
-    '<div class="filter-chips">' + chip('status', 'available', 'Available') + chip('status', 'reserved', 'Reserved') + chip('status', 'sold', 'Sold') + chip('status', 'all', 'All') + '</div>' +
+    (tags ? '<div id="st-totals"></div>' : '') +
+    '<div class="search-box"><input type="text" id="cat-search" placeholder="Search tag no., design no., stones…" autocomplete="off" value="' + esc(C.q) + '"></div>' +
+    '<div class="filter-chips">' + chip('status', 'available', 'In stock') + (tags ? chip('status', 'approval', 'On approval') : '') + chip('status', 'reserved', 'Reserved') +
+    chip('status', 'sold', 'Sold') + chip('status', 'all', 'All') + '</div>' +
     '<div class="filter-chips" id="cat-cats"></div>' +
     '<div id="cat-grid">' + loadingHTML() + '</div>';
+  if (tags) loadStockTotals();
   const inp = $('#cat-search');
   inp.addEventListener('input', () => {
     clearTimeout(S.searchTimer);
@@ -56,7 +67,7 @@ function catQuery(C, picking) {
   if (s) {
     const pat = '%' + s + '%';
     q = q.or('tag_no.ilike.' + pat + ',title.ilike.' + pat + ',description.ilike.' + pat + ',category.ilike.' + pat + ',stone_details.ilike.' + pat +
-      ',diamond_type.ilike.' + pat + ',metal_color.ilike.' + pat);
+      ',diamond_type.ilike.' + pat + ',metal_color.ilike.' + pat + (S.dbv18 ? ',design_no.ilike.' + pat : ''));
   }
   return q.order('created_at', { ascending: false }).limit(400);
 }
@@ -72,7 +83,7 @@ async function loadCatGrid(sel, picking) {
   if (picking) S.catPick.items = rows;
   if (!rows.length) {
     box.innerHTML = '<div class="empty"><div class="big">💍</div>' + (String(C.q || '').trim() ? 'No design matches "' + esc(C.q) + '".' :
-      picking ? 'No available pieces in the catalogue yet.' : 'No designs here yet.<br>Tap “Add design” to photograph your first piece.') + '</div>';
+      picking ? (S.dbv18 ? 'No pieces in stock right now.' : 'No available pieces in the catalogue yet.') : S.dbv18 ? 'Nothing here yet.<br>Tap “Add stock” to add your pieces by their tags.' : 'No designs here yet.<br>Tap “Add design” to photograph your first piece.') + '</div>';
     return;
   }
   box.innerHTML = '<div class="cat-grid">' + rows.map((it) => {
@@ -81,7 +92,7 @@ async function loadCatGrid(sel, picking) {
       '<div class="cat-img">' + ((it.photo_paths || [])[0] ? '<img data-catimg="' + esc(it.photo_paths[0]) + '" alt="">' : '<span class="cat-noimg">💍</span>') +
       (it.status !== 'available' ? '<span class="cat-badge st-' + esc(it.status) + '">' + esc(CAT_STATUS_LABEL[it.status] || it.status) + '</span>' : '') +
       (picking ? '<span class="cat-check">' + (on ? '✓' : '') + '</span>' : '') + '</div>' +
-      '<div class="cat-body"><div class="cat-tag">' + esc(it.tag_no || it.title || 'Design') + '</div>' +
+      '<div class="cat-body"><div class="cat-tag">' + esc(it.tag_no || it.title || 'Design') + (it.design_no ? ' <span class="cat-dno">' + esc(it.design_no) + '</span>' : '') + '</div>' +
       '<div class="cat-sub">' + esc([it.category, num(it.net_wt) ? grams(it.net_wt) : '', it.metal_color || '',
         it.diamond_type ? diamondLabel(it.diamond_type) + (num(it.diamond_ct) ? ' ' + num(it.diamond_ct) + ' ct' : '') : ''].filter(Boolean).join(' · ')) + '</div>' +
       '</div></div>';
@@ -118,25 +129,30 @@ function renderCatItem(it) {
   S.catItem = it;
   const rows = [];
   const add = (k, v) => { if (v) rows.push('<div class="detail-row"><div class="dk">' + k + '</div><div class="dv">' + v + '</div></div>'); };
-  add('Tag / design no.', esc(it.tag_no));
+  add(S.dbv18 ? 'Tag no.' : 'Tag / design no.', esc(it.tag_no));
+  add('Design no.', esc(it.design_no || ''));
   add('Piece', esc(it.category));
   add('Metal', esc((it.metal || 'Gold') + (it.purity ? ' ' + purityLabel(it.purity) : '')));
   add(it.metal === 'Silver' ? 'Silver finish' : 'Gold colour', esc(it.metal_color || ''));
   add('Gross weight', it.gross_wt != null ? grams(it.gross_wt) : '');
   add('Net metal weight', it.net_wt != null ? grams(it.net_wt) : '');
   add('Diamonds / stones', esc(diamondLine(it)));
+  add('Colour stones', num(it.cs_ct) ? esc(carats(it.cs_ct) + (it.cs_pcs ? ' / ' + it.cs_pcs + ' pcs' : '')) : '');
   add('Jewellery certificate', esc(jewelCertLine(it)));
   add(it.diamond_type ? 'Other stones' : 'Stones', esc(it.stone_details || ''));
   add('Added by', esc(nameOf(it.created_by)) + ' · ' + fmtD(it.created_at));
   const photos = it.photo_paths || [];
   $('#content').innerHTML =
-    (photos.length ? '<div class="cat-photos" id="cat-photos">' + photos.map((ph) => '<img data-catimg="' + esc(ph) + '" alt="">').join('') + '</div>' : '') +
+    (photos.length || it.tag_photo_path ? '<div class="cat-photos" id="cat-photos">' + photos.map((ph) => '<img data-catimg="' + esc(ph) + '" alt="">').join('') +
+      (it.tag_photo_path ? '<img class="cat-tagph" data-catimg="' + esc(it.tag_photo_path) + '" alt="The tag">' : '') + '</div>' : '') +
     '<div class="card" style="padding:14px 16px">' +
     '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><div style="font-size:18px;font-weight:750">' + esc(it.title || it.category || 'Design') + '</div>' +
     (it.description ? '<div style="color:var(--muted);font-size:14px;margin-top:3px">' + esc(it.description) + '</div>' : '') + '</div>' +
     '<span class="chip cat-st-' + esc(it.status) + '">' + esc(CAT_STATUS_LABEL[it.status] || it.status) + '</span></div></div>' +
 
-    (it.status === 'available' ? '<button class="btn btn-primary" data-action="cat-add-order" data-id="' + it.id + '" style="margin-bottom:10px">＋ Add to an order</button>' : '<div id="cat-inorder"></div>') +
+    (it.status === 'available' ? (typeof billsOn === 'function' && billsOn()
+      ? '<button class="btn btn-primary" data-action="cat-sell" data-id="' + it.id + '" style="margin-bottom:10px">📦 Sell · quotation · approval</button>'
+      : '<button class="btn btn-primary" data-action="cat-add-order" data-id="' + it.id + '" style="margin-bottom:10px">＋ Add to an order</button>') : '<div id="cat-inorder"></div>') +
     '<div id="cat-bag"></div>' +
     '<div class="action-row">' +
     '<button class="btn btn-secondary" data-action="cat-share" data-id="' + it.id + '">Share</button>' +
@@ -147,9 +163,9 @@ function renderCatItem(it) {
     '<div class="card">' + rows.join('') + '</div>' +
     (it.notes ? '<div class="section-label">Notes</div><div class="card" style="white-space:pre-wrap;font-size:14.5px">' + esc(it.notes) + '</div>' : '') +
 
-    '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:16px 0 6px">' +
-    (it.status === 'available' ? '<button class="btn btn-small btn-ghost" data-action="cat-status" data-id="' + it.id + '" data-s="sold">Mark sold</button>'
-      : '<button class="btn btn-small btn-ghost" data-action="cat-status" data-id="' + it.id + '" data-s="available">Mark available</button>') +
+    '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:16px 0 6px" id="cat-foot">' +
+    (it.status === 'available' ? '<button class="btn btn-small btn-ghost" data-action="cat-status" data-id="' + it.id + '" data-s="sold">' + (S.dbv18 ? 'Mark sold (outside the app)' : 'Mark sold') + '</button>'
+      : S.dbv18 ? '' : '<button class="btn btn-small btn-ghost" data-action="cat-status" data-id="' + it.id + '" data-s="available">Mark available</button>') +
     (isOwner() ? '<button class="btn btn-small btn-danger-ghost" data-action="cat-delete" data-id="' + it.id + '">Delete design</button>' : '') +
     '</div>';
   const ph = $('#cat-photos');
@@ -158,14 +174,30 @@ function renderCatItem(it) {
   if (typeof loadCatBag === 'function') loadCatBag(it);
 }
 
-/* "Reserved in ORD-0004 ›" on a piece that is in an order */
+/* "Reserved in ORD-0004 ›" on a piece that is in an order — and (update 18) the bill or the approval memo it is on */
 async function loadCatOrderLink(catId) {
-  const { data } = await db.from('order_items').select('order_id, orders!inner(order_no, status)').eq('catalogue_id', catId)
-    .in('orders.status', HOLDING_STATUSES).limit(5);
+  const jobs = [db.from('order_items').select('order_id, orders!inner(order_no, status)').eq('catalogue_id', catId).in('orders.status', HOLDING_STATUSES).limit(5)];
+  if (S.dbv18) {
+    jobs.push(db.from('bill_lines').select('bill_id, bills!inner(kind, bill_no, status, clients(trade_name))').eq('catalogue_id', catId).eq('bills.kind', 'sale').eq('bills.status', 'open').limit(3));
+    jobs.push(db.from('approval_items').select('approval_id, status, approvals!inner(memo_no, return_by, clients(trade_name))').eq('catalogue_id', catId).in('status', ['out', 'sold']).limit(3));
+  }
+  const [o, bl, ap] = await Promise.all(jobs);
   const box = $('#cat-inorder');
-  if (!box || !data || !data.length) return;
-  box.innerHTML = '<div class="notice">' + data.map((r) => (r.orders.status === 'delivered' ? 'Sold in ' : 'Reserved in ') +
-    '<a href="#" data-action="o-open" data-id="' + r.order_id + '">' + ordNo(r.orders.order_no) + ' ›</a>').join(' · ') + '</div>';
+  if (!box) return;
+  const parts = [];
+  ((o && o.data) || []).forEach((r) => parts.push((r.orders.status === 'delivered' ? 'Sold in ' : 'Reserved in ') +
+    '<a href="#" data-action="o-open" data-id="' + r.order_id + '">' + ordNo(r.orders.order_no) + ' ›</a>'));
+  ((bl && bl.data) || []).forEach((r) => parts.push(esc('Sold to ' + ((r.bills.clients || {}).trade_name || 'a shop') + ' on ') +
+    '<a href="#" data-action="bl-open" data-id="' + r.bill_id + '">' + esc(billNo(r.bills)) + ' ›</a>'));
+  ((ap && ap.data) || []).forEach((r) => parts.push(esc((r.status === 'sold' ? 'Sold to ' : 'On approval with ') + ((r.approvals.clients || {}).trade_name || 'a shop') +
+    (r.status === 'out' && r.approvals.return_by ? ' till ' + fmtD(r.approvals.return_by) : '') + ' — ') +
+    '<a href="#" data-action="ap-open" data-id="' + r.approval_id + '">' + esc(appNo(r.approvals.memo_no)) + ' ›</a>'));
+  if (parts.length) box.innerHTML = '<div class="notice">' + parts.join('<br>') + '</div>';
+  else if (S.dbv18 && S.catItem && S.catItem.id === catId && S.catItem.status !== 'available') {
+    // marked by hand (sold outside the app): it can come back
+    const f = $('#cat-foot');
+    if (f && !f.querySelector('[data-s="available"]')) f.insertAdjacentHTML('afterbegin', '<button class="btn btn-small btn-ghost" data-action="cat-status" data-id="' + catId + '" data-s="available">Back in stock</button>');
+  }
 }
 
 /* ---------------- add / edit ---------------- */
@@ -185,10 +217,11 @@ function renderCatForm(existing) {
     '<div class="section-label">Details</div>' +
     '<div class="card">' +
     '<div class="o-2col">' +
-    '<div class="field"><label>Tag / design no.</label><input type="text" id="cf-tag" value="' + v('tag_no') + '" placeholder="e.g. PK-1042" autocapitalize="characters"></div>' +
+    '<div class="field"><label>' + (S.dbv18 ? 'Tag no.' : 'Tag / design no.') + '</label><input type="text" id="cf-tag" value="' + v('tag_no') + '" placeholder="e.g. PK-1042" autocapitalize="characters"></div>' +
     '<div class="field"><label>Type of piece</label><select id="cf-cat"><option value="">Choose…</option>' +
     cats.map((c) => '<option value="' + esc(c) + '"' + (c === e.category ? ' selected' : '') + '>' + esc(c) + '</option>').join('') + '</select></div>' +
     '</div>' +
+    (S.dbv18 ? '<div class="field"><label>Design no.</label><input type="text" id="cf-dno" value="' + v('design_no') + '" placeholder="e.g. ER00055" autocapitalize="characters"></div>' : '') +
     '<div class="field"><label>Design name</label><input type="text" id="cf-title" value="' + v('title') + '" placeholder="e.g. Polki choker with emerald drops"></div>' +
     '<div class="field"><label>Description</label><textarea id="cf-desc" style="min-height:64px" placeholder="Finish, colours, size…">' + v('description') + '</textarea></div>' +
     '<div class="field"><label>Metal</label>' + segHTML('cf_metal', ['Gold', 'Silver'], S.formState.cf_metal) + '</div>' +
@@ -198,6 +231,8 @@ function renderCatForm(existing) {
     '<div class="field"><label>Gross wt (g)</label><input type="text" inputmode="decimal" id="cf-gross" value="' + v('gross_wt') + '" placeholder="0.000"></div>' +
     '<div class="field"><label>Net metal wt (g)</label><input type="text" inputmode="decimal" id="cf-net" value="' + v('net_wt') + '" placeholder="0.000"></div>' +
     '</div>' +
+    (S.dbv18 ? '<div class="o-2col"><div class="field"><label>Colour stones (ct)</label><input type="text" inputmode="decimal" id="cf-csct" value="' + v('cs_ct') + '" placeholder="0.000"></div>' +
+      '<div class="field"><label>Colour stones (pcs)</label><input type="text" inputmode="numeric" id="cf-cspcs" value="' + v('cs_pcs') + '" placeholder="0"></div></div>' : '') +
     '<div class="field"><label>Other stones</label><input type="text" id="cf-stones" value="' + v('stone_details') + '" placeholder="e.g. kundan, emerald drops"></div>' +
     '</div>' +
     '<div class="section-label">Diamonds &amp; certificate</div>' +
@@ -273,6 +308,11 @@ async function saveCatItem() {
     stone_details: $('#cf-stones').value.trim() || null,
     notes: $('#cf-notes').value.trim() || null,
   };
+  if (S.dbv18 && $('#cf-dno')) {
+    row.design_no = (typeof tagCode === 'function' ? tagCode($('#cf-dno').value) : $('#cf-dno').value.trim()) || null;
+    row.cs_ct = numOrNull($('#cf-csct').value);
+    row.cs_pcs = numOrNull($('#cf-cspcs').value) != null ? Math.round(num($('#cf-cspcs').value)) : null;
+  }
   Object.assign(row, jewelRow(F.j || {}));
   const btn = $('#cf-save'); const label = btn.textContent;
   btn.disabled = true; btn.textContent = 'Saving…';
@@ -371,7 +411,8 @@ function deleteCatItem(id) {
     const it = await fetchCatItem(id);
     const { error } = await db.from('catalogue_items').delete().eq('id', id);
     if (error) { toast('Could not delete — only the owner can delete designs.', 'err'); return; }
-    if (it && it.photo_paths && it.photo_paths.length) db.storage.from('catalogue').remove(it.photo_paths);
+    const files = ((it && it.photo_paths) || []).concat(it && it.tag_photo_path ? [it.tag_photo_path] : []);
+    if (files.length) db.storage.from('catalogue').remove(files);
     toast('Design deleted', 'ok');
     backOne();
   }, true);
@@ -380,7 +421,7 @@ function deleteCatItem(id) {
 /* ---------------- pick pieces for an order ---------------- */
 function openCatPicker() {
   S.catPick = { q: '', sel: new Set(), items: [] };
-  showSub('Pick from catalogue', renderCatPicker);
+  showSub(S.dbv18 ? 'Pick from stock' : 'Pick from catalogue', renderCatPicker);
 }
 function renderCatPicker() {
   $('#content').innerHTML =
@@ -400,7 +441,8 @@ function updatePickBar() {
   const n = S.catPick.sel.size;
   if (b) b.textContent = !n ? 'Tap pieces to select them'
     : S.catPick.mode === 'stock' ? 'Make a link with ' + n + ' piece' + (n === 1 ? '' : 's')   // a ready-stock link (inbox.js)
-      : 'Add ' + n + ' piece' + (n === 1 ? '' : 's') + ' to the order';
+      : S.catPick.mode === 'bill' ? 'Add ' + n + ' piece' + (n === 1 ? '' : 's') + ' to the bill'   // bills.js
+        : 'Add ' + n + ' piece' + (n === 1 ? '' : 's') + ' to the order';
 }
 function catToItem(c) {
   return Object.assign(blankItem(), jewelForm(c), {
@@ -428,6 +470,7 @@ function addCatItemsToOrder(list) {
 }
 function catPickDone() {
   if (S.catPick.mode === 'stock' && typeof stockPicked === 'function') { stockPicked(); return; }
+  if (S.catPick.mode === 'bill' && typeof billPicked === 'function') { billPicked(); return; }
   if (!S.catPick.sel.size) { toast('Tap the pieces you want first.', 'err'); return; }
   const chosen = S.catPick.items.filter((i) => S.catPick.sel.has(i.id));
   addCatItemsToOrder(chosen);
@@ -459,12 +502,12 @@ async function exportCatalogueData(pName, today) {
   const rows = await fetchAll('catalogue_items', 'created_at');
   await new Promise((r) => setTimeout(r, 450));
   downloadFile('bj-catalogue-' + today + '.csv', buildCsv(
-    ['Tag no', 'Piece', 'Design name', 'Description', 'Metal', 'Purity', 'Colour / finish', 'Gross wt (g)', 'Net wt (g)', 'Diamonds / stones', 'Carats', 'Diamond pcs',
+    ['Tag no / design no', 'Piece', 'Design name', 'Description', 'Metal', 'Purity', 'Colour / finish', 'Gross wt (g)', 'Net wt (g)', 'Diamonds / stones', 'Carats', 'Diamond pcs',
       'Diamond quality', 'Diamond certificate', 'Diamond cert no', 'Jewellery certificate', 'Jewellery cert / HUID no',
-      'Other stones', 'Status', 'Photos', 'Notes', 'Added by', 'Added on'],
-    rows.map((c) => [c.tag_no, c.category, c.title, c.description, c.metal, c.purity, c.metal_color, c.gross_wt, c.net_wt, diamondLabel(c.diamond_type), c.diamond_ct, c.diamond_pcs,
+      'Other stones', 'Colour stone ct', 'Colour stone pcs', 'Status', 'Photos', 'Notes', 'Added by', 'Added on'],
+    rows.map((c) => [[c.tag_no, c.design_no].filter(Boolean).join(' / '), c.category, c.title, c.description, c.metal, c.purity, c.metal_color, c.gross_wt, c.net_wt, diamondLabel(c.diamond_type), c.diamond_ct, c.diamond_pcs,
       c.diamond_quality, c.diamond_type ? (c.diamond_cert_lab || 'Not certified') : '', c.diamond_cert_no, c.jewel_cert_type || '', c.jewel_cert_no,
-      c.stone_details,
+      c.stone_details, c.cs_ct, c.cs_pcs,
       CAT_STATUS_LABEL[c.status] || c.status, (c.photo_paths || []).length, c.notes, pName.get(c.created_by) || '', fmtExp(c.created_at)])));
 }
 
@@ -478,6 +521,11 @@ onAct('cat-photo-del', (el) => { const p = S.catForm.photos.splice(+el.dataset.i
 onAct('cat-share', (el) => shareCatItem(el.dataset.id));
 onAct('cat-status', (el) => setCatStatus(el.dataset.id, el.dataset.s));
 onAct('cat-delete', (el) => deleteCatItem(el.dataset.id));
+onAct('cat-sell', async (el) => {
+  const it = S.catItem && S.catItem.id === el.dataset.id ? S.catItem : await fetchCatItem(el.dataset.id);
+  if (!it) return;
+  pickClientThen('Sell · quotation · approval — choose the shop', (c) => startBill(c, { kind: 'sale', pieces: [it], replace: true }));
+});
 onAct('cat-add-order', async (el) => {
   const it = S.catItem && S.catItem.id === el.dataset.id ? S.catItem : await fetchCatItem(el.dataset.id);
   if (!it) return;

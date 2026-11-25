@@ -54,6 +54,7 @@ function memoItemHTML(m, showClient) {
 function newApprovalForm(client) { return { client, return_by: todayStr(7), notes: '', items: [newApprovalPiece()] }; }
 function newApprovalPiece() { return { description: '', design_code: '', qty: '1', net_wt: '', photo: null }; }
 function startApproval(client) {
+  if (typeof billsOn === 'function' && billsOn()) { startBill(client, { kind: 'approval', replace: true }); return; }   // pieces from the stock (update 18)
   S.apForm = newApprovalForm(client);
   showSub('Pieces on approval', renderApprovalForm, true);
 }
@@ -163,21 +164,54 @@ function renderApprovalPage(m) {
     '<button class="btn btn-secondary" data-action="ap-pdf" data-id="' + m.id + '">Memo (PDF)</button>' +
     '</div>' +
     (out > 1 ? '<button class="btn btn-small btn-secondary" data-action="ap-all" data-id="' + m.id + '" data-s="returned" style="margin:0 0 10px">↩ All came back</button>' : '') +
+    (soldToBill(m).length && typeof billsOn === 'function' && billsOn() ? '<button class="btn btn-primary" data-action="ap-bill" data-id="' + m.id + '" style="margin:0 0 10px">🧾 Make the sale bill (' +
+      (soldToBill(m).length === 1 ? '1 piece sold' : soldToBill(m).length + ' pieces sold') + ')</button>' : '') +
     '<div class="section-label">Pieces (' + items.length + ')</div>' +
     items.map((it) => '<div class="card ap-item' + (it.status !== 'out' ? ' closed' : '') + '">' +
-      (it.photo_path ? '<img class="ap-img" data-app="' + esc(it.photo_path) + '" alt="">' : '') +
-      '<div class="ap-body"><div class="o-item-title">' + esc(it.description) + (it.design_code ? ' <span class="o-tag">' + esc(it.design_code) + '</span>' : '') + '</div>' +
-      '<div class="o-item-meta">' + esc([it.qty > 1 ? it.qty + ' pcs' : '', it.net_wt != null ? 'Net ' + grams(it.net_wt) : ''].filter(Boolean).join(' · ')) + '</div>' +
-      '<div class="ap-st">' + chipAppr(it.status) + (it.closed_on && it.status !== 'out' ? '<span class="hint">' + esc(fmtD(it.closed_on)) + '</span>' : '') + '</div>' +
+      (it.photo_path ? '<img class="ap-img" data-app="' + esc(it.photo_path) + '" alt="">' : it.catalogue_id ? '<img class="ap-img" data-apcat="' + it.catalogue_id + '" alt="">' : '') +
+      '<div class="ap-body"><div class="o-item-title">' + (it.catalogue_id ? '<a href="#" data-action="cat-open" data-id="' + it.catalogue_id + '">' + esc(it.description) + ' ›</a>' : esc(it.description)) +
+      (it.design_code ? ' <span class="o-tag">' + esc(it.design_code) + '</span>' : '') + '</div>' +
+      '<div class="o-item-meta">' + esc([it.qty > 1 ? it.qty + ' pcs' : '', it.gross_wt != null ? 'Gross ' + grams(it.gross_wt) : '', it.net_wt != null ? 'Net ' + grams(it.net_wt) : '',
+        num(it.dia_ct) ? 'Dia ' + carats(it.dia_ct) + (it.dia_pcs ? '/' + it.dia_pcs : '') : ''].filter(Boolean).join(' · ')) + '</div>' +
+      '<div class="ap-st">' + chipAppr(it.status) + (it.closed_on && it.status !== 'out' ? '<span class="hint">' + esc(fmtD(it.closed_on)) + '</span>' : '') +
+      (it.bill_id ? '<a href="#" class="ap-billed" data-action="bl-open" data-id="' + it.bill_id + '" data-apbill="' + it.bill_id + '">On the sale bill ›</a>' : '') + '</div>' +
       '<div class="photo-row">' + (it.status === 'out'
         ? '<button class="btn btn-small btn-primary" data-action="ap-item" data-id="' + it.id + '" data-s="sold">Sold</button>' +
           '<button class="btn btn-small btn-secondary" data-action="ap-item" data-id="' + it.id + '" data-s="returned">Returned</button>'
-        : '<button class="btn btn-small btn-ghost" data-action="ap-item" data-id="' + it.id + '" data-s="out">Undo</button>') + '</div>' +
+        : it.bill_id ? '' : '<button class="btn btn-small btn-ghost" data-action="ap-item" data-id="' + it.id + '" data-s="out">Undo</button>') + '</div>' +
       '</div></div>').join('') +
     (m.notes ? '<div class="section-label">Note</div><div class="card" style="white-space:pre-wrap;font-size:14.5px">' + esc(m.notes) + '</div>' : '') +
     '<div style="display:flex;gap:10px;justify-content:center;margin:18px 0 6px"><button class="btn btn-small btn-danger-ghost" data-action="ap-del" data-id="' + m.id + '">Delete memo</button></div>';
   const ps = items.map((it) => it.photo_path).filter(Boolean);
   if (ps.length) signedUrls('orders', ps).then((mm) => { document.querySelectorAll('img[data-app]').forEach((im) => { const u = mm.get(im.dataset.app); if (u) im.src = u; }); });
+  fillMemoStock(items);
+}
+/* pieces from the stock: their photo, and the bill they went on (update 18) */
+async function fillMemoStock(items) {
+  const cat = items.map((it) => it.catalogue_id).filter(Boolean);
+  if (cat.length) {
+    const { data } = await db.from('catalogue_items').select('id, photo_paths').in('id', cat);
+    const first = new Map((data || []).filter((c) => (c.photo_paths || [])[0]).map((c) => [c.id, c.photo_paths[0]]));
+    const urls = await signedUrls('catalogue', Array.from(first.values()));
+    document.querySelectorAll('img[data-apcat]').forEach((im) => { const u = urls.get(first.get(im.dataset.apcat)); if (u) im.src = u; else im.remove(); });
+  }
+  const bills = Array.from(new Set(items.map((it) => it.bill_id).filter(Boolean)));
+  if (bills.length && typeof billNo === 'function') {
+    const { data } = await db.from('bills').select('id, kind, bill_no').in('id', bills);
+    (data || []).forEach((b) => document.querySelectorAll('[data-apbill="' + b.id + '"]').forEach((a) => { a.textContent = 'On ' + billNo(b) + ' ›'; }));
+  }
+}
+/* stock pieces the shop kept that are not on a bill yet */
+function soldToBill(m) { return (m.approval_items || []).filter((it) => it.status === 'sold' && it.catalogue_id && !it.bill_id); }
+async function memoToBill(id) {
+  const m = S.apPage && S.apPage.id === id ? S.apPage : await fetchApproval(id);
+  if (!m) return;
+  const ids = soldToBill(m).map((it) => it.catalogue_id);
+  if (!ids.length) return;
+  const { data } = await db.from('catalogue_items').select('*').in('id', ids);
+  const rows = ids.map((x) => (data || []).find((c) => c.id === x)).filter(Boolean);
+  const cl = m.clients || {};
+  startBill({ id: m.client_id, trade_name: cl.trade_name, city: cl.city }, { kind: 'sale', pieces: rows, from_memo: m.id });
 }
 
 async function setPieceStatus(itemId, s) {
@@ -186,8 +220,11 @@ async function setPieceStatus(itemId, s) {
   if (!it) return;
   const patch = s === 'out' ? { status: 'out', closed_on: null, closed_by: null } : { status: s, closed_on: todayStr(), closed_by: S.me.id };
   const { data, error } = await db.from('approval_items').update(patch).eq('id', itemId).eq('status', it.status).select('id');
-  if (error || !data || !data.length) { toast('Could not update — open the memo again.', 'err'); openApproval(m.id, true); return; }
-  toast(s === 'out' ? 'Back with the shop' : (s === 'sold' ? 'Marked sold ✓' : 'Marked returned ✓'), 'ok');
+  if (error || !data || !data.length) {
+    toast(error && /sale bill/.test(error.message || '') ? 'This piece is on a sale bill — cancel the bill first.' : 'Could not update — open the memo again.', 'err');
+    openApproval(m.id, true); return;
+  }
+  toast(s === 'out' ? 'Back with the shop' : (s === 'sold' ? (it.catalogue_id && typeof billsOn === 'function' && billsOn() ? 'Marked sold ✓ — make the sale bill from the button at the top' : 'Marked sold ✓') : 'Marked returned ✓'), 'ok');
   openApproval(m.id, true);
 }
 async function setAllPieces(memoId, s) {
@@ -234,18 +271,35 @@ async function buildApprovalPdf(id) {
   if (m.return_by) meta.push(['Back by', pDate(m.return_by)]);
   const d = await pdfStart('APPROVAL MEMO', meta, 'Goods sent on approval - not a sale');
   d.y = pParty(d, PM, d.y, PG_W - PM * 2, 'GIVEN TO', clientLines(cl)) + 3;
-  const cols = [{ h: '#', w: 7 }, { h: 'Piece', w: 0 }, { h: 'Tag / design', w: 28 }, { h: 'Qty', w: 12, a: 'right' }, { h: 'Net wt (g)', w: 22, a: 'right' }, { h: 'Status', w: 26 }];
+  const stock = items.some((it) => it.catalogue_id || it.gross_wt != null || num(it.dia_ct));
+  const cols = stock
+    ? [{ h: '#', w: 7 }, { h: 'Piece', w: 0 }, { h: 'Tag no.', w: 25 }, { h: 'Gross (g)', w: 18, a: 'right' }, { h: 'Net (g)', w: 18, a: 'right' }, { h: 'Dia ct/pcs', w: 20, a: 'right' }, { h: 'Status', w: 24 }]
+    : [{ h: '#', w: 7 }, { h: 'Piece', w: 0 }, { h: 'Tag / design', w: 28 }, { h: 'Qty', w: 12, a: 'right' }, { h: 'Net wt (g)', w: 22, a: 'right' }, { h: 'Status', w: 26 }];
   cols[1].w = PG_W - PM * 2 - cols.reduce((a, x) => a + x.w, 0);
-  let q = 0, n = 0;
-  const rows = items.map((it, i) => { q += it.qty || 1; n += num(it.net_wt); return [String(i + 1), it.description, it.design_code || '', String(it.qty || 1), it.net_wt != null ? pG(it.net_wt) : '', APPR_LABEL[it.status] + (it.closed_on && it.status !== 'out' ? ' ' + pDate(it.closed_on) : '')]; });
-  const tot = ['', 'Total', '', String(q), n ? pG(n) : '', ''];
+  let q = 0, n = 0, g = 0, dc = 0, dp = 0;
+  const st = (it) => APPR_LABEL[it.status] + (it.closed_on && it.status !== 'out' ? ' ' + pDate(it.closed_on) : '');
+  const rows = items.map((it, i) => {
+    q += it.qty || 1; n += num(it.net_wt); g += num(it.gross_wt); dc += num(it.dia_ct); dp += num(it.dia_pcs);
+    return stock ? [String(i + 1), it.description, it.design_code || '', it.gross_wt != null ? pG(it.gross_wt) : '', it.net_wt != null ? pG(it.net_wt) : '',
+      num(it.dia_ct) ? num(it.dia_ct).toFixed(3) + '/' + (it.dia_pcs || 0) : '', st(it)]
+      : [String(i + 1), it.description, it.design_code || '', String(it.qty || 1), it.net_wt != null ? pG(it.net_wt) : '', st(it)];
+  });
+  const tot = stock ? ['', 'Total (' + items.length + ')', '', g ? pG(g) : '', n ? pG(n) : '', dc ? dc.toFixed(3) + '/' + dp : '', ''] : ['', 'Total', '', String(q), n ? pG(n) : '', ''];
   tot.bold = true;
   rows.push(tot);
   d.table(cols, rows);
   pNote(d, '', 'The above goods are given on approval and remain our property until they are paid for. Please return the pieces not kept' + (m.return_by ? ' by ' + pDate(m.return_by) : '') + '.');
   pNote(d, 'NOTE', m.notes);
   const urls = await signedUrls('orders', items.map((it) => it.photo_path).filter(Boolean));
-  await pPhotos(d, items.map((it) => ({ category: it.description, design_code: it.design_code })), items.map((it) => (it.photo_path ? urls.get(it.photo_path) || null : null)));
+  const catIds = items.filter((it) => !it.photo_path && it.catalogue_id).map((it) => it.catalogue_id);
+  let catFirst = new Map(), catUrls = new Map();
+  if (catIds.length) {
+    const { data } = await db.from('catalogue_items').select('id, photo_paths').in('id', catIds);
+    catFirst = new Map((data || []).filter((c) => (c.photo_paths || [])[0]).map((c) => [c.id, c.photo_paths[0]]));
+    catUrls = await signedUrls('catalogue', Array.from(catFirst.values()));
+  }
+  await pPhotos(d, items.map((it) => ({ category: it.description, design_code: it.design_code })),
+    items.map((it) => (it.photo_path ? urls.get(it.photo_path) || null : it.catalogue_id && catFirst.get(it.catalogue_id) ? catUrls.get(catFirst.get(it.catalogue_id)) || null : null)));
   pSignatures(d, 'Received the above goods on approval - signature, name and date');
   return { pdf: d, name: safeFileName(appNo(m.memo_no) + ' ' + (cl.trade_name || '') + ' - Approval memo') + '.pdf', text: 'Approval memo ' + appNo(m.memo_no) + ' from ' + bizName() };
 }
@@ -273,7 +327,14 @@ async function loadClientApprovals(cl) {
 
 onAct('ap-list', () => showSub('Pieces on approval', renderApprovals));
 onAct('ap-new', () => pickClientThen('On approval — choose the shop', (c) => startApproval(c)));
-onAct('ap-new-for', async (el) => { const c = await fetchClient(el.dataset.id); if (c) { S.apForm = newApprovalForm(c); showSub('Pieces on approval', renderApprovalForm); } });
+onAct('ap-new-for', async (el) => {
+  const c = await fetchClient(el.dataset.id);
+  if (!c) return;
+  if (typeof billsOn === 'function' && billsOn()) { startBill(c, { kind: 'approval' }); return; }   // pieces from the stock (update 18)
+  S.apForm = newApprovalForm(c); showSub('Pieces on approval', renderApprovalForm);
+});
+onAct('ap-manual', async (el) => { const c = await fetchClient(el.dataset.id); if (c) { S.bf = null; S.apForm = newApprovalForm(c); showSub('Pieces on approval', renderApprovalForm, true); } });
+onAct('ap-bill', (el) => memoToBill(el.dataset.id));
 onAct('ap-show', (el) => { S.apl.show = el.dataset.v; document.querySelectorAll('[data-action="ap-show"]').forEach((b) => b.classList.toggle('on', b === el)); loadApprovalList(); });
 onAct('ap-open', (el) => openApproval(el.dataset.id));
 onAct('ap-item', (el) => setPieceStatus(el.dataset.id, el.dataset.s));

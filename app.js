@@ -238,7 +238,7 @@ function tabsHTML() {
   return '<button data-action="tab" data-tab="today">' + IC.today + '<span>Today</span></button>' +
     '<button data-action="tab" data-tab="find">' + IC.find + '<span>Clients</span></button>' +
     (typeof renderOrders === 'function' ? '<button data-action="tab" data-tab="orders">' + ORD_ICON + '<span>Orders</span></button>' : '') +
-    (typeof renderCatalogue === 'function' && appOn('catalogue') ? '<button data-action="tab" data-tab="catalogue">' + CAT_ICON + '<span>Catalogue</span></button>'
+    (typeof renderCatalogue === 'function' && appOn('catalogue') ? '<button data-action="tab" data-tab="catalogue">' + CAT_ICON + '<span>Stock</span></button>'
       : typeof renderBoard === 'function' ? '<button data-action="tab" data-tab="board">' + BOARD_ICON + '<span>Board</span></button>' : '') +
     (S.me && S.me.role === 'owner' ? '<button data-action="tab" data-tab="report">' + IC.chart + '<span>Report</span></button>' : '') +
     '<button data-action="tab" data-tab="more">' + IC.more + '<span>More</span></button>';
@@ -1221,6 +1221,7 @@ async function openClient(id, replace) {
     if (typeof loadClientOrders === 'function') loadClientOrders(cl);
     if (typeof loadClientRepairs === 'function') loadClientRepairs(cl);
     if (typeof loadClientApprovals === 'function') loadClientApprovals(cl);
+    if (typeof loadClientBills === 'function') loadClientBills(cl);
     if (typeof loadClientCredit === 'function') loadClientCredit(cl);
     if (typeof loadClientPicks === 'function') loadClientPicks(cl);
     if (typeof loadClientInbox === 'function') loadClientInbox(cl);
@@ -1279,6 +1280,7 @@ function renderClientPage(cl) {
     '<div id="client-orders"></div>' +
     '<div id="client-repairs"></div>' +
     '<div id="client-approvals"></div>' +
+    '<div id="client-bills"></div>' +
     '<div id="client-history"><div class="empty">Loading history…</div></div>' +
     (canDeleteClients() ? '<div class="cl-del-row">' +
       (typeof mergeOn === 'function' && mergeOn() ? '<button class="btn btn-small btn-ghost" data-action="cl-merge" data-id="' + cl.id + '">Merge with another client</button>' : '') +
@@ -1833,6 +1835,7 @@ async function exportAllData() {
     const extra = [
       ['orders', 2, typeof exportOrdersData === 'function' ? () => exportOrdersData(pName, cName, today) : null],
       ['catalogue', 1, typeof exportCatalogueData === 'function' ? () => exportCatalogueData(pName, today) : null],
+      ['bills', 3, typeof exportBillsData === 'function' && S.dbv18 ? () => exportBillsData(pName, cName, today) : null],
       ['karigars', 1, typeof exportKarigarData === 'function' ? () => exportKarigarData(pName, today) : null],
       ['vendors', 2, typeof exportVendorData === 'function' && S.dbv6 ? () => exportVendorData(pName, today) : null],
       ['client notes', 1, typeof exportNotesData === 'function' && S.dbv6 ? () => exportNotesData(pName, cName, today) : null],
@@ -1889,6 +1892,8 @@ async function renderMore() {
     (typeof renderVendors === 'function' && appOn('vendors') ? mrow('v-list', '🏭', 'Vendors', 'Who makes your orders · diamonds to give them') : '') +
     (typeof renderKarigars === 'function' && appOn('karigars') ? mrow('k-list', '🔨', 'Karigars', 'Metal given and received back') : '') +
     (typeof repairsOn === 'function' && repairsOn() ? mrow('rp-list', '🔧', 'Repairs', 'Pieces shops send back — resize, polish, repair') : '') +
+    (typeof billsOn === 'function' && billsOn() ? mrow('bl-list', '🧾', 'Ready-stock bills', 'Sale bills and quotations for pieces from your stock') +
+      mrow('dues-bills', '🪙', 'To collect', 'Money and raw gold each shop still owes for its bills') : '') +
     (typeof approvalsOn === 'function' && approvalsOn() ? mrow('ap-list', '💎', 'Pieces on approval', 'Given to shops to show their customers · sold or returned') : '') +
     (typeof campaignsOn === 'function' && campaignsOn() ? mrow('camp-open-list', '📣', 'Messages to shops', 'New designs or an offer to many shops on WhatsApp') : '') +
     (typeof designOn === 'function' && designOn() ? mrow('dr-open', '📥', 'Designs from shops', 'Photos of designs shops want made · the link for any shop') : '') +
