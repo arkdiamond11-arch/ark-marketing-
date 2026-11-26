@@ -1357,3 +1357,31 @@ input.sw:disabled { cursor: default; }
 }
 #bf-rate-hint { margin: -6px 0 12px; }
 #bf-rate-hint:empty { display: none; }
+
+/* ---------- v29: gold rate, stock check, returns, cash, accounts ---------- */
+.gr-card { padding: 12px 14px; margin-bottom: 12px; }
+.gr-card[data-action] { cursor: pointer; }
+.gr-card.old { border: 1.5px dashed var(--gold); box-shadow: none; }
+.gr-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 14px; }
+.gr-h > span { font-weight: 700; }
+.gr-h > b { font-size: 13px; color: var(--maroon); flex: none; }
+.gr-v { margin-top: 4px; font-size: 14.5px; font-weight: 650; color: var(--ink); overflow-wrap: anywhere; }
+.gr-v.muted { color: var(--muted); font-weight: 500; }
+.cost-card { padding: 11px 14px; margin: 12px 0; cursor: pointer; border: 1.5px dashed var(--line); box-shadow: none; }
+.li-card { padding: 12px 14px; margin-bottom: 8px; cursor: pointer; }
+.li-card .li-title { font-weight: 750; }
+.li-card .li-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.rt-acts { display: flex; gap: 6px; flex: none; }
+.rt-acts .btn { width: auto; }
+.rc-item.closed { opacity: .6; }
+.rc-item[data-action] { cursor: pointer; }
+.cat-badge.st-hold { color: #92600a; }
+.tg-inc { font-size: 13px; font-weight: 650; color: var(--green); margin-top: 6px; }
+.sg-row { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; margin: 0 -2px 8px; scroll-snap-type: x proximity; }
+.sg-pc { flex: none; width: 116px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 3px; text-align: left; border: 1.5px solid var(--line); background: #fff;
+  border-radius: 12px; padding: 6px; cursor: pointer; font: inherit; color: inherit; }
+.sg-pc.on { border-color: var(--maroon); background: var(--maroon-soft); }
+.sg-pc img, .sg-pc .cat-noimg { width: 100%; height: 92px; object-fit: cover; border-radius: 8px; background: #f3efe9; display: flex; align-items: center; justify-content: center; font-size: 30px; }
+.sg-pc b { font-size: 12.5px; overflow-wrap: anywhere; }
+.sg-pc span { font-size: 11.5px; color: var(--muted); }
+.st-cost input::placeholder { font-size: 12.5px; }

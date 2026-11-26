@@ -131,6 +131,8 @@ async function startBill(client, opt) {
   else {
     r = ratesFrom(billDefaults() || await lastBillRates());   // today's rates: the last ones used
     r.gold_mode = await lastShopMode(client.id);               // money or raw gold: as this shop paid last time
+    const t = typeof loadTodayRate === 'function' ? await loadTodayRate() : null;   // the owner's rate of the day (update 19)
+    if (t && num(t.r24) > 0) { r.gold_rate = String(num(t.r24)); if (num(t.silver) > 0) r.silver_rate = String(num(t.silver)); }
   }
   S.bf = {
     id: opt.edit && opt.bill ? opt.bill.id : null, billNo: opt.edit && opt.bill ? billNo(opt.bill) : null,
@@ -377,6 +379,14 @@ async function saveBill() {
     from_bill: F.from_bill, from_memo: F.from_memo,
     lines: F.pieces.map((x) => ({ catalogue_id: x.id, dia_rate: n(x.dia_rate), labour_rate: n(x.labour_rate) })),
   };
+  if (F.kind === 'sale' && !F.creditOk && typeof billCreditCheck === 'function') {
+    const warn = await billCreditCheck(F.client.id, T.totalP, F.id);
+    if (warn) {
+      if (btn) btn.disabled = false;
+      confirmModal('Check before saving', warn, 'Save anyway', () => { if (S.bf === F) { F.creditOk = true; saveBill(); } });
+      return;
+    }
+  }
   const { data, error } = await db.rpc('bill_save', { p });
   if (error || !data) { fail(rpcMsg(error)); return; }
   if (data.total_amt != null && Math.round(num(data.total_amt) * 100) !== T.totalP) console.warn('bill total differs', data.total_amt, T.totalP);
@@ -417,8 +427,19 @@ async function clientLedger(clientId) {
   const bills = bs.data || [], receipts = rs.data || [];
   const sales = bills.filter((b) => b.kind === 'sale' && b.status === 'open');
   const per = new Map();
-  sales.forEach((b) => per.set(b.id, { dueP: Math.round(num(b.total_amt) * 100), paidP: 0, dueM: b.gold_mode === 'metal' ? Math.round(num(b.fine_due_g) * 1000) : 0, paidM: 0 }));
+  sales.forEach((b) => per.set(b.id, { dueP: Math.round(num(b.total_amt) * 100), paidP: 0, dueM: b.gold_mode === 'metal' ? Math.round(num(b.fine_due_g) * 1000) : 0, paidM: 0, retP: 0, retM: 0 }));
   let poolP = 0, poolM = 0;
+  // returns (credit notes, update 19) take their amount off their own bill first
+  let returns = [];
+  if (S.dbv19) {
+    const { data } = await db.from('bill_returns').select('*').eq('client_id', clientId).eq('status', 'open').limit(2000);
+    returns = (data || []).filter((r) => per.has(r.bill_id));
+    returns.forEach((r) => {
+      const x = per.get(r.bill_id), a = Math.round(num(r.money_amt) * 100), m = Math.round(num(r.fine_g) * 1000);
+      const tP = Math.min(a, Math.max(0, x.dueP - x.paidP)); x.paidP += tP; x.retP += tP; poolP += a - tP;
+      const tM = Math.min(m, Math.max(0, x.dueM - x.paidM)); x.paidM += tM; x.retM += tM; poolM += m - tM;
+    });
+  }
   receipts.forEach((r) => {
     const x = r.bill_id ? per.get(r.bill_id) : null;
     if (r.kind === 'money') {
@@ -437,7 +458,8 @@ async function clientLedger(clientId) {
   const sumP = sales.reduce((s, b) => s + per.get(b.id).dueP, 0), sumM = sales.reduce((s, b) => s + per.get(b.id).dueM, 0);
   const inP = receipts.filter((r) => r.kind === 'money').reduce((s, r) => s + Math.round(num(r.amount) * 100), 0);
   const inM = receipts.filter((r) => r.kind !== 'money').reduce((s, r) => s + Math.round(num(r.fine_g) * 1000), 0);
-  return { bills, receipts, per, moneyDueP: sumP - inP, goldDueM: sumM - inM };
+  const rtP = returns.reduce((s, r) => s + Math.round(num(r.money_amt) * 100), 0), rtM = returns.reduce((s, r) => s + Math.round(num(r.fine_g) * 1000), 0);
+  return { bills, receipts, returns, per, moneyDueP: sumP - inP - rtP, goldDueM: sumM - inM - rtM };
 }
 function billPayState(b, x) {
   if (b.kind !== 'sale') return null;
@@ -490,6 +512,7 @@ function renderBillPage(got) {
     '<button class="btn btn-secondary" data-action="bl-wa" data-id="' + b.id + '">WhatsApp</button></div>' +
     (sale && open ? '<div class="action-row"><button class="btn btn-primary" data-action="rc-new" data-kind="money" data-client="' + b.client_id + '" data-bill="' + b.id + '">＋ Money received</button>' +
       (metal ? '<button class="btn btn-primary" data-action="rc-new" data-kind="metal" data-client="' + b.client_id + '" data-bill="' + b.id + '">＋ Gold received</button>' : '') + '</div>' : '') +
+    (sale && open && S.dbv19 && lines.some((l) => !l.return_id) ? '<div class="action-row"><button class="btn btn-secondary" data-action="rt-new" data-id="' + b.id + '">↩ Pieces came back</button></div>' : '') +
     (!sale && open ? '<div class="action-row"><button class="btn btn-primary" data-action="bl-convert" data-id="' + b.id + '">Make sale bill</button>' +
       '<button class="btn btn-secondary" data-action="bl-appr" data-id="' + b.id + '">Give on approval</button></div>' : '') +
     (b.from_bill ? '<div class="notice">Made from a quotation — <a href="#" data-action="bl-open" data-id="' + b.from_bill + '">open it ›</a></div>' : '') +
@@ -499,12 +522,12 @@ function renderBillPage(got) {
       '<div class="bf-pc-b"><div class="bf-pc-t">' + (l.catalogue_id ? '<a href="#" data-action="cat-open" data-id="' + l.catalogue_id + '">' + esc(pieceTitle(l)) + ' ›</a>' : esc(pieceTitle(l) + (l.description ? ' · ' + l.description : ''))) + '</div>' +
       '<div class="bf-pc-w">' + esc(pieceWeights({ category: l.category, purity: l.purity, gross_wt: l.gross_wt, net_wt: l.net_wt, diamond_ct: l.dia_ct, diamond_pcs: l.dia_pcs, cs_ct: l.cs_ct, cs_pcs: l.cs_pcs }) + (l.qty > 1 ? ' · ' + l.qty + ' pcs' : '')) + '</div>' +
       '<div class="bf-pc-w muted">' + esc([num(l.fine_g) ? grams(l.fine_g) + ' fine' + (l.touch_pct != null ? ' (' + num(l.touch_pct) + '%)' : '') : '', num(l.dia_amt) && l.dia_rate != null ? 'Dia ₹ ' + num(l.dia_rate).toLocaleString('en-IN') + '/ct' : ''].filter(Boolean).join(' · ')) + '</div>' +
-      '<div class="bf-pc-amt">' + inrNum(l.line_amt) + '</div></div></div>').join('') +
+      '<div class="bf-pc-amt">' + inrNum(l.line_amt) + (l.return_id ? ' <span class="chip bl-st-cancelled">Returned</span>' : '') + '</div></div></div>').join('') +
     '<div class="section-label">' + esc(sale ? 'Bill' : 'Quotation') + '</div><div class="card bf-total">' +
     '<div class="bf-rates">' + esc([num(b.gold_rate) ? 'Gold ₹ ' + num(b.gold_rate).toLocaleString('en-IN') + '/g (24K)' : '', num(b.wastage_pct) ? 'wastage ' + num(b.wastage_pct) + '%' : '',
       num(b.dia_rate) ? 'Dia ₹ ' + num(b.dia_rate).toLocaleString('en-IN') + '/ct' : '', num(b.labour_rate) ? 'Labour ₹ ' + num(b.labour_rate).toLocaleString('en-IN') + ' ' + (LABOUR_ON.find((x) => x[0] === b.labour_on) || LABOUR_ON[0])[1] : ''].filter(Boolean).join(' · ')) + '</div>' +
     totals.join('') + '</div>' +
-    (sale ? '<div id="bl-settle"></div>' : '') +
+    (sale ? '<div id="bl-settle"></div><div id="bl-returns"></div>' : '') +
     (b.notes ? '<div class="section-label">Note</div><div class="card" style="white-space:pre-wrap;font-size:14.5px">' + esc(b.notes) + '</div>' : '') +
     '<div class="bl-made">' + esc('Made by ' + nameOf(b.created_by) + ' · ' + fmtD(b.created_at)) + (b.closed_at && b.status !== 'open' ? esc(' · ' + BILL_STATUS[b.status] + ' ' + fmtD(b.closed_at)) : '') + '</div>' +
     '<div class="bl-foot">' +
@@ -514,6 +537,7 @@ function renderBillPage(got) {
     (sale && open && mine ? '<button class="btn btn-small btn-danger-ghost" data-action="bl-close" data-id="' + b.id + '" data-s="cancelled">Cancel bill</button>' : '') + '</div>';
   fillCatImages($('#content'));
   if (sale) loadBillSettle(b);
+  if (sale && typeof loadBillReturns === 'function') loadBillReturns(b);
   if (b.status === 'converted') {
     db.from('bills').select('id, kind, bill_no').eq('from_bill', b.id).limit(1).then(({ data }) => {
       const el = $('#bl-next');
@@ -533,8 +557,10 @@ async function loadBillSettle(b) {
   const mine = L.receipts.filter((r) => r.bill_id === b.id);
   const row = (k, val, cls) => '<div class="bf-row' + (cls ? ' ' + cls : '') + '"><span>' + k + '</span><b>' + val + '</b></div>';
   box.innerHTML = '<div class="section-label">Payment</div><div class="card bf-total">' +
-    row('Money', inr(x.dueP)) + row('Received', inr(x.paidP)) + row('Still to receive', inr(Math.max(0, x.dueP - x.paidP)), x.dueP - x.paidP > 0 ? 'tot due' : 'tot') +
-    (x.dueM ? row('Raw gold (fine)', gM(x.dueM)) + row('Received', gM(x.paidM)) + row('Still to receive', gM(Math.max(0, x.dueM - x.paidM)), x.dueM - x.paidM > 0 ? 'tot due gold' : 'tot gold') : '') +
+    row('Money', inr(x.dueP)) + (x.retP ? row('Returned', inr(x.retP)) : '') + row('Received', inr(x.paidP - x.retP)) +
+    row('Still to receive', inr(Math.max(0, x.dueP - x.paidP)), x.dueP - x.paidP > 0 ? 'tot due' : 'tot') +
+    (x.dueM ? row('Raw gold (fine)', gM(x.dueM)) + (x.retM ? row('Returned', gM(x.retM)) : '') + row('Received', gM(x.paidM - x.retM)) +
+      row('Still to receive', gM(Math.max(0, x.dueM - x.paidM)), x.dueM - x.paidM > 0 ? 'tot due gold' : 'tot gold') : '') +
     '<div class="hint">Payments against this bill count here first; payments the shop made without a bill count against its oldest bills.</div></div>' +
     (mine.length ? '<div class="section-label">Received against this bill</div>' + mine.map(receiptHTML).join('') : '');
 }
@@ -570,6 +596,7 @@ async function quoteToApproval(id) {
   await startBill({ id: got.b.client_id, trade_name: cl.trade_name, city: cl.city }, { kind: 'approval', pieces: rows });
 }
 async function editBill(id) {
+  if (S.billPage && S.billPage.b.id === id && S.billPage.lines.some((l) => l.return_id)) { toast('A return is recorded against this bill — it cannot be changed.', 'err'); return; }
   const got = S.billPage && S.billPage.b.id === id ? S.billPage : await fetchBill(id);
   if (!got) return;
   const ids = got.lines.map((l) => l.catalogue_id).filter(Boolean);
@@ -746,6 +773,7 @@ async function loadClientBills(cl) {
       '<div><b class="' + (moneyDue > 0 ? 'o-red' : '') + '">' + inr(Math.abs(moneyDue)) + '</b><span>' + (moneyDue >= 0 ? 'Money to receive' : 'Paid in advance') + '</span></div>' +
       (goldDue || L.receipts.some((r) => r.kind !== 'money') ? '<div><b class="' + (goldDue > 0 ? 'o-red' : '') + '">' + gM(Math.abs(goldDue)) + '</b><span>' + (goldDue >= 0 ? 'Fine gold to receive' : 'Shop\'s gold with us') + '</span></div>' : '') + '</div>' : '') +
     '<div class="o-more-acts"><button class="btn btn-small btn-secondary" data-action="bl-new-for" data-id="' + cl.id + '">🧾 Bill from stock</button>' +
+    (S.dbv19 && (sales.length || L.receipts.length) ? '<button class="btn btn-small btn-secondary" data-action="stm-new" data-id="' + cl.id + '">📄 Statement</button>' : '') +
     (sales.length ? '<button class="btn btn-small btn-secondary" data-action="rc-new" data-kind="money" data-client="' + cl.id + '">＋ Money received</button>' +
       '<button class="btn btn-small btn-secondary" data-action="rc-new" data-kind="metal" data-client="' + cl.id + '">＋ Gold received</button>' : '') + '</div>' +
     recent.map((b) => billItemHTML(b, false, billPayState(b, L.per.get(b.id)))).join('') +
@@ -782,6 +810,13 @@ async function exportBillsData(pName, cName, today) {
     ['Received on', 'Shop', 'Against bill', 'Kind', 'Amount', 'Paid by', 'Cheque / UTR no', 'Raw gold (g)', 'Purity %', 'Rate (per g fine)', 'Fine gold (g)', 'Note', 'Entered by', 'Entered on'],
     recs.map((r) => [r.received_on, shop(r.client_id), r.bill_id ? no.get(r.bill_id) || '' : 'On account', RK[r.kind] || r.kind, r.amount, r.mode ? payModeLabel(r.mode) : '', r.ref_no,
       r.metal_g, r.metal_purity, r.rate, r.fine_g, r.note, pName.get(r.created_by) || '', fmtExp(r.created_at)])));
+  if (!S.dbv19) return;
+  const rets = await fetchAll('bill_returns', 'created_at');
+  await new Promise((r) => setTimeout(r, 450));
+  downloadFile('bj-returns-' + today + '.csv', buildCsv(
+    ['Credit note', 'Date', 'Shop', 'Against bill', 'Pieces', 'Goods', 'Taxable', 'GST', 'Round off', 'Credit (money)', 'Credit (fine gold g)', 'Reason', 'Status', 'Made by', 'Made on'],
+    rets.map((r) => ['CN-' + String(r.return_no).padStart(4, '0'), r.return_date, shop(r.client_id), no.get(r.bill_id) || '', r.pieces, r.goods_amt, r.taxable_amt, r.gst_amt, r.round_off,
+      r.money_amt, r.fine_g, r.reason, r.status === 'open' ? 'Open' : 'Cancelled', pName.get(r.created_by) || '', fmtExp(r.created_at)])));
 }
 
 /* ---------------- WhatsApp and PDF ---------------- */

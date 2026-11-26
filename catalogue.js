@@ -27,6 +27,7 @@ async function renderCatalogue() {
     (tags ? '<button class="btn btn-primary" data-action="st-new">＋ Add stock</button><button class="btn btn-secondary" data-action="st-find">Find a piece</button>' +
       '<button class="btn btn-secondary" data-action="cat-new">＋ Design</button>' : '<button class="btn btn-primary" data-action="cat-new">＋ Add design</button>') +
     (typeof billsOn === 'function' && billsOn() ? '<button class="btn btn-secondary" data-action="bl-list">Bills</button>' : '') +
+    (typeof stock19On === 'function' && stock19On() ? '<button class="btn btn-secondary" data-action="sc-list">Stock check</button><button class="btn btn-secondary" data-action="old-stock">Old stock</button>' : '') +
     (typeof catStickers === 'function' ? '<button class="btn btn-secondary" data-action="cat-stickers">QR stickers</button>' : '') +
     (!tags && typeof qrScanOn === 'function' && qrScanOn() ? '<button class="btn btn-secondary" data-action="qr-scan">Scan QR</button>' : '') +
     (typeof stockOn === 'function' && stockOn() ? '<button class="btn btn-secondary" data-action="sl-new">Ready-stock link</button>' : '') + '</div>' +
@@ -90,7 +91,8 @@ async function loadCatGrid(sel, picking) {
     const on = picking && S.catPick.sel.has(it.id);
     return '<div class="cat-card' + (on ? ' picked' : '') + '" data-action="' + (picking ? 'cat-pick-toggle' : 'cat-open') + '" data-id="' + it.id + '">' +
       '<div class="cat-img">' + ((it.photo_paths || [])[0] ? '<img data-catimg="' + esc(it.photo_paths[0]) + '" alt="">' : '<span class="cat-noimg">💍</span>') +
-      (it.status !== 'available' ? '<span class="cat-badge st-' + esc(it.status) + '">' + esc(CAT_STATUS_LABEL[it.status] || it.status) + '</span>' : '') +
+      (it.status !== 'available' ? '<span class="cat-badge st-' + esc(it.status) + '">' + esc(CAT_STATUS_LABEL[it.status] || it.status) + '</span>'
+        : it.hold_client && it.hold_till >= todayStr() ? '<span class="cat-badge st-hold">' + esc('Kept') + '</span>' : '') +
       (picking ? '<span class="cat-check">' + (on ? '✓' : '') + '</span>' : '') + '</div>' +
       '<div class="cat-body"><div class="cat-tag">' + esc(it.tag_no || it.title || 'Design') + (it.design_no ? ' <span class="cat-dno">' + esc(it.design_no) + '</span>' : '') + '</div>' +
       '<div class="cat-sub">' + esc([it.category, num(it.net_wt) ? grams(it.net_wt) : '', it.metal_color || '',
@@ -153,14 +155,14 @@ function renderCatItem(it) {
     (it.status === 'available' ? (typeof billsOn === 'function' && billsOn()
       ? '<button class="btn btn-primary" data-action="cat-sell" data-id="' + it.id + '" style="margin-bottom:10px">📦 Sell · quotation · approval</button>'
       : '<button class="btn btn-primary" data-action="cat-add-order" data-id="' + it.id + '" style="margin-bottom:10px">＋ Add to an order</button>') : '<div id="cat-inorder"></div>') +
-    '<div id="cat-bag"></div>' +
+    '<div id="cat-hold"></div><div id="cat-bag"></div>' +
     '<div class="action-row">' +
     '<button class="btn btn-secondary" data-action="cat-share" data-id="' + it.id + '">Share</button>' +
     '<button class="btn btn-secondary" data-action="cat-edit" data-id="' + it.id + '">Edit</button>' +
     (typeof catStickers === 'function' ? '<button class="btn btn-secondary" data-action="cat-sticker" data-id="' + it.id + '">QR sticker</button>' : '') +
     '</div>' +
 
-    '<div class="card">' + rows.join('') + '</div>' +
+    '<div class="card">' + rows.join('') + '</div>' + '<div id="cat-cost"></div>' +
     (it.notes ? '<div class="section-label">Notes</div><div class="card" style="white-space:pre-wrap;font-size:14.5px">' + esc(it.notes) + '</div>' : '') +
 
     '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:16px 0 6px" id="cat-foot">' +
@@ -172,6 +174,8 @@ function renderCatItem(it) {
   if (ph) fillCatImages(ph);
   if (it.status !== 'available') loadCatOrderLink(it.id);
   if (typeof loadCatBag === 'function') loadCatBag(it);
+  if (typeof loadCatHold === 'function') loadCatHold(it);
+  if (typeof loadCatCost === 'function') loadCatCost(it);
 }
 
 /* "Reserved in ORD-0004 ›" on a piece that is in an order — and (update 18) the bill or the approval memo it is on */

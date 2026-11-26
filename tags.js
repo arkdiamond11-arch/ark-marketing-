@@ -95,11 +95,13 @@ function stockDefaults() {
 }
 function blankStock() {
   const d = stockDefaults();
-  return { tag_no: '', design_no: '', category: '', gross_wt: '', net_wt: '', dia_ct: '', dia_pcs: '', cs_ct: '', cs_pcs: '', notes: '', dia_type: d.dia, warn: '' };
+  return { tag_no: '', design_no: '', category: '', gross_wt: '', net_wt: '', dia_ct: '', dia_pcs: '', cs_ct: '', cs_pcs: '', notes: '', dia_type: d.dia, warn: '',
+    dia_cost: '', making_cost: '' };
 }
-function startAddStock(prefill) {
+function startAddStock(prefill, from) {
   const d = stockDefaults();
-  S.st = { tagPhoto: null, piece: null, f: Object.assign(blankStock(), prefill || {}), msg: '', msgKind: '', reading: false, added: (S.st && S.st.added) || 0 };
+  S.st = { tagPhoto: null, piece: (from && from.piece) || null, f: Object.assign(blankStock(), prefill || {}), msg: '', msgKind: '', reading: false, added: (S.st && S.st.added) || 0,
+    fromOrder: (from && from.order) || null, fromItem: (from && from.item) || null };
   S.formState = Object.assign(S.formState || {}, { st_metal: d.metal, st_purity: d.purity, st_color: d.color || null });
   if (purityOptions(d.metal).indexOf(S.formState.st_purity) === -1) S.formState.st_purity = defaultPurity(d.metal);
   showSub('Add stock', renderAddStock);
@@ -150,6 +152,8 @@ function renderAddStock() {
     '<div class="field"><label>Pcs</label><input type="text" inputmode="numeric" data-st="cs_pcs" value="' + v('cs_pcs') + '" placeholder="0"></div>' +
     '</div>' +
     '<div class="st-warn" id="st-warn">' + esc(f.warn || stockWeightWarn(f)) + '</div>' +
+    (S.dbv19 && isOwner() ? '<div class="o-2col st-cost"><div class="field"><label>Diamond cost (₹ per ct)</label><input type="text" inputmode="decimal" data-st="dia_cost" value="' + v('dia_cost') + '" placeholder="Only you see this"></div>' +
+      '<div class="field"><label>Making cost (₹)</label><input type="text" inputmode="decimal" data-st="making_cost" value="' + v('making_cost') + '" placeholder="Only you see this"></div></div>' : '') +
     '<div class="field" style="margin-bottom:2px"><label>Notes (team only)</label><input type="text" data-st="notes" value="' + v('notes') + '" placeholder="Where it is kept, supplier…" autocomplete="off"></div>' +
     '</div>' +
     '<div class="st-acts"><button class="btn btn-primary" data-action="st-save" data-next="1" id="st-save-next">Save · next tag</button>' +
@@ -267,6 +271,7 @@ async function saveStock(next) {
       cs_ct: cct || null, cs_pcs: cct && numOrNull(f.cs_pcs) != null ? Math.round(num(f.cs_pcs)) : null,
       notes: String(f.notes || '').trim() || null, status: 'available', created_by: S.me.id,
     };
+    if (S.dbv19 && T.fromItem) { row.from_order = T.fromOrder; row.from_item = T.fromItem; }
     const { data, error } = await db.from('catalogue_items').insert(row).select('id').single();
     if (error || !data) { fail(String((error && error.code) || '') === '23505' ? 'That tag no. is already in the stock.' : 'Could not save — try again.'); return; }
     const id = data.id;
@@ -283,6 +288,10 @@ async function saveStock(next) {
       if (up.error) upFail = true; else patch.tag_photo_path = path;
     }
     if (Object.keys(patch).length) await db.from('catalogue_items').update(patch).eq('id', id);
+    // the cost — only the owner sees it (update 19)
+    if (S.dbv19 && isOwner() && (numOrNull(f.dia_cost) != null || numOrNull(f.making_cost) != null)) {
+      await db.from('catalogue_costs').upsert({ catalogue_id: id, dia_cost_rate: numOrNull(f.dia_cost), making_cost: numOrNull(f.making_cost), updated_by: S.me.id }, { onConflict: 'catalogue_id' });
+    }
     try {
       localStorage.setItem('stockDefaults', JSON.stringify({ metal, purity: S.formState.st_purity, color: S.formState.st_color || '', dia: f.dia_type || 'Natural' }));
     } catch (e) { /* ignore */ }

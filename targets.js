@@ -6,11 +6,21 @@
    ============================================================ */
 'use strict';
 
-const TG_FIELDS = [
+const TG_BASE = [
   ['meetings', 'Meetings', false],
   ['new_clients', 'New clients', false],
   ['orders', 'Orders', false],
 ];
+/* sales from ready-stock bills (update 19): value without GST, returned pieces left out */
+const TG_SALES = [['sales_amt', 'Sales (₹)', true], ['sales_pcs', 'Pieces sold', false]];
+function tgSalesOn() { return !!S.dbv19 && typeof billsOn === 'function' && billsOn(); }
+const TG_FIELDS = new Proxy([], { get: (t, k) => { const a = TG_BASE.concat(tgSalesOn() ? TG_SALES : []); const v = a[k]; return typeof v === 'function' ? v.bind(a) : v; } });
+function tgFmt(f) { return f[2] ? (x) => '₹ ' + Math.round(num(x)).toLocaleString('en-IN') : null; }
+function tgIncentive(t, a) {
+  if (!t || !num(t.incentive_pct) || !a) return 0;
+  const base = t.incentive_on === 'above' ? Math.max(0, num(a.sales_amt) - num(t.sales_amt)) : num(a.sales_amt);
+  return Math.round(base * num(t.incentive_pct) / 100);
+}
 
 /* how far through the month we are (1 for past months) */
 function monthPace(ms) {
@@ -29,7 +39,20 @@ async function monthActuals(ms) {
     db.from('orders').select('created_by, status').gte('order_date', ms).lt('order_date', next).limit(20000),
   ]);
   const a = new Map();
-  const get = (id) => { if (!a.has(id)) a.set(id, { meetings: 0, new_clients: 0, orders: 0 }); return a.get(id); };
+  const get = (id) => { if (!a.has(id)) a.set(id, { meetings: 0, new_clients: 0, orders: 0, sales_amt: 0, sales_pcs: 0 }); return a.get(id); };
+  if (tgSalesOn()) {
+    const { data: bs } = await db.from('bills').select('created_by, extra_amt, discount_amt, bill_lines(gold_amt, dia_amt, cs_amt, labour_amt, return_id)')
+      .eq('kind', 'sale').eq('status', 'open').gte('bill_date', ms).lt('bill_date', next).limit(5000);
+    (bs || []).forEach((b) => {
+      if (!b.created_by) return;
+      const kept = (b.bill_lines || []).filter((l) => !l.return_id);
+      if (!kept.length) return;
+      const x = get(b.created_by);
+      x.sales_pcs += kept.length;
+      x.sales_amt += kept.reduce((s, l) => s + num(l.gold_amt) + num(l.dia_amt) + num(l.cs_amt) + num(l.labour_amt), 0) +
+        (kept.length === (b.bill_lines || []).length ? num(b.extra_amt) - num(b.discount_amt) : 0);
+    });
+  }
   (ir.data || []).forEach((r) => { if (r.exec_id) get(r.exec_id).meetings++; });
   (cr.data || []).forEach((r) => { if (r.created_by) get(r.created_by).new_clients++; });
   (or.data || []).forEach((r) => {
@@ -42,7 +65,10 @@ async function monthActuals(ms) {
 function targetBarsHTML(t, act, ms) {
   const pace = monthPace(ms);
   const rows = TG_FIELDS.filter((f) => t && num(t[f[0]]) > 0).map((f) =>
-    progressHTML(f[1], act ? act[f[0]] : 0, t[f[0]], null, pace));
+    progressHTML(f[1], act ? act[f[0]] : 0, t[f[0]], tgFmt(f), pace));
+  const inc = tgSalesOn() ? tgIncentive(t, act) : 0;
+  if (tgSalesOn() && t && num(t.incentive_pct)) rows.push('<div class="tg-inc">' + esc('Incentive so far: ₹ ' + inc.toLocaleString('en-IN') + ' (' + num(t.incentive_pct) + '% of ' +
+    (t.incentive_on === 'above' ? 'sales above the target' : 'sales') + ')') + '</div>');
   return rows.join('');
 }
 
@@ -83,15 +109,26 @@ function openTargetModal(execId) {
       TG_FIELDS.map((f) => '<div class="field"><label>' + esc(f[1]) + '</label><input type="text" inputmode="numeric" id="tg-' + f[0] + '" value="' +
         (cur[f[0]] != null ? esc(String(num(cur[f[0]]))) : '') + '"></div>').join('') +
       '</div>' +
+      (tgSalesOn() ? '<div class="o-2col"><div class="field"><label>Incentive (% of sales)</label><input type="text" inputmode="decimal" id="tg-inc" value="' +
+        (cur.incentive_pct != null ? esc(String(num(cur.incentive_pct))) : '') + '"></div><div class="field"><label>Incentive on</label><div class="seg" id="tg-on">' +
+        [['all', 'All sales'], ['above', 'Above the target']].map((x) => '<button type="button" data-v="' + x[0] + '" class="' + ((cur.incentive_on || 'all') === x[0] ? 'on' : '') + '">' + esc(x[1]) + '</button>').join('') +
+        '</div></div></div>' : '') +
       (prev ? '<button class="btn btn-small btn-secondary" data-m="prev" style="margin:-4px 0 14px">Same as last month</button>' : '') +
       '<div class="modal-actions"><button class="btn btn-secondary" data-m="no">Cancel</button><button class="btn btn-primary" data-m="yes">Save</button></div>');
     ov.querySelector('[data-m=no]').onclick = closeModal;
+    let incOn = cur.incentive_on || 'all';
+    ov.querySelectorAll('#tg-on button').forEach((b) => { b.onclick = () => { incOn = b.dataset.v; ov.querySelectorAll('#tg-on button').forEach((x) => x.classList.toggle('on', x === b)); }; });
     if (prev) ov.querySelector('[data-m=prev]').onclick = () => {
       TG_FIELDS.forEach((f) => { $('#tg-' + f[0]).value = prev[f[0]] != null ? String(num(prev[f[0]])) : ''; });
     };
     ov.querySelector('[data-m=yes]').onclick = async (e) => {
       const row = { exec_id: execId, month: ms, set_by: S.me.id };
       TG_FIELDS.forEach((f) => { const v = numOrNull($('#tg-' + f[0]).value); row[f[0]] = v == null ? null : Math.round(v); });
+      if (tgSalesOn()) {
+        const inc = numOrNull($('#tg-inc').value);
+        if (inc != null && (inc < 0 || inc > 50)) { toast('Incentive: 0 to 50 %', 'err'); return; }
+        row.incentive_pct = inc; row.incentive_on = incOn;
+      }
       e.target.disabled = true;
       const { error } = await db.from('targets').upsert(row, { onConflict: 'exec_id,month' });
       if (error) { e.target.disabled = false; toast('Could not save — only the owner can set targets.', 'err'); return; }

@@ -98,13 +98,14 @@ async function loadClientCredit(cl) {
   if (!$('#client-credit') || S.currentClientId !== cl.id) return;
   S.crClient = cl;
   const owner = isOwner();
-  const set = !!cl.credit_hold || cl.credit_days != null || !!cl.credit_max_open;
+  const set = !!cl.credit_hold || cl.credit_days != null || !!cl.credit_max_open || (S.dbv19 && cl.bill_limit != null);
   if (!owner && !set && !probs.length) { el.innerHTML = ''; return; }
   const rules = [];
   if (cl.credit_hold) rules.push('On hold' + (cl.credit_note ? ' — ' + cl.credit_note : ''));
   const d = creditDaysFor(cl);
   rules.push((d === 0 ? 'No late payment allowed' : 'Payment can be late by up to ' + d + (d === 1 ? ' day' : ' days')) + (cl.credit_days == null ? ' (app setting)' : ''));
   if (cl.credit_max_open) rules.push('At most ' + cl.credit_max_open + (cl.credit_max_open === 1 ? ' order' : ' orders') + ' in work');
+  if (S.dbv19 && cl.bill_limit != null) rules.push('Bill limit ₹ ' + Math.round(num(cl.bill_limit)).toLocaleString('en-IN'));
   el.innerHTML = '<div class="section-label">Credit</div><div class="card cr-card' + (probs.length ? ' warn' : '') + '">' +
     (probs.length ? '<div class="cr-warn">⚠ New approved orders need the owner\'s OK</div>' + creditListHTML(probs)
       : '<div class="cr-ok">✓ New orders are fine</div>') +
@@ -123,6 +124,8 @@ function creditEdit() {
     (cl.credit_days != null ? esc(cl.credit_days) : '') + '" placeholder="' + creditDaysDefault() + ' (app setting)"></div>' +
     '<div class="field"><label>Most orders in work at once</label><input type="number" inputmode="numeric" min="1" max="99" id="cr-max" value="' +
     (cl.credit_max_open ? esc(cl.credit_max_open) : '') + '" placeholder="No limit"></div>' +
+    (S.dbv19 ? '<div class="field"><label>Bill limit (₹ the shop may owe on ready-stock bills)</label><input type="text" inputmode="decimal" id="cr-bill" value="' +
+      (cl.bill_limit != null ? esc(String(num(cl.bill_limit))) : '') + '" placeholder="No limit"></div>' : '') +
     '<div class="modal-actions"><button class="btn btn-secondary" data-m="no">Cancel</button><button class="btn btn-primary" data-m="yes">Save</button></div>');
   ov.querySelector('[data-m=no]').onclick = closeModal;
   ov.querySelector('[data-m=yes]').onclick = async (e) => {
@@ -131,6 +134,11 @@ function creditEdit() {
     if (Number.isNaN(days)) { toast('Days: a number from 0 to 365, or leave it empty.', 'err'); return; }
     if (Number.isNaN(max)) { toast('Orders in work: a number from 1 to 99, or leave it empty.', 'err'); return; }
     const patch = { credit_hold: $('#cr-hold').checked, credit_note: $('#cr-note').value.trim() || null, credit_days: days, credit_max_open: max };
+    if (S.dbv19) {
+      const bl = numOrNull($('#cr-bill').value);
+      if (bl != null && bl < 0) { toast('Bill limit: a number, or leave it empty.', 'err'); return; }
+      patch.bill_limit = bl == null ? null : Math.round(bl * 100) / 100;
+    }
     e.target.disabled = true;
     const { error } = await db.from('clients').update(patch).eq('id', cl.id);
     if (error) { e.target.disabled = false; toast(/owner/i.test(error.message || '') ? 'Only the owner can change credit rules.' : 'Could not save — try again.', 'err'); return; }

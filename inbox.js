@@ -164,6 +164,7 @@ function designWaText(r) {
   return 'Namaste 🙏\nThank you — we got the design you sent. We will send you the details soon.\n— ' + bizName();
 }
 onAct('dr-open', () => { S.dr = null; showSub('Designs from shops', renderDesigns); });
+onAct('open-order', (el) => { if (el.dataset.id) openOrder(el.dataset.id); });   // "Order made ›" on a design or a ready-stock choice
 onAct('dr-show', (el) => { S.dr.show = el.dataset.v; renderDesigns(); });
 onAct('dr-set', (el) => designSet(el.dataset.id, el.dataset.s));
 onAct('dr-order', (el) => designOrder(el.dataset.id));
@@ -187,6 +188,11 @@ onAct('dl-copy', async () => {
 
 /* ================= READY-STOCK LINKS ================= */
 /* choose pieces in the catalogue picker (catalogue.js), then the shop */
+function slCount(l) { return l.live ? 'Live — all pieces in stock' : (l.items || []).length === 1 ? '1 piece' : (l.items || []).length + ' pieces'; }
+/* a live link: every piece in stock now (update 19) */
+function stockLiveStart() {
+  showSub('Which shop?', () => renderClientChooser({ head: 'Which shop is this link for?', onPick: (cl) => stockForm(cl, [], false, true) }));   // the link's page takes the chooser's place
+}
 function stockStart(cl) {
   S.catPick = { q: '', sel: new Set(), items: [], mode: 'stock', client: cl || null };
   showSub('Choose pieces', renderCatPicker);
@@ -198,9 +204,9 @@ function stockPicked() {
   if (P.client) { stockForm(P.client, ids); return; }
   showSub('Which shop?', () => renderClientChooser({ head: 'Which shop is this list for?', onPick: (cl) => stockForm(cl, ids, true) }));
 }
-function stockForm(cl, ids, fromChooser) {
+function stockForm(cl, ids, fromChooser, live) {
   const ov = openModal('<h3>Ready-stock link</h3><p class="noi18n" style="margin-top:-4px"><b>' + esc(cl.trade_name) + '</b></p>' +
-    '<p>' + esc(ids.length === 1 ? '1 piece' : ids.length + ' pieces') + '</p>' +
+    '<p>' + esc(live ? 'All pieces in stock — sold pieces drop off by themselves' : ids.length === 1 ? '1 piece' : ids.length + ' pieces') + '</p>' +
     '<div class="field"><label>Title (the shop sees it)</label><input type="text" id="sf-title" value="' + esc('Ready stock — ' + fmtD(todayStr())) + '"></div>' +
     '<div class="field"><label>Note for the shop (optional)</label><input type="text" id="sf-note" placeholder="e.g. Can be sent this week"></div>' +
     '<div class="field"><label>Open for</label><div class="seg" id="sf-days">' + [['7', '7 days'], ['15', '15 days'], ['30', '30 days'], ['0', 'No end']].map((x, i) =>
@@ -213,6 +219,7 @@ function stockForm(cl, ids, fromChooser) {
     e.target.disabled = true;
     const row = { client_id: cl.id, title: $('#sf-title').value.trim() || null, note: $('#sf-note').value.trim() || null, items: ids,
       expires_on: days ? todayStr(days) : null, created_by: S.me.id };
+    if (live) row.live = true;
     const { data, error } = await db.from('stock_links').insert(row).select('*').single();
     closeModal();
     if (error || !data) { toast('Could not make the link — try again.', 'err'); return; }
@@ -243,14 +250,15 @@ async function renderStockLinks() {
   const rows = data || [];
   const seen = await stockSeen(rows.map((l) => l.id)).catch(() => new Map());
   if (!$('#content')) return;
-  c.innerHTML = '<button class="btn btn-primary" data-action="sl-new" style="margin-bottom:12px">＋ New ready-stock link</button>' +
+  c.innerHTML = '<div class="action-row"><button class="btn btn-primary" data-action="sl-new">＋ New ready-stock link</button>' +
+    (S.dbv19 ? '<button class="btn btn-secondary" data-action="sl-live">＋ Live link — all stock</button>' : '') + '</div>' +
     '<div class="notice">Choose catalogue pieces for one shop — it sees the photos and weights (never rates) and taps the pieces it wants.</div>' +
     (rows.length ? rows.map((l) => {
       const p = (l.stock_picks || [])[0];
       const v = seen.get(l.id);
       return '<div class="list-item" data-action="sl-open" data-id="' + l.id + '"><div class="li-main">' +
         '<div class="li-title noi18n">' + esc((l.clients && l.clients.trade_name) || '') + '</div>' +
-        '<div class="li-sub">' + esc([l.title || '', (l.items || []).length === 1 ? '1 piece' : (l.items || []).length + ' pieces', fmtD(l.created_at)].filter(Boolean).join(' · ')) +
+        '<div class="li-sub">' + esc([l.title || '', slCount(l), fmtD(l.created_at)].filter(Boolean).join(' · ')) +
         ' · <span class="noi18n">' + esc(nameOf(l.created_by)) + '</span></div>' +
         '<div class="li-chips">' + (p ? '<span class="chip ' + (p.status === 'new' ? 'pk-st-new' : 'chip-st-delivered') + '">' + esc('🛍️ ' + ((p.items || []).length === 1 ? '1 chosen' : (p.items || []).length + ' chosen') + (p.status === 'new' ? ' · new' : '')) + '</span>' : '') +
         '<span class="chip">' + esc(v ? '👁 Seen' : 'Not seen yet') + '</span>' +
@@ -264,12 +272,14 @@ async function renderStockLink(id) {
   if (!$('#content')) return;
   if (error || !l) { c.innerHTML = '<div class="empty">Could not load — try again.</div>'; return; }
   const [kr, seen] = await Promise.all([
-    db.from('catalogue_items').select('*').in('id', l.items || []),
+    l.live ? db.from('catalogue_items').select('*').eq('status', 'available').order('created_at', { ascending: false }).limit(300)
+      : db.from('catalogue_items').select('*').in('id', l.items || []),
     stockSeen([l.id]).catch(() => new Map()),
   ]);
   if (!$('#content')) return;
   const byId = new Map((kr.data || []).map((k) => [k.id, k]));
-  const items = (l.items || []).map((x) => byId.get(x)).filter(Boolean);
+  const items = l.live ? Array.from(byId.values()).filter((k) => !k.hold_client || k.hold_till < todayStr() || k.hold_client === l.client_id)
+    : (l.items || []).map((x) => byId.get(x)).filter(Boolean);
   const p = (l.stock_picks || [])[0] || null;
   const chosen = new Set(p ? p.items || [] : []);
   S.sl = { l, items, p };
@@ -282,7 +292,7 @@ async function renderStockLink(id) {
     '<div class="cat-body"><div class="cat-tag">' + esc(k.tag_no || k.title || 'Design') + '</div>' +
     '<div class="cat-sub">' + esc([k.category, num(k.gross_wt) ? grams(k.gross_wt) : ''].filter(Boolean).join(' · ')) + '</div></div></div>';
   c.innerHTML = '<div class="client-head"><h2 class="noi18n">' + esc((l.clients && l.clients.trade_name) || '') + '</h2><div class="co">' +
-    esc([l.title || '', (l.items || []).length === 1 ? '1 piece' : (l.items || []).length + ' pieces', fmtD(l.created_at)].filter(Boolean).join(' · ')) + '</div>' +
+    esc([l.title || '', slCount(l), fmtD(l.created_at)].filter(Boolean).join(' · ')) + '</div>' +
     '<div class="chips"><span class="chip">' + esc(v ? seenText(v) : 'Not seen yet') + '</span>' +
     '<span class="chip">' + esc(!open ? 'Closed' : l.expires_on ? 'Open till ' + fmtD(l.expires_on) : 'Open') + '</span></div></div>' +
     (l.note ? '<div class="card noi18n">' + esc(l.note) + '</div>' : '') +
@@ -297,7 +307,7 @@ async function renderStockLink(id) {
       : '<div class="notice">' + esc(v ? 'The shop has seen the list — no choice yet.' : 'The shop has not opened the list yet.') + '</div>') +
     '<div class="action-row">' + (l.clients && l.clients.mobile ? '<button class="btn btn-secondary" data-action="sl-send">' + WA_SVG + ' Send again</button>' : '') +
     '<button class="btn btn-secondary" data-action="sl-copy">Copy link</button></div>' +
-    '<div class="section-label">' + esc('Pieces on the list (' + items.length + ')') + '</div>' +
+    '<div class="section-label">' + esc((l.live ? 'Pieces in stock now (' : 'Pieces on the list (') + items.length + ')') + '</div>' +
     '<div class="cat-grid">' + items.map(card).join('') + '</div>' +
     '<div class="cl-del-row"><button class="btn btn-small btn-ghost" data-action="sl-close">' + (l.closed ? 'Open the list again' : 'Close the list') + '</button>' +
     '<button class="btn btn-small btn-danger-ghost" data-action="sl-del">Delete</button></div>';
@@ -310,6 +320,7 @@ async function stockOrdered(pickId, orderId) {
 }
 onAct('sl-list', () => showSub('Ready-stock links', renderStockLinks));
 onAct('sl-new', () => stockStart(null));
+onAct('sl-live', () => stockLiveStart());
 onAct('sl-new-for', async (el) => { const cl = await fetchClient(el.dataset.id); if (cl) stockStart(cl); });
 onAct('sl-open', (el) => { const t = el.querySelector('.li-title'); showSub(t ? t.textContent : 'Ready stock', () => renderStockLink(el.dataset.id)); });
 onAct('sl-send', () => { const L = S.sl; if (L && L.l.clients) openWa(L.l.clients.mobile, stockText(L.l)); });
@@ -379,7 +390,7 @@ async function loadClientInbox(cl) {
     (ls.length ? '<div class="section-label">Ready-stock links</div>' + ls.map((l) => {
       const p = (l.stock_picks || [])[0];
       return '<div class="list-item" data-action="sl-open" data-id="' + l.id + '"><div class="li-main"><div class="li-title">' + esc(l.title || 'Ready stock') + '</div>' +
-        '<div class="li-sub">' + esc([(l.items || []).length === 1 ? '1 piece' : (l.items || []).length + ' pieces', fmtD(l.created_at)].join(' · ')) + '</div>' +
+        '<div class="li-sub">' + esc([slCount(l), fmtD(l.created_at)].join(' · ')) + '</div>' +
         (p ? '<div class="li-chips"><span class="chip ' + (p.status === 'new' ? 'pk-st-new' : 'chip-st-delivered') + '">' + esc('🛍️ ' + ((p.items || []).length === 1 ? '1 chosen' : (p.items || []).length + ' chosen')) + '</span></div>' : '') +
         '</div><div class="li-go">›</div></div>';
     }).join('') : '');

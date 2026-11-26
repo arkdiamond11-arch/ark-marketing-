@@ -452,11 +452,13 @@ async function renderToday() {
     html += '<div class="empty"><div class="big">🌤️</div>No pending reminders.<br>Log an interaction and add follow-ups — they will appear here.</div>';
   }
   c.innerHTML = (typeof eventBannerHTML === 'function' ? eventBannerHTML() : '') + '<div id="today-day"></div><div id="today-team"></div>' +
-    '<div id="today-late"></div><div id="today-stuck"></div><div id="today-summary"></div><div id="today-targets"></div><div id="today-fest"></div><div id="today-wishes"></div>' +
+    '<div id="today-late"></div><div id="today-stuck"></div><div id="today-summary"></div><div id="today-rate"></div><div id="today-cash"></div><div id="today-targets"></div><div id="today-fest"></div><div id="today-wishes"></div>' +
     '<div id="today-pay"></div><div id="today-orders"></div><div id="today-repairs"></div><div id="today-approvals"></div>' + html +
     '<div id="today-reorder"></div><div id="today-visits"></div><div id="today-sleep"></div>';
   if (typeof renderTodaySummary === 'function') renderTodaySummary($('#today-summary'));
   if (typeof renderMyTargets === 'function' && appOn('targets')) renderMyTargets($('#today-targets'));
+  if (typeof renderTodayRate === 'function') renderTodayRate($('#today-rate'));
+  if (typeof renderTodayCash === 'function') renderTodayCash($('#today-cash'));
   if (typeof loadTodayPay === 'function' && appOn('payments')) loadTodayPay();
   if (typeof loadTodayOrders === 'function') loadTodayOrders();
   if (typeof loadTodaySleep === 'function') loadTodaySleep();
@@ -1222,6 +1224,7 @@ async function openClient(id, replace) {
     if (typeof loadClientRepairs === 'function') loadClientRepairs(cl);
     if (typeof loadClientApprovals === 'function') loadClientApprovals(cl);
     if (typeof loadClientBills === 'function') loadClientBills(cl);
+    if (typeof loadClientSuggest === 'function') loadClientSuggest(cl);
     if (typeof loadClientCredit === 'function') loadClientCredit(cl);
     if (typeof loadClientPicks === 'function') loadClientPicks(cl);
     if (typeof loadClientInbox === 'function') loadClientInbox(cl);
@@ -1280,7 +1283,7 @@ function renderClientPage(cl) {
     '<div id="client-orders"></div>' +
     '<div id="client-repairs"></div>' +
     '<div id="client-approvals"></div>' +
-    '<div id="client-bills"></div>' +
+    '<div id="client-bills"></div><div id="client-suggest"></div>' +
     '<div id="client-history"><div class="empty">Loading history…</div></div>' +
     (canDeleteClients() ? '<div class="cl-del-row">' +
       (typeof mergeOn === 'function' && mergeOn() ? '<button class="btn btn-small btn-ghost" data-action="cl-merge" data-id="' + cl.id + '">Merge with another client</button>' : '') +
@@ -1894,6 +1897,14 @@ async function renderMore() {
     (typeof repairsOn === 'function' && repairsOn() ? mrow('rp-list', '🔧', 'Repairs', 'Pieces shops send back — resize, polish, repair') : '') +
     (typeof billsOn === 'function' && billsOn() ? mrow('bl-list', '🧾', 'Ready-stock bills', 'Sale bills and quotations for pieces from your stock') +
       mrow('dues-bills', '🪙', 'To collect', 'Money and raw gold each shop still owes for its bills') : '') +
+    (typeof goldOn === 'function' && goldOn() ? mrow('cash-open', '💵', isOwner ? 'Cash handover' : 'Cash with me', isOwner ? 'Cash the team collected, and what each person handed over' : 'Cash you collected and handed over') +
+      (isOwner ? mrow('cl-open', '🧾', 'Today\'s closing', 'Sales, money and gold received, pieces given and back — any day') +
+        mrow('ge-open', '🪙', 'Gold register', 'Where all the fine gold is — raw, with karigars, in stock, with shops') +
+        mrow('sv-open', '💎', 'Stock value', 'The stock at today\'s gold rate, diamonds at cost — PDF') +
+        mrow('pf-open', '📈', 'Profit', 'The margin on each bill — by month and by shop') +
+        mrow('ax-open', '📑', 'GST and Tally', 'GST sales register for GSTR-1, and Tally files for the accountant') : '') : '') +
+    (typeof stock19On === 'function' && stock19On() ? mrow('sc-list', '🔍', 'Stock check', 'Scan every tag in the safe — see what is missing') +
+      mrow('old-stock', '⏳', 'Old stock', 'Pieces lying 3 and 6 months and more; what sells fast') : '') +
     (typeof approvalsOn === 'function' && approvalsOn() ? mrow('ap-list', '💎', 'Pieces on approval', 'Given to shops to show their customers · sold or returned') : '') +
     (typeof campaignsOn === 'function' && campaignsOn() ? mrow('camp-open-list', '📣', 'Messages to shops', 'New designs or an offer to many shops on WhatsApp') : '') +
     (typeof designOn === 'function' && designOn() ? mrow('dr-open', '📥', 'Designs from shops', 'Photos of designs shops want made · the link for any shop') : '') +

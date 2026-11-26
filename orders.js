@@ -1237,9 +1237,11 @@ async function loadOrderDetails(o) {
         jewelMetaHTML(it, o.metal) +
         (it.stone_details ? '<div class="o-item-meta">' + (it.diamond_type ? 'Other stones: ' : 'Stones: ') + esc(it.stone_details) + '</div>' : '') +
         (it.catalogue_id ? '<div class="o-item-meta"><a href="#" data-action="cat-open" data-id="' + it.catalogue_id + '">Catalogue piece ›</a></div>' : '') +
+        (typeof canStockItem === 'function' && canStockItem(o, it) ? '<div class="o-item-meta"><button class="btn btn-small btn-secondary" data-action="it-stock" data-order="' + o.id + '" data-id="' + it.id + '">📦 Add to stock</button></div>' : '') +
         '</div></div>';
     }).join('') : '<div class="empty" style="padding:10px">No items — tap Edit to add them.</div>');
 
+  if (typeof markStockedItems === 'function') markStockedItems(o.id);   // pieces already added to the stock (update 19)
   // the finished piece next to the design
   if (typeof drawFinalBox === 'function') drawFinalBox(o, items, urls);
   // IGI certificate · who received it
