@@ -235,13 +235,17 @@ function renderOwnerSetup() {
    SHELL
    ============================================================ */
 function tabsHTML() {
-  return '<button data-action="tab" data-tab="today">' + IC.today + '<span>Today</span></button>' +
+  // on a computer the tabs stand in a bar down the left side, with the business on top and who is signed in at the bottom
+  const me = S.me || {};
+  return '<div class="side-brand"><div class="mini-badge noi18n">' + esc(BRAND_SHORT) + '</div><div><b class="noi18n">' + esc(BRAND) + '</b><span>Marketing</span></div></div>' +
+    '<button data-action="tab" data-tab="today">' + IC.today + '<span>Today</span></button>' +
     '<button data-action="tab" data-tab="find">' + IC.find + '<span>Clients</span></button>' +
     (typeof renderOrders === 'function' ? '<button data-action="tab" data-tab="orders">' + ORD_ICON + '<span>Orders</span></button>' : '') +
     (typeof renderCatalogue === 'function' && appOn('catalogue') ? '<button data-action="tab" data-tab="catalogue">' + CAT_ICON + '<span>Stock</span></button>'
       : typeof renderBoard === 'function' ? '<button data-action="tab" data-tab="board">' + BOARD_ICON + '<span>Board</span></button>' : '') +
     (S.me && S.me.role === 'owner' ? '<button data-action="tab" data-tab="report">' + IC.chart + '<span>Report</span></button>' : '') +
-    '<button data-action="tab" data-tab="more">' + IC.more + '<span>More</span></button>';
+    '<button data-action="tab" data-tab="more">' + IC.more + '<span>More</span></button>' +
+    (S.me ? '<div class="side-me"><b class="noi18n">' + esc(me.full_name || me.email || '') + '</b><span>' + (me.role === 'owner' ? 'Owner' : 'Marketing Executive') + '</span></div>' : '');
 }
 function renderShell() {
   $('#app').innerHTML =
@@ -266,6 +270,10 @@ function refreshTabbar() {
 function setHeader(title, hasBack) {
   $('#screen-name').textContent = title;
   $('#appbar').classList.toggle('has-back', !!hasBack);
+  // for the computer layout (styles.css): a screen inside a tab, and Today / More shown in two columns
+  document.body.classList.toggle('in-sub', !!hasBack);
+  document.body.classList.toggle('cols', !hasBack && (S.tab === 'today' || S.tab === 'more'));
+  document.body.dataset.tab = S.tab || '';
 }
 
 function switchTab(tab) {
@@ -306,6 +314,9 @@ function goBack() {
   }
   window.scrollTo(0, 0);
 }
+document.addEventListener('keydown', (e) => {   // a computer: Esc closes the open box
+  if (e.key === 'Escape' && $('#modal-ov')) { e.preventDefault(); closeModal(); }
+});
 window.addEventListener('popstate', () => {
   if (S.suppressPop) { S.suppressPop = false; return; }
   if ($('#modal-ov')) { closeModal(); return; }

@@ -2848,6 +2848,8 @@ const I18N = {
   'check the internet': ['इंटरनेट देखें', 'ઇન્ટરનેટ તપાસો'],
   'Not found': ['नहीं मिला', 'મળ્યું નહીં'],
   'Purity must be': ['शुद्धता होनी चाहिए', 'શુદ્ધતા હોવી જોઈએ'],
+  /* ---------- v30: the computer layout ---------- */
+  'Marketing': ['मार्केटिंग', 'માર્કેટિંગ'],
 };
 
 /* Sentences with changing parts (numbers, names, dates).
