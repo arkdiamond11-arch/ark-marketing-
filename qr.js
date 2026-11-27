@@ -253,7 +253,8 @@ const QR = (function () {
 
 /* the links in the codes: open the order / the piece in the app */
 function qrOrderUrl(id) { return new URL('index.html#o=' + id, location.href).href; }
-function qrPieceUrl(id) { return new URL('index.html#c=' + id, location.href).href; }
+/* a piece: its passport (update 23) — anyone can open it; the app finds the piece from it too */
+function qrPieceUrl(id, passport) { return passport && S.dbv23 ? new URL('piece.html#' + passport, location.href).href : new URL('index.html#c=' + id, location.href).href; }
 
 /* ---------------- scan a code with the phone's camera (where the browser can) ---------------- */
 function qrScanOn() { return 'BarcodeDetector' in window && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia); }
@@ -287,7 +288,7 @@ async function qrScan() {
     if (done) return;
     try {
       const found = await det.detect(v);
-      const hit = (found || []).map((f) => String(f.rawValue || '')).find((s) => /#[oc]=[0-9a-f-]{36}/i.test(s));
+      const hit = (found || []).map((f) => String(f.rawValue || '')).find((s) => /#[oc]=[0-9a-f-]{36}|piece\.html#[0-9a-f-]{36}/i.test(s));
       if (hit) {
         stop(); closeModal();
         if (!qrOpenUrl(hit)) toast('This code is not from the app.', 'err');
@@ -301,6 +302,8 @@ async function qrScan() {
 }
 /* "#o=<order>" or "#c=<piece>" (from a scan, or a code opened in the browser) */
 function qrOpenUrl(u) {
+  const pp = typeof passportCode === 'function' ? passportCode(u) : null;   // a piece's passport (update 23)
+  if (pp && S.me) { openPassportPiece(pp); return true; }
   const m = /#([oc])=([0-9a-f-]{36})/i.exec(String(u || ''));
   if (!m || !S.me) return false;
   if (m[1].toLowerCase() === 'o') openOrder(m[2]);

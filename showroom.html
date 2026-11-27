@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2b2530">
+  <meta name="robots" content="noindex">
+  <title>Showroom</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%E2%9D%A4%3C/text%3E%3C/svg%3E">
+  <style>
+    :root { --head: #2b2530; --gold: #c9a14a; --bg: #f7f5f2; --card: #fff; --ink: #27222b; --muted: #857e8c; --line: #eae6e2; --heart: #d6336c; --green: #1a7f4e; --red: #b3372f; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", "Noto Sans Gujarati", sans-serif; font-size: 15px; line-height: 1.45; }
+    header { background: var(--head); color: #fff; padding: calc(18px + env(safe-area-inset-top)) 16px 16px; text-align: center; }
+    header .shop { font-size: 23px; font-weight: 800; letter-spacing: .3px; }
+    header .city { font-size: 13px; opacity: .75; letter-spacing: .8px; text-transform: uppercase; margin-top: 2px; }
+    header .ttl { margin-top: 8px; color: var(--gold); font-size: 14.5px; font-weight: 650; }
+    main { max-width: 760px; margin: 0 auto; padding: 14px 16px 120px; }
+    .langs { display: flex; gap: 6px; justify-content: flex-end; margin: 0 0 10px; }
+    .langs button, .cats button { border: 1.5px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink); white-space: nowrap; }
+    .langs button.on, .cats button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .cats { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px; scrollbar-width: none; }
+    .cats::-webkit-scrollbar { display: none; }
+    .hint { color: var(--muted); font-size: 13.5px; margin: 0 2px 10px; }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    @media (min-width: 640px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+    .pc { background: var(--card); border-radius: 14px; box-shadow: 0 1px 3px rgba(40,20,30,.08); overflow: hidden; position: relative; }
+    .ph { position: relative; aspect-ratio: 1; background: #f1ede7; cursor: zoom-in; }
+    .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .ph .more { position: absolute; left: 6px; bottom: 6px; background: rgba(20, 15, 20, .6); color: #fff; font-size: 11.5px; padding: 2px 7px; border-radius: 999px; }
+    .wm { position: absolute; right: 7px; bottom: 6px; color: rgba(255, 255, 255, .88); font-size: 11px; font-weight: 800; letter-spacing: .4px; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); pointer-events: none; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .zoom .wm { font-size: 15px; right: 14px; bottom: 14px; }
+    .heart { position: absolute; right: 7px; top: 7px; width: 36px; height: 36px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .92); color: #b9b2bd; font-size: 19px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+    .pc.on .heart { color: var(--heart); }
+    .pc.on { box-shadow: 0 0 0 2.5px var(--heart); }
+    .bd { padding: 8px 10px 10px; }
+    .bd b { display: block; font-size: 14px; }
+    .bd span { display: block; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+    .bar { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; box-shadow: 0 -4px 16px rgba(40, 20, 30, .12); padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
+    .bar .in { max-width: 760px; margin: 0 auto; display: flex; gap: 10px; align-items: center; }
+    .bar .cnt { flex: 1; font-weight: 700; }
+    .bar .cnt small { display: block; font-weight: 500; color: var(--muted); font-size: 12.5px; }
+    .bar button, .send { padding: 12px 16px; border: 0; border-radius: 12px; background: var(--heart); color: #fff; font: inherit; font-weight: 800; cursor: pointer; white-space: nowrap; }
+    .bar button:disabled, .send:disabled { opacity: .5; }
+    .sheet { position: fixed; inset: 0; background: rgba(20, 15, 20, .5); display: flex; align-items: flex-end; justify-content: center; z-index: 8; }
+    .sheet .in { background: #fff; width: 100%; max-width: 520px; border-radius: 18px 18px 0 0; padding: 18px 16px calc(16px + env(safe-area-inset-bottom)); }
+    .sheet h3 { margin: 0 0 4px; }
+    .sheet label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+    .sheet input, .sheet textarea { width: 100%; font: inherit; padding: 10px 11px; border: 1.5px solid var(--line); border-radius: 11px; }
+    .sheet textarea { min-height: 64px; resize: vertical; }
+    .sheet .row { display: flex; gap: 8px; margin-top: 14px; }
+    .sheet .row button { flex: 1; }
+    .ghost { padding: 12px 16px; border-radius: 12px; border: 1.5px solid var(--line); background: #fff; color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; }
+    .err { color: var(--red); font-weight: 650; font-size: 13.5px; margin: 8px 0 0; }
+    .contact { text-align: center; color: var(--muted); font-size: 13.5px; margin-top: 20px; }
+    .contact a { color: var(--ink); font-weight: 700; }
+    .msg { text-align: center; padding: 40px 10px; color: var(--muted); }
+    .msg .big { font-size: 40px; }
+    .msg b { color: var(--ink); font-size: 18px; display: block; margin-bottom: 4px; }
+    .list { text-align: left; background: #fff; border-radius: 14px; padding: 10px 14px; margin: 14px auto; max-width: 420px; color: var(--ink); }
+    .list div { padding: 4px 0; border-top: 1px solid var(--line); }
+    .list div:first-child { border-top: 0; }
+    .again { margin-top: 12px; }
+    .zoom { position: fixed; inset: 0; background: rgba(10, 8, 12, .94); display: flex; align-items: center; justify-content: center; z-index: 9; }
+    .zoom .fr { position: relative; max-width: 100%; max-height: 100%; }
+    .zoom img { max-width: 100vw; max-height: 100vh; display: block; }
+    .zoom .nav { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .2); color: #fff; font-size: 22px; cursor: pointer; }
+    .zoom .prev { left: 8px; } .zoom .next { right: 8px; }
+  </style>
+</head>
+<body>
+  <header><div class="shop" id="shop">&nbsp;</div><div class="city" id="city"></div><div class="ttl" id="ttl"></div></header>
+  <main id="main"><div class="msg">Loading…</div></main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+  /* A shop's showroom for its own customers (no login): the shop's name on top,
+     the pieces in stock with photos (never rates). A customer taps ❤ on what she
+     likes and sends the list — to the shop on WhatsApp (and it is noted for us,
+     without her phone number). */
+  (function () {
+    'use strict';
+    var T = {
+      hi: {
+        'Showroom': 'शोरूम', 'All': 'सभी', 'Tap ❤ on what you like, then send your list to the shop.': 'जो पसंद आए उस पर ❤ टैप करें, फिर अपनी सूची दुकान को भेजें।',
+        'Send my list': 'मेरी सूची भेजें', 'liked': 'पसंद', 'Your name': 'आपका नाम', 'A note (optional)': 'नोट (वैकल्पिक)', 'e.g. for a wedding in December': 'जैसे दिसंबर में शादी के लिए',
+        'Send on WhatsApp': 'WhatsApp पर भेजें', 'Cancel': 'रद्द करें', 'Sending…': 'भेज रहे हैं…', 'Your list for': 'आपकी सूची —',
+        'Thank you — your list is ready': 'धन्यवाद — आपकी सूची तैयार है', 'Show this list at the shop, or send it on WhatsApp.': 'यह सूची दुकान पर दिखाएँ, या WhatsApp पर भेजें।',
+        'See the pieces again': 'पीस फिर देखें', 'Visit or call': 'आइए या कॉल करें', 'Gross': 'कुल', 'Net': 'नेट', 'photos': 'फोटो',
+        'Choose at least one piece': 'कम से कम एक पीस चुनें', 'This link is not active any more.': 'यह लिंक अब चालू नहीं है।',
+        'Please ask the shop for a new link.': 'कृपया दुकान से नया लिंक मांगें।', 'This link does not work any more': 'यह लिंक अब काम नहीं करता',
+        'Could not load — check the internet and open the link again.': 'लोड नहीं हुआ — इंटरनेट देखें और लिंक फिर से खोलें।',
+        'Could not send — check the internet and try again.': 'भेजा नहीं जा सका — इंटरनेट देखें और फिर से कोशिश करें।',
+        'Nothing to show just now — please ask the shop.': 'अभी दिखाने को कुछ नहीं — कृपया दुकान से पूछें।',
+        'Hello': 'नमस्ते', 'I liked these pieces on your showroom link:': 'मुझे आपके शोरूम लिंक पर ये पीस पसंद आए:', 'Code': 'कोड', 'Loading…': 'लोड हो रहा है…',
+        'Gold': 'सोना', 'Silver': 'चांदी', 'Platinum': 'प्लैटिनम', 'Yellow': 'पीला', 'Rose': 'रोज़', 'White': 'सफ़ेद', 'Two tone': 'दो रंग',
+        'Natural': 'नैचुरल', 'Lab-grown': 'लैब-ग्रोन', 'diamonds': 'डायमंड'
+      },
+      gu: {
+        'Showroom': 'શોરૂમ', 'All': 'બધા', 'Tap ❤ on what you like, then send your list to the shop.': 'જે ગમે તેના પર ❤ ટૅપ કરો, પછી તમારી યાદી દુકાનને મોકલો.',
+        'Send my list': 'મારી યાદી મોકલો', 'liked': 'ગમ્યા', 'Your name': 'તમારું નામ', 'A note (optional)': 'નોંધ (વૈકલ્પિક)', 'e.g. for a wedding in December': 'જેમ કે ડિસેમ્બરમાં લગ્ન માટે',
+        'Send on WhatsApp': 'WhatsApp પર મોકલો', 'Cancel': 'રદ કરો', 'Sending…': 'મોકલી રહ્યા છીએ…', 'Your list for': 'તમારી યાદી —',
+        'Thank you — your list is ready': 'આભાર — તમારી યાદી તૈયાર છે', 'Show this list at the shop, or send it on WhatsApp.': 'આ યાદી દુકાને બતાવો, અથવા WhatsApp પર મોકલો.',
+        'See the pieces again': 'પીસ ફરી જુઓ', 'Visit or call': 'આવો અથવા કૉલ કરો', 'Gross': 'કુલ', 'Net': 'નેટ', 'photos': 'ફોટા',
+        'Choose at least one piece': 'ઓછામાં ઓછો એક પીસ પસંદ કરો', 'This link is not active any more.': 'આ લિંક હવે ચાલુ નથી.',
+        'Please ask the shop for a new link.': 'કૃપા કરીને દુકાન પાસે નવી લિંક માંગો.', 'This link does not work any more': 'આ લિંક હવે કામ કરતી નથી',
+        'Could not load — check the internet and open the link again.': 'લોડ ન થયું — ઇન્ટરનેટ તપાસો અને લિંક ફરી ખોલો.',
+        'Could not send — check the internet and try again.': 'મોકલી ન શકાયું — ઇન્ટરનેટ તપાસો અને ફરી પ્રયત્ન કરો.',
+        'Nothing to show just now — please ask the shop.': 'હમણાં બતાવવા માટે કંઈ નથી — કૃપા કરીને દુકાનને પૂછો.',
+        'Hello': 'નમસ્તે', 'I liked these pieces on your showroom link:': 'મને તમારી શોરૂમ લિંક પર આ પીસ ગમ્યા:', 'Code': 'કોડ', 'Loading…': 'લોડ થાય છે…',
+        'Gold': 'સોનું', 'Silver': 'ચાંદી', 'Platinum': 'પ્લેટિનમ', 'Yellow': 'પીળું', 'Rose': 'રોઝ', 'White': 'સફેદ', 'Two tone': 'બે રંગ',
+        'Natural': 'નેચરલ', 'Lab-grown': 'લેબ-ગ્રોન', 'diamonds': 'ડાયમંડ'
+      }
+    };
+    var lang = 'en';
+    var stored = null;
+    try { stored = localStorage.getItem('statusLang') || localStorage.getItem('lang'); } catch (e) { /* private mode */ }
+    if (stored === 'hi' || stored === 'gu' || stored === 'en') lang = stored;
+    else { var nl = String(navigator.language || '').slice(0, 2); if (nl === 'hi' || nl === 'gu') lang = nl; }
+    function t(s) { return (T[lang] && T[lang][s]) || s; }
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    function g(n) { return (Math.round(Number(n) * 1000) / 1000).toLocaleString('en-IN', { maximumFractionDigits: 3 }) + ' g'; }
+    function kt(p) { var n = Number(p); if (!n) return ''; var m = { 99.9: '24K', 91.6: '22K', 91.7: '22K', 75: '18K', 58.5: '14K', 58.3: '14K', 41.7: '10K', 37.5: '9K', 92.5: '925' }; return m[n] || (n + '%'); }
+    function teamPhone() {
+      try { for (var i = 0; i < localStorage.length; i++) { if (/^sb-.+-auth-token$/.test(localStorage.key(i) || '')) return true; } } catch (e) { /* private mode */ }
+      return false;
+    }
+    function waNo(p) { var d = String(p || '').replace(/\D/g, ''); if (d.length === 10) d = '91' + d; return d.length >= 11 ? d : ''; }
+
+    var c = window.APP_CONFIG || {};
+    var token = (location.hash || '').replace(/^#/, '').trim().toLowerCase();
+    var main = document.getElementById('main');
+    var data = null, urls = {}, liked = {}, cat = '', who = { name: '', note: '' }, busy = false, errMsg = '';
+    try { var keep = JSON.parse(localStorage.getItem('sr-' + token) || 'null'); if (keep && keep.liked) { liked = keep.liked; who.name = keep.name || ''; } } catch (e) { /* none */ }
+    function remember() { try { localStorage.setItem('sr-' + token, JSON.stringify({ liked: liked, name: who.name })); } catch (e) { /* private mode */ } }
+    function message(big, lines, extra) {
+      var bar = document.getElementById('bar'); if (bar) bar.remove();
+      main.innerHTML = '<div class="msg"><div class="big">' + big + '</div>' + lines.map(function (x, i) { return i === 0 && extra ? '<b>' + esc(t(x)) + '</b>' : '<p>' + esc(t(x)) + '</p>'; }).join('') + (extra || '') + '</div>';
+    }
+    if (!window.supabase || !c.SUPABASE_URL || !/^[0-9a-f-]{36}$/.test(token)) { message('🔗', ['This link is not active any more.', 'Please ask the shop for a new link.']); return; }
+    var db = window.supabase.createClient(c.SUPABASE_URL, c.SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+
+    function langBar() {
+      return '<div class="langs">' + [['en', 'English'], ['hi', 'हिन्दी'], ['gu', 'ગુજરાતી']].map(function (x) {
+        return '<button data-l="' + x[0] + '" class="' + (lang === x[0] ? 'on' : '') + '">' + x[1] + '</button>';
+      }).join('') + '</div>';
+    }
+    function wm() { return data && data.shop ? '<span class="wm">' + esc(data.shop) + '</span>' : ''; }
+    function lines(it) {
+      var a = [];
+      a.push([t(it.metal || 'Gold') + (kt(it.purity) ? ' ' + kt(it.purity) : ''), it.metal_color ? t(it.metal_color) : ''].filter(Boolean).join(' · '));
+      var w = [];
+      if (it.gross_wt != null) w.push(t('Gross') + ' ' + g(it.gross_wt));
+      if (it.net_wt != null) w.push(t('Net') + ' ' + g(it.net_wt));
+      if (w.length) a.push(w.join(' · '));
+      if (it.diamond_type || it.diamond_ct) a.push([it.diamond_type ? t(it.diamond_type) + ' ' + t('diamonds') : t('diamonds'), it.diamond_ct ? Number(it.diamond_ct) + ' ct' : '', it.diamond_quality || ''].filter(Boolean).join(' · '));
+      return a.filter(Boolean);
+    }
+    function chosen() { return (data.items || []).filter(function (it) { return liked[it.id]; }); }
+    function shown() { return (data.items || []).filter(function (it) { return !cat || it.category === cat; }); }
+    function draw() {
+      var d = data;
+      document.getElementById('shop').textContent = d.shop || '';
+      document.getElementById('city').textContent = d.city || '';
+      document.getElementById('ttl').textContent = d.title || t('Showroom');
+      document.title = (d.shop || '') + ' — ' + (d.title || t('Showroom'));
+      var cats = [];
+      (d.items || []).forEach(function (it) { if (it.category && cats.indexOf(it.category) === -1) cats.push(it.category); });
+      if (cat && cats.indexOf(cat) === -1) cat = '';
+      var h = langBar();
+      if (!(d.items || []).length) { main.innerHTML = h + '<div class="msg"><div class="big">💍</div><p>' + esc(t('Nothing to show just now — please ask the shop.')) + '</p></div>' + contact(); wire(); drawBar(); return; }
+      if (cats.length > 1) h += '<div class="cats"><button data-c="" class="' + (cat ? '' : 'on') + '">' + esc(t('All')) + '</button>' + cats.map(function (x) {
+        return '<button data-c="' + esc(x) + '" class="' + (cat === x ? 'on' : '') + '">' + esc(x) + '</button>';
+      }).join('') + '</div>';
+      h += '<p class="hint">' + esc(t('Tap ❤ on what you like, then send your list to the shop.')) + '</p>';
+      h += '<div class="grid">' + shown().map(function (it) {
+        var ph = (it.photos || [])[0], u = ph ? urls[ph] : '';
+        return '<div class="pc' + (liked[it.id] ? ' on' : '') + '" data-id="' + esc(it.id) + '">' +
+          '<div class="ph" data-z="' + esc(it.id) + '"><img alt=""' + (u ? ' src="' + esc(u) + '"' : '') + '>' + wm() +
+          ((it.photos || []).length > 1 ? '<span class="more">' + it.photos.length + ' ' + esc(t('photos')) + '</span>' : '') + '</div>' +
+          '<button class="heart" data-h="' + esc(it.id) + '" aria-label="❤">' + (liked[it.id] ? '♥' : '♡') + '</button>' +
+          '<div class="bd"><b>' + esc(it.category || it.title || '') + '</b>' + lines(it).map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') +
+          (it.code ? '<span>' + esc(t('Code') + ' ' + it.code) + '</span>' : '') + '</div></div>';
+      }).join('') + '</div>' + contact();
+      main.innerHTML = h;
+      wire();
+      drawBar();
+    }
+    function wire() {
+      main.querySelectorAll('.langs button').forEach(function (bt) {
+        bt.onclick = function () { lang = bt.dataset.l; try { localStorage.setItem('statusLang', lang); } catch (e) { /* ignore */ } draw(); };
+      });
+      main.querySelectorAll('.cats button').forEach(function (bt) { bt.onclick = function () { cat = bt.dataset.c; draw(); }; });
+      main.querySelectorAll('[data-h]').forEach(function (bt) {
+        bt.onclick = function () { var id = bt.dataset.h; if (liked[id]) delete liked[id]; else liked[id] = true; remember(); errMsg = ''; draw(); };
+      });
+      main.querySelectorAll('[data-z]').forEach(function (el) { el.onclick = function () { zoom(el.dataset.z, 0); }; });
+    }
+    function contact() {
+      var ph = String((data && data.phone) || '').replace(/[^\d+]/g, '');
+      if (!ph) return '';
+      var wa = waNo(ph);
+      return '<p class="contact">' + esc(t('Visit or call')) + ' ' + esc(data.shop || '') + '<br><a href="tel:' + esc(ph) + '">' + esc(data.phone) + '</a>' +
+        (wa ? ' · <a href="https://wa.me/' + esc(wa) + '" target="_blank" rel="noopener">WhatsApp</a>' : '') + '</p>';
+    }
+    function drawBar() {
+      var bar = document.getElementById('bar');
+      var n = chosen().length;
+      if (!(data.items || []).length) { if (bar) bar.remove(); return; }
+      if (!bar) {
+        bar = document.createElement('div'); bar.className = 'bar'; bar.id = 'bar';
+        bar.innerHTML = '<div class="in"><div class="cnt" id="cnt"></div><button id="go"></button></div>';
+        document.body.appendChild(bar);
+        bar.querySelector('#go').onclick = ask;
+      }
+      bar.querySelector('#cnt').innerHTML = '♥ ' + n + ' ' + esc(t('liked'));
+      var go = bar.querySelector('#go');
+      go.disabled = !n;
+      go.textContent = t('Send my list');
+    }
+    function zoom(id, k) {
+      var it = (data.items || []).filter(function (x) { return x.id === id; })[0], ps = (it && it.photos) || [];
+      if (!ps.length) return;
+      var old = document.querySelector('.zoom'); if (old) old.remove();
+      var z = document.createElement('div'); z.className = 'zoom';
+      var u = urls[ps[k]] || '';
+      z.innerHTML = '<div class="fr"><img alt=""' + (u ? ' src="' + esc(u) + '"' : '') + '>' + wm() + '</div>' +
+        (ps.length > 1 ? '<button class="nav prev" aria-label="‹">‹</button><button class="nav next" aria-label="›">›</button>' : '');
+      z.onclick = function (e) {
+        if (e.target.classList.contains('prev')) { zoom(id, (k + ps.length - 1) % ps.length); return; }
+        if (e.target.classList.contains('next')) { zoom(id, (k + 1) % ps.length); return; }
+        z.remove();
+      };
+      document.body.appendChild(z);
+    }
+    function listText(items) {
+      return items.map(function (it, i) {
+        return (i + 1) + '. ' + [it.category || it.title || '', it.code ? t('Code') + ' ' + it.code : '', [t(it.metal || 'Gold'), kt(it.purity)].filter(Boolean).join(' ')].filter(Boolean).join(' — ');
+      });
+    }
+    function ask() {
+      var items = chosen();
+      if (!items.length) return;
+      var old = document.querySelector('.sheet'); if (old) old.remove();
+      var s = document.createElement('div'); s.className = 'sheet';
+      s.innerHTML = '<div class="in"><h3>' + esc(t('Your list for') + ' ' + (data.shop || '')) + '</h3>' +
+        '<div class="hint" style="margin:0">♥ ' + items.length + ' ' + esc(t('liked')) + '</div>' +
+        '<label for="sr-name">' + esc(t('Your name')) + '</label><input id="sr-name" maxlength="80" autocomplete="name" value="' + esc(who.name) + '">' +
+        '<label for="sr-note">' + esc(t('A note (optional)')) + '</label><textarea id="sr-note" maxlength="500" placeholder="' + esc(t('e.g. for a wedding in December')) + '">' + esc(who.note) + '</textarea>' +
+        '<p class="err" id="sr-err">' + esc(errMsg ? t(errMsg) : '') + '</p>' +
+        '<div class="row"><button class="ghost" id="sr-no">' + esc(t('Cancel')) + '</button><button class="send" id="sr-go">' + esc(t(busy ? 'Sending…' : 'Send on WhatsApp')) + '</button></div></div>';
+      document.body.appendChild(s);
+      s.onclick = function (e) { if (e.target === s) s.remove(); };
+      s.querySelector('#sr-no').onclick = function () { s.remove(); };
+      s.querySelector('#sr-go').onclick = function () {
+        who.name = s.querySelector('#sr-name').value.trim(); who.note = s.querySelector('#sr-note').value.trim();
+        remember();
+        send(items, s);
+      };
+    }
+    function send(items, sheet) {
+      if (busy) return;
+      busy = true; errMsg = '';
+      var go = sheet.querySelector('#sr-go'); go.disabled = true; go.textContent = t('Sending…');
+      /* WhatsApp first opens in the same tap (a phone blocks it after a wait) */
+      var wa = waNo(data.phone);
+      var text = t('Hello') + ' ' + (data.shop || '') + ',\n' + t('I liked these pieces on your showroom link:') + '\n' + listText(items).join('\n') +
+        (who.note ? '\n' + who.note : '') + (who.name ? '\n— ' + who.name : '') + '\n' + location.href;
+      var win = wa ? window.open('https://wa.me/' + wa + '?text=' + encodeURIComponent(text), '_blank') : null;
+      db.rpc('showroom_enquire', { p_token: token, p_items: items.map(function (it) { return it.id; }), p_name: who.name || null, p_note: who.note || null }).then(function (r) {
+        busy = false;
+        if (r.error && !win) { errMsg = String(r.error.message || '').replace(/\.$/, '') || 'Could not send — check the internet and try again.'; sheet.remove(); ask(); return; }
+        sheet.remove();
+        done(items, wa ? 'https://wa.me/' + wa + '?text=' + encodeURIComponent(text) : '');
+      }, function () {
+        busy = false;
+        sheet.remove();
+        if (win) done(items, 'https://wa.me/' + wa + '?text=' + encodeURIComponent(text));
+        else { errMsg = 'Could not send — check the internet and try again.'; ask(); }
+      });
+    }
+    function done(items, waUrl) {
+      message('♥', ['Thank you — your list is ready', 'Show this list at the shop, or send it on WhatsApp.'],
+        '<div class="list">' + listText(items).map(function (x) { return '<div>' + esc(x) + '</div>'; }).join('') + '</div>' +
+        (waUrl ? '<a class="send" style="display:inline-block;text-decoration:none" href="' + esc(waUrl) + '" target="_blank" rel="noopener">' + esc(t('Send on WhatsApp')) + '</a><br>' : '') +
+        '<button class="ghost again" id="again">' + esc(t('See the pieces again')) + '</button>' + contact());
+      document.getElementById('again').onclick = function () { draw(); };
+    }
+
+    db.rpc('showroom_page', { p_token: token }).then(function (r) {
+      if (r.error) { message('⚠️', [/function|schema cache/i.test(String(r.error.message || '')) ? 'This link is not active any more.' : 'Could not load — check the internet and open the link again.']); return; }
+      if (!r.data) { message('🔗', ['This link is not active any more.', 'Please ask the shop for a new link.']); return; }
+      data = r.data;
+      var have = {}; (data.items || []).forEach(function (it) { have[it.id] = true; });
+      Object.keys(liked).forEach(function (id) { if (!have[id]) delete liked[id]; });   // sold since
+      draw();
+      if (!teamPhone()) { try { db.rpc('link_seen', { p_kind: 'showroom', p_token: token }).then(function () {}, function () {}); } catch (e) { /* not counted */ } }
+      var paths = [];
+      (data.items || []).forEach(function (it) { (it.photos || []).forEach(function (p) { if (paths.indexOf(p) === -1) paths.push(p); }); });
+      for (var i = 0; i < paths.length; i += 100) {
+        db.storage.from('catalogue').createSignedUrls(paths.slice(i, i + 100), 3600).then(function (s) {
+          (s.data || []).forEach(function (x) { if (x && x.signedUrl) urls[x.path] = x.signedUrl; });
+          if (!document.querySelector('.msg')) draw();
+        }, function () { /* the photos stay blank */ });
+      }
+    }, function () { message('⚠️', ['Could not load — check the internet and open the link again.']); });
+  })();
+  </script>
+</body>
+</html>

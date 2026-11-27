@@ -101,6 +101,8 @@ function dpTools(k) {
     billList(); toCollect(); appr(); links(); rate();
     T(on('x22'), 'bk-list', '🔒', 'Gold rate bookings', 'A shop books today\'s rate for gold it buys later');
     T(on('x22'), 'mo-list', '🎉', 'Offers on making', 'Festival offers — % off making, on the bill in one tap');
+    T(on('showroomsOn'), 'se-list', '❤️', 'From the showrooms', 'What shops\' customers liked on their showroom links');
+    T(fn('renderBrief'), 'vb-pick', '📋', 'Before a visit', 'One page on a shop: what to talk about, dues, orders, what it buys');
     closing(); tgt();
   } else if (k === 'accounts') {
     toCollect(); billList(); cash(); closing(); rate();
@@ -131,6 +133,8 @@ function dpTools(k) {
     T(on('campaignsOn'), 'camp-open-list', '📣', 'Messages to shops', 'New designs or an offer to many shops on WhatsApp');
     T(on('designOn'), 'dr-open', '📥', 'Designs from shops', 'Photos of designs shops want made · the link for any shop');
     T(on('festOn'), 'fest-open-list', '🪔', 'Festival calendar', 'Selling days and days to send wishes');
+    T(on('postersOn'), 'po-open', '🖼', 'Posters', 'Rate cards and festival posters with a shop\'s name');
+    T(on('showroomsOn'), 'sr-list', '🛍', 'Showroom links', 'A link for each shop\'s own customers — its name on top');
     T(on('eventsOn'), 'ev-list', '🎪', 'Exhibitions', 'Visitors and meetings at a trade show, kept together');
     bag(); links(); week();
   } else if (k === 'care') {   // update 21 (repairs: before it too)

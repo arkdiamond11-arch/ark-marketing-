@@ -1270,6 +1270,9 @@ function renderClientPage(cl) {
   if (typeof stockOn === 'function' && stockOn()) more.push('<button class="btn btn-small btn-secondary" data-action="sl-new-for" data-id="' + cl.id + '">📦 Ready-stock link</button>');
   if (typeof workOn === 'function' && workOn()) more.push('<button class="btn btn-small btn-secondary" data-action="wo-give-for" data-c="' + cl.id + '">📝 Give work</button>');   // work.js
   if (typeof careOn === 'function' && careOn()) more.push('<button class="btn btn-small btn-secondary" data-action="cs-new-for" data-c="' + cl.id + '">🙋 Complaint</button>');   // care.js
+  if (typeof renderBrief === 'function') more.unshift('<button class="btn btn-small btn-secondary" data-action="vb-for" data-id="' + cl.id + '">📋 Before the visit</button>');   // customers.js
+  if (typeof showroomsOn === 'function' && showroomsOn()) more.push('<button class="btn btn-small btn-secondary" data-action="sr-for" data-id="' + cl.id + '">🛍 Showroom for its customers</button>');
+  if (typeof postersOn === 'function' && postersOn()) more.push('<button class="btn btn-small btn-secondary" data-action="po-for" data-id="' + cl.id + '">🖼 Poster with its name</button>');   // posters.js
 
   $('#content').innerHTML =
     '<div class="client-head"><h2>' + esc(cl.trade_name) + '</h2>' +

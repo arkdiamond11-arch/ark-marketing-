@@ -92,7 +92,7 @@ function buildStickersPdf(pieces, startAt) {
     const x = STK.left + col * STK.px, y = STK.top + rw * STK.h;
     d.rect(x, y, STK.w, STK.h, null, [0.86, 0.84, 0.82]);
     const q = STK.h - 5;
-    QR.pdf(d, qrPieceUrl(c.id), x + 1.5, y + 2.5, q);
+    QR.pdf(d, qrPieceUrl(c.id, c.passport), x + 1.5, y + 2.5, q);
     const tx = x + q + 3.5, tw = STK.w - q - 5;
     let ty = y + 4.8;
     d.text(tx, ty, c.tag_no || 'Design', { size: 11, bold: true, color: C_MAROON });

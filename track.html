@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2b2530">
+  <meta name="robots" content="noindex">
+  <title>Your order</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%F0%9F%92%8D%3C/text%3E%3C/svg%3E">
+  <style>
+    :root { --head: #2b2530; --gold: #c9a14a; --bg: #f7f5f2; --card: #fff; --ink: #27222b; --muted: #857e8c; --line: #eae6e2; --green: #1a7f4e; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", "Noto Sans Gujarati", sans-serif; font-size: 15px; line-height: 1.45; }
+    header { background: var(--head); color: #fff; padding: calc(18px + env(safe-area-inset-top)) 16px 16px; text-align: center; }
+    header .shop { font-size: 22px; font-weight: 800; }
+    header .city { font-size: 12.5px; opacity: .75; letter-spacing: .8px; text-transform: uppercase; margin-top: 2px; }
+    main { max-width: 560px; margin: 0 auto; padding: 14px 16px 40px; }
+    .langs { display: flex; gap: 6px; justify-content: flex-end; margin: 0 0 10px; }
+    .langs button { border: 1.5px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink); }
+    .langs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .card { background: var(--card); border-radius: 16px; box-shadow: 0 1px 3px rgba(40,20,30,.08), 0 4px 14px rgba(40,20,30,.05); padding: 14px 16px; margin: 0 0 12px; }
+    .hello { font-size: 17px; font-weight: 750; }
+    .now { font-size: 12.5px; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); margin-top: 10px; }
+    .now-step { font-size: 22px; font-weight: 800; color: var(--head); }
+    .bar { display: flex; gap: 4px; margin-top: 12px; }
+    .bar i { flex: 1; height: 6px; border-radius: 3px; background: #ebe6e0; }
+    .bar i.done { background: var(--green); }
+    .bar i.cur { background: var(--gold); }
+    h2 { font-size: 13px; letter-spacing: .9px; text-transform: uppercase; color: var(--muted); margin: 18px 4px 8px; }
+    .steps { list-style: none; margin: 0; padding: 0; }
+    .steps li { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+    .steps li:first-child { border-top: 0; }
+    .steps .dot { width: 26px; height: 26px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; color: #fff; background: #e4dfd8; }
+    .steps li.done .dot { background: var(--green); }
+    .steps li.cur .dot { background: var(--gold); }
+    .steps .nm { flex: 1; font-weight: 650; }
+    .steps li.pending .nm { color: var(--muted); font-weight: 500; }
+    .steps .when { font-size: 12.5px; color: var(--muted); }
+    .photos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .photos figure { margin: 0; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(40,20,30,.08); }
+    .photos img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: #f1ede7; cursor: zoom-in; }
+    .photos figcaption { font-size: 12.5px; color: var(--muted); padding: 6px 9px; }
+    .contact { text-align: center; color: var(--muted); font-size: 13.5px; margin-top: 20px; }
+    .contact a { color: var(--ink); font-weight: 700; }
+    .msg { text-align: center; padding: 40px 10px; color: var(--muted); }
+    .msg .big { font-size: 40px; }
+    .zoom { position: fixed; inset: 0; background: rgba(10, 8, 12, .94); display: flex; align-items: center; justify-content: center; z-index: 9; }
+    .zoom img { max-width: 100vw; max-height: 100vh; }
+  </style>
+</head>
+<body>
+  <header><div class="shop" id="shop">&nbsp;</div><div class="city" id="city"></div></header>
+  <main id="main"><div class="msg">Loading…</div></main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+  /* An order link a shop gives its own customer (no login): the shop's name, how
+     far the piece has come, the photos — no prices, no maker, no notes. */
+  (function () {
+    'use strict';
+    var T = {
+      hi: {
+        'Your order': 'आपका ऑर्डर', 'Hello': 'नमस्ते', 'Your jewellery is being made with care.': 'आपके गहने ध्यान से बनाए जा रहे हैं।', 'Now': 'अभी', 'Steps': 'स्टेप', 'Photos': 'फोटो',
+        'Order placed': 'ऑर्डर दिया', 'Design': 'डिज़ाइन', 'Model': 'मॉडल', 'Being made': 'बन रहा है', 'Stone setting': 'स्टोन सेटिंग', 'Finishing': 'फ़िनिशिंग',
+        'Certificate': 'सर्टिफिकेट', 'Ready at the shop': 'दुकान पर तैयार', 'Your piece is ready — come and take it.': 'आपका पीस तैयार है — आकर ले जाइए।',
+        'Finished piece': 'तैयार पीस', 'Visit or call': 'आइए या कॉल करें', 'This link is not active any more.': 'यह लिंक अब चालू नहीं है।',
+        'Please ask the shop for a new link.': 'कृपया दुकान से नया लिंक मांगें।', 'Could not load — check the internet and open the link again.': 'लोड नहीं हुआ — इंटरनेट देखें और लिंक फिर से खोलें।',
+        'Loading…': 'लोड हो रहा है…'
+      },
+      gu: {
+        'Your order': 'તમારો ઓર્ડર', 'Hello': 'નમસ્તે', 'Your jewellery is being made with care.': 'તમારા દાગીના ધ્યાનથી બની રહ્યા છે.', 'Now': 'હમણાં', 'Steps': 'સ્ટેપ', 'Photos': 'ફોટા',
+        'Order placed': 'ઓર્ડર આપ્યો', 'Design': 'ડિઝાઇન', 'Model': 'મોડલ', 'Being made': 'બની રહ્યું છે', 'Stone setting': 'સ્ટોન સેટિંગ', 'Finishing': 'ફિનિશિંગ',
+        'Certificate': 'સર્ટિફિકેટ', 'Ready at the shop': 'દુકાને તૈયાર', 'Your piece is ready — come and take it.': 'તમારો પીસ તૈયાર છે — આવીને લઈ જાઓ.',
+        'Finished piece': 'તૈયાર પીસ', 'Visit or call': 'આવો અથવા કૉલ કરો', 'This link is not active any more.': 'આ લિંક હવે ચાલુ નથી.',
+        'Please ask the shop for a new link.': 'કૃપા કરીને દુકાન પાસે નવી લિંક માંગો.', 'Could not load — check the internet and open the link again.': 'લોડ ન થયું — ઇન્ટરનેટ તપાસો અને લિંક ફરી ખોલો.',
+        'Loading…': 'લોડ થાય છે…'
+      }
+    };
+    var lang = 'en';
+    var stored = null;
+    try { stored = localStorage.getItem('statusLang') || localStorage.getItem('lang'); } catch (e) { /* private mode */ }
+    if (stored === 'hi' || stored === 'gu' || stored === 'en') lang = stored;
+    else { var nl = String(navigator.language || '').slice(0, 2); if (nl === 'hi' || nl === 'gu') lang = nl; }
+    function t(s) { return (T[lang] && T[lang][s]) || s; }
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    var MONTHS = { en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+      hi: ['जन', 'फ़र', 'मार्च', 'अप्रै', 'मई', 'जून', 'जुला', 'अग', 'सित', 'अक्टू', 'नव', 'दिस'],
+      gu: ['જાન્યુ', 'ફેબ્રુ', 'માર્ચ', 'એપ્રિ', 'મે', 'જૂન', 'જુલા', 'ઑગ', 'સપ્ટે', 'ઑક્ટો', 'નવે', 'ડિસે'] };
+    function day(iso) { if (!iso) return ''; var d = new Date(String(iso).length === 10 ? iso + 'T00:00:00' : iso); return d.getDate() + ' ' + MONTHS[lang][d.getMonth()]; }
+    function teamPhone() {
+      try { for (var i = 0; i < localStorage.length; i++) { if (/^sb-.+-auth-token$/.test(localStorage.key(i) || '')) return true; } } catch (e) { /* private mode */ }
+      return false;
+    }
+    function waNo(p) { var d = String(p || '').replace(/\D/g, ''); if (d.length === 10) d = '91' + d; return d.length >= 11 ? d : ''; }
+    /* the maker's steps, in a customer's words */
+    var STEP = { 'new': 'Order placed', cad: 'Design', wax: 'Model', in_production: 'Being made', setting: 'Stone setting', finished: 'Finishing', ready: 'Finishing',
+      igi: 'Certificate', delivered: 'Ready at the shop' };
+    var ALL = ['cad', 'wax', 'in_production', 'setting', 'finished', 'igi'];
+
+    var c = window.APP_CONFIG || {};
+    var token = (location.hash || '').replace(/^#/, '').trim().toLowerCase();
+    var main = document.getElementById('main');
+    var data = null, urls = {};
+    function message(big, lines) {
+      main.innerHTML = '<div class="msg"><div class="big">' + big + '</div>' + lines.map(function (x) { return '<p>' + esc(t(x)) + '</p>'; }).join('') + '</div>';
+    }
+    if (!window.supabase || !c.SUPABASE_URL || !/^[0-9a-f-]{36}$/.test(token)) { message('🔗', ['This link is not active any more.', 'Please ask the shop for a new link.']); return; }
+    var db = window.supabase.createClient(c.SUPABASE_URL, c.SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+
+    function langBar() {
+      return '<div class="langs">' + [['en', 'English'], ['hi', 'हिन्दी'], ['gu', 'ગુજરાતી']].map(function (x) {
+        return '<button data-l="' + x[0] + '" class="' + (lang === x[0] ? 'on' : '') + '">' + x[1] + '</button>';
+      }).join('') + '</div>';
+    }
+    function draw() {
+      var d = data;
+      document.getElementById('shop').textContent = d.shop || '';
+      document.getElementById('city').textContent = d.city || '';
+      document.title = t('Your order') + ' — ' + (d.shop || '');
+      var used = Array.isArray(d.steps) ? ALL.filter(function (k) { return d.steps.indexOf(k) > -1; }) : ALL.slice();
+      var st = d.status === 'ready' ? 'finished' : d.status;
+      if (STEP[st] && st !== 'new' && st !== 'delivered' && used.indexOf(st) === -1) used.push(st);
+      used.sort(function (a, z) { return ALL.indexOf(a) - ALL.indexOf(z); });
+      var list = ['new'].concat(used).concat(['delivered']);
+      var cur = Math.max(0, list.indexOf(st));
+      var tick = {};
+      (d.ticks || []).forEach(function (x) { tick[x.status === 'ready' ? 'finished' : x.status] = x.at; });
+      var doneAll = st === 'delivered';
+      var h = langBar() +
+        '<div class="card"><div class="hello">' + esc(t('Hello') + (d.name ? ' ' + d.name : '')) + ' 🙏</div>' +
+        '<div style="color:var(--muted)">' + esc(t(doneAll ? 'Your piece is ready — come and take it.' : 'Your jewellery is being made with care.')) + '</div>' +
+        '<div class="now">' + esc(t('Now')) + '</div><div class="now-step">' + esc(t(STEP[st] || 'Being made')) + '</div>' +
+        '<div class="bar">' + list.map(function (k, i) { return '<i class="' + (i < cur || doneAll ? 'done' : i === cur ? 'cur' : '') + '"></i>'; }).join('') + '</div></div>' +
+        '<h2>' + esc(t('Steps')) + '</h2><div class="card"><ul class="steps">' + list.map(function (k, i) {
+          var state = i < cur || (doneAll && i === cur) ? 'done' : i === cur ? 'cur' : 'pending';
+          var when = tick[k] ? day(tick[k]) : (k === 'new' ? day(d.order_date) : k === 'delivered' && doneAll ? day(d.delivered_on) : '');
+          return '<li class="' + state + '"><span class="dot">' + (state === 'pending' ? '' : '✓') + '</span><span class="nm">' + esc(t(STEP[k])) + '</span>' +
+            '<span class="when">' + (state === 'pending' ? '' : esc(when)) + '</span></li>';
+        }).join('') + '</ul></div>';
+      var pics = [];
+      (d.final_photos || []).forEach(function (p) { if (p) pics.push({ p: 'o:' + p, cap: t('Finished piece') }); });
+      (d.items || []).forEach(function (it) {
+        var k = it.photo ? 'o:' + it.photo : it.cat_photo ? 'c:' + it.cat_photo : '';
+        if (k) pics.push({ p: k, cap: [t('Design'), it.category, it.qty > 1 ? '× ' + it.qty : ''].filter(Boolean).join(' · ') });
+      });
+      if (pics.length) {
+        h += '<h2>' + esc(t('Photos')) + '</h2><div class="photos">' + pics.map(function (x) {
+          return '<figure><img data-p="' + esc(x.p) + '" alt=""' + (urls[x.p] ? ' src="' + esc(urls[x.p]) + '"' : '') + '><figcaption>' + esc(x.cap) + '</figcaption></figure>';
+        }).join('') + '</div>';
+      }
+      var ph = String(d.phone || '').replace(/[^\d+]/g, ''), wa = waNo(ph);
+      if (ph) h += '<p class="contact">' + esc(t('Visit or call')) + ' ' + esc(d.shop || '') + '<br><a href="tel:' + esc(ph) + '">' + esc(d.phone) + '</a>' +
+        (wa ? ' · <a href="https://wa.me/' + esc(wa) + '" target="_blank" rel="noopener">WhatsApp</a>' : '') + '</p>';
+      main.innerHTML = h;
+      main.querySelectorAll('.langs button').forEach(function (bt) {
+        bt.onclick = function () { lang = bt.dataset.l; try { localStorage.setItem('statusLang', lang); } catch (e) { /* ignore */ } draw(); };
+      });
+      main.querySelectorAll('.photos img').forEach(function (im) {
+        im.onclick = function () {
+          if (!im.src) return;
+          var z = document.createElement('div'); z.className = 'zoom';
+          z.innerHTML = '<img alt="">'; z.firstChild.src = im.src;
+          z.onclick = function () { z.remove(); };
+          document.body.appendChild(z);
+        };
+      });
+    }
+
+    db.rpc('order_track', { p_token: token }).then(function (r) {
+      if (r.error) { message('⚠️', [/function|schema cache/i.test(String(r.error.message || '')) ? 'This link is not active any more.' : 'Could not load — check the internet and open the link again.']); return; }
+      if (!r.data) { message('🔗', ['This link is not active any more.', 'Please ask the shop for a new link.']); return; }
+      data = r.data;
+      draw();
+      if (!teamPhone()) { try { db.rpc('link_seen', { p_kind: 'track', p_token: token }).then(function () {}, function () {}); } catch (e) { /* not counted */ } }
+      var paths = [], cat = [];
+      (data.final_photos || []).forEach(function (p) { if (p) paths.push(p); });
+      (data.items || []).forEach(function (it) { if (it.photo) paths.push(it.photo); else if (it.cat_photo) cat.push(it.cat_photo); });
+      function sign(bucket, list, pre) {
+        if (!list.length) return Promise.resolve();
+        return db.storage.from(bucket).createSignedUrls(list, 3600).then(function (s) {
+          (s.data || []).forEach(function (x) { if (x && x.signedUrl) urls[pre + x.path] = x.signedUrl; });
+        }, function () { /* the photos stay blank */ });
+      }
+      if (paths.length || cat.length) Promise.all([sign('orders', paths, 'o:'), sign('catalogue', cat, 'c:')]).then(draw);
+    }, function () { message('⚠️', ['Could not load — check the internet and open the link again.']); });
+  })();
+  </script>
+</body>
+</html>

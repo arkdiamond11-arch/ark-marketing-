@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f3a34">
+  <meta name="robots" content="noindex">
+  <title>Piece passport</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <style>
+    :root { --head: #1f3a34; --gold: #c9a14a; --bg: #f5f4f1; --card: #fff; --ink: #24262a; --muted: #7e8288; --line: #e7e4df; --green: #1a7f4e; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", "Noto Sans Gujarati", sans-serif; font-size: 15px; line-height: 1.45; }
+    header { background: var(--head); color: #fff; padding: calc(16px + env(safe-area-inset-top)) 16px 16px; text-align: center; }
+    header .kind { font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--gold); font-weight: 700; }
+    header h1 { margin: 4px 0 0; font-size: 22px; }
+    header .sub { font-size: 13.5px; opacity: .8; margin-top: 2px; }
+    main { max-width: 560px; margin: 0 auto; padding: 14px 16px 40px; }
+    .langs { display: flex; gap: 6px; justify-content: flex-end; margin: 0 0 10px; }
+    .langs button { border: 1.5px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink); }
+    .langs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .card { background: var(--card); border-radius: 16px; box-shadow: 0 1px 3px rgba(20,30,30,.08), 0 4px 14px rgba(20,30,30,.05); padding: 14px 16px; margin: 0 0 12px; }
+    .pics { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 0 12px; border-radius: 16px; }
+    .pics img { flex: none; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 16px; background: #ece9e3; scroll-snap-align: center; }
+    .pics.many img { width: 86%; }
+    .ok { display: flex; gap: 12px; align-items: center; background: #eaf6ef; border: 1.5px solid #bfe3cd; color: #155f3b; }
+    .ok .ic { width: 38px; height: 38px; border-radius: 50%; background: var(--green); color: #fff; font-size: 20px; font-weight: 900; display: flex; align-items: center; justify-content: center; flex: none; }
+    .ok b { display: block; }
+    .ok span { font-size: 13px; }
+    h2 { font-size: 13px; letter-spacing: .9px; text-transform: uppercase; color: var(--muted); margin: 18px 4px 8px; }
+    .rows div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+    .rows div:first-child { border-top: 0; }
+    .rows span { color: var(--muted); }
+    .rows b { text-align: right; overflow-wrap: anywhere; }
+    .huid { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: 1px; }
+    .tips { margin: 0; padding-left: 18px; color: #3f4348; }
+    .tips li { margin: 4px 0; }
+    .who b { display: block; font-size: 16px; }
+    .who span { color: var(--muted); font-size: 13.5px; }
+    .who a { display: inline-block; margin-top: 8px; margin-right: 12px; color: var(--head); font-weight: 750; text-decoration: none; }
+    .team { text-align: center; margin-top: 14px; }
+    .team a { color: var(--muted); font-size: 13px; }
+    .msg { text-align: center; padding: 40px 10px; color: var(--muted); }
+    .msg .big { font-size: 40px; }
+    .small { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <header><div class="kind" id="kind">Piece passport</div><h1 id="title">&nbsp;</h1><div class="sub" id="sub"></div></header>
+  <main id="main"><div class="msg">Loading…</div></main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+  /* A piece's passport (no login), opened from the QR on its tag: what it is,
+     metal and purity, weights, diamonds, HUID, the quality check, who sold it.
+     Never a rate or a cost. */
+  (function () {
+    'use strict';
+    var T = {
+      hi: {
+        'Piece passport': 'पीस पासपोर्ट', 'Genuine piece': 'असली पीस', 'This piece is in the maker\'s records — the details below are from them.': 'यह पीस बनाने वाले के रिकॉर्ड में है — नीचे की जानकारी वहीं से है।',
+        'The piece': 'पीस', 'Item': 'आइटम', 'Code': 'कोड', 'Metal': 'धातु', 'Gross weight': 'कुल वज़न', 'Net weight': 'नेट वज़न', 'Diamonds': 'डायमंड', 'Colour stones': 'रंगीन पत्थर',
+        'Stones': 'पत्थर', 'Hallmark (HUID)': 'हॉलमार्क (HUID)', 'Check it on the BIS CARE app.': 'BIS CARE ऐप पर जाँचें।', 'Quality checked': 'क्वालिटी जाँच', 'Made': 'बना',
+        'Sold by': 'बेचने वाले', 'Made by': 'बनाने वाले', 'Call': 'कॉल करें', 'Care': 'देखभाल',
+        'Keep it in a soft pouch of its own, away from other jewellery.': 'इसे अपनी अलग मुलायम थैली में रखें, दूसरे गहनों से दूर।',
+        'Put on perfume and lotion first, the jewellery last.': 'पहले परफ्यूम और लोशन लगाएँ, गहने सबसे आख़िर में।',
+        'Take it off for a bath, a swim or the gym.': 'नहाते, तैरते या जिम जाते समय उतार दें।',
+        'Wipe it with a soft dry cloth after you wear it.': 'पहनने के बाद मुलायम सूखे कपड़े से पोंछ लें।',
+        'Once a year, have the stones and clasps checked at the shop.': 'साल में एक बार दुकान पर पत्थर और हुक जँचवाएँ।',
+        'This passport was not found.': 'यह पासपोर्ट नहीं मिला।', 'Please check the QR or ask the shop.': 'कृपया QR जाँचें या दुकान से पूछें।',
+        'Could not load — check the internet and open the link again.': 'लोड नहीं हुआ — इंटरनेट देखें और लिंक फिर से खोलें।',
+        'Open in the app': 'ऐप में खोलें', 'Gold': 'सोना', 'Silver': 'चांदी', 'Platinum': 'प्लैटिनम', 'Yellow': 'पीला', 'Rose': 'रोज़', 'White': 'सफ़ेद', 'Two tone': 'दो रंग',
+        'Natural': 'नैचुरल', 'Lab-grown': 'लैब-ग्रोन', 'pcs': 'पीस', 'Loading…': 'लोड हो रहा है…'
+      },
+      gu: {
+        'Piece passport': 'પીસ પાસપોર્ટ', 'Genuine piece': 'અસલી પીસ', 'This piece is in the maker\'s records — the details below are from them.': 'આ પીસ બનાવનારના રેકોર્ડમાં છે — નીચેની વિગતો ત્યાંથી છે.',
+        'The piece': 'પીસ', 'Item': 'આઇટમ', 'Code': 'કોડ', 'Metal': 'ધાતુ', 'Gross weight': 'કુલ વજન', 'Net weight': 'નેટ વજન', 'Diamonds': 'ડાયમંડ', 'Colour stones': 'રંગીન પથ્થર',
+        'Stones': 'પથ્થર', 'Hallmark (HUID)': 'હોલમાર્ક (HUID)', 'Check it on the BIS CARE app.': 'BIS CARE એપ પર તપાસો.', 'Quality checked': 'ક્વોલિટી ચકાસણી', 'Made': 'બન્યું',
+        'Sold by': 'વેચનાર', 'Made by': 'બનાવનાર', 'Call': 'કૉલ કરો', 'Care': 'સંભાળ',
+        'Keep it in a soft pouch of its own, away from other jewellery.': 'તેને પોતાની અલગ નરમ થેલીમાં રાખો, બીજા દાગીનાથી દૂર.',
+        'Put on perfume and lotion first, the jewellery last.': 'પહેલાં પરફ્યુમ અને લોશન લગાવો, દાગીના છેલ્લે.',
+        'Take it off for a bath, a swim or the gym.': 'નહાતી, તરતી કે જીમ જતી વખતે ઉતારી દો.',
+        'Wipe it with a soft dry cloth after you wear it.': 'પહેર્યા પછી નરમ સૂકા કપડાથી લૂછી લો.',
+        'Once a year, have the stones and clasps checked at the shop.': 'વર્ષમાં એક વાર દુકાને પથ્થર અને હૂક ચકાસાવો.',
+        'This passport was not found.': 'આ પાસપોર્ટ મળ્યો નહીં.', 'Please check the QR or ask the shop.': 'કૃપા કરીને QR તપાસો અથવા દુકાનને પૂછો.',
+        'Could not load — check the internet and open the link again.': 'લોડ ન થયું — ઇન્ટરનેટ તપાસો અને લિંક ફરી ખોલો.',
+        'Open in the app': 'એપમાં ખોલો', 'Gold': 'સોનું', 'Silver': 'ચાંદી', 'Platinum': 'પ્લેટિનમ', 'Yellow': 'પીળું', 'Rose': 'રોઝ', 'White': 'સફેદ', 'Two tone': 'બે રંગ',
+        'Natural': 'નેચરલ', 'Lab-grown': 'લેબ-ગ્રોન', 'pcs': 'પીસ', 'Loading…': 'લોડ થાય છે…'
+      }
+    };
+    var lang = 'en';
+    var stored = null;
+    try { stored = localStorage.getItem('statusLang') || localStorage.getItem('lang'); } catch (e) { /* private mode */ }
+    if (stored === 'hi' || stored === 'gu' || stored === 'en') lang = stored;
+    else { var nl = String(navigator.language || '').slice(0, 2); if (nl === 'hi' || nl === 'gu') lang = nl; }
+    function t(s) { return (T[lang] && T[lang][s]) || s; }
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    var MONTHS = { en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+      hi: ['जन', 'फ़र', 'मार्च', 'अप्रै', 'मई', 'जून', 'जुला', 'अग', 'सित', 'अक्टू', 'नव', 'दिस'],
+      gu: ['જાન્યુ', 'ફેબ્રુ', 'માર્ચ', 'એપ્રિ', 'મે', 'જૂન', 'જુલા', 'ઑગ', 'સપ્ટે', 'ઑક્ટો', 'નવે', 'ડિસે'] };
+    function day(iso) { if (!iso) return ''; var d = new Date(String(iso).length === 10 ? iso + 'T00:00:00' : iso); return d.getDate() + ' ' + MONTHS[lang][d.getMonth()] + ' ' + d.getFullYear(); }
+    function month(ym) { if (!ym) return ''; var p = String(ym).split('-'); return MONTHS[lang][(+p[1] || 1) - 1] + ' ' + p[0]; }
+    function g(n) { return (Math.round(Number(n) * 1000) / 1000).toLocaleString('en-IN', { maximumFractionDigits: 3 }) + ' g'; }
+    function kt(p) { var n = Number(p); if (!n) return ''; var m = { 99.9: '24K · 999', 99.5: '24K · 995', 91.6: '22K · 916', 91.7: '22K · 916', 75: '18K · 750', 58.5: '14K · 585', 58.3: '14K · 585', 41.7: '10K · 417', 37.5: '9K · 375', 92.5: '925' }; return m[n] || (n + '%'); }
+    function teamPhone() {
+      try { for (var i = 0; i < localStorage.length; i++) { if (/^sb-.+-auth-token$/.test(localStorage.key(i) || '')) return true; } } catch (e) { /* private mode */ }
+      return false;
+    }
+    function waNo(p) { var d = String(p || '').replace(/\D/g, ''); if (d.length === 10) d = '91' + d; return d.length >= 11 ? d : ''; }
+
+    var c = window.APP_CONFIG || {};
+    var code = (location.hash || '').replace(/^#/, '').trim().toLowerCase();
+    var main = document.getElementById('main');
+    var data = null, urls = {};
+    function message(big, lines) {
+      main.innerHTML = '<div class="msg"><div class="big">' + big + '</div>' + lines.map(function (x) { return '<p>' + esc(t(x)) + '</p>'; }).join('') + '</div>';
+    }
+    if (!window.supabase || !c.SUPABASE_URL || !/^[0-9a-f-]{36}$/.test(code)) { message('🔍', ['This passport was not found.', 'Please check the QR or ask the shop.']); return; }
+    var db = window.supabase.createClient(c.SUPABASE_URL, c.SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+
+    function langBar() {
+      return '<div class="langs">' + [['en', 'English'], ['hi', 'हिन्दी'], ['gu', 'ગુજરાતી']].map(function (x) {
+        return '<button data-l="' + x[0] + '" class="' + (lang === x[0] ? 'on' : '') + '">' + x[1] + '</button>';
+      }).join('') + '</div>';
+    }
+    function whoHTML(label, w) {
+      if (!w || !w.name) return '';
+      var ph = String(w.phone || '').replace(/[^\d+]/g, ''), wa = waNo(ph);
+      return '<h2>' + esc(t(label)) + '</h2><div class="card who"><b>' + esc(w.name) + '</b>' + (w.city ? '<span>' + esc(w.city) + '</span>' : '') +
+        (ph ? '<div><a href="tel:' + esc(ph) + '">📞 ' + esc(t('Call')) + '</a>' + (wa ? '<a href="https://wa.me/' + esc(wa) + '" target="_blank" rel="noopener">WhatsApp</a>' : '') + '</div>' : '') + '</div>';
+    }
+    function draw() {
+      var d = data, p = d.piece || {}, s = d.seller, m = d.maker;
+      var top = (s && s.name) || (m && m.name) || '';
+      document.getElementById('kind').textContent = t('Piece passport');
+      document.getElementById('title').textContent = top || t('Piece passport');
+      document.getElementById('sub').textContent = top ? [(s && s.name ? s.city : m && m.city) || ''].join('') : '';
+      document.title = t('Piece passport') + (top ? ' — ' + top : '');
+      var ph = (p.photos || []).filter(Boolean);
+      var h = langBar();
+      if (ph.length) h += '<div class="pics' + (ph.length > 1 ? ' many' : '') + '">' + ph.map(function (x) { return '<img alt=""' + (urls[x] ? ' src="' + esc(urls[x]) + '"' : '') + '>'; }).join('') + '</div>';
+      h += '<div class="card ok"><span class="ic">✓</span><div><b>' + esc(t('Genuine piece')) + '</b><span>' + esc(t('This piece is in the maker\'s records — the details below are from them.')) + '</span></div></div>';
+      var rows = [];
+      function row(k, v, cls) { if (v) rows.push('<div><span>' + esc(t(k)) + '</span><b' + (cls ? ' class="' + cls + '"' : '') + '>' + esc(v) + '</b></div>'); }
+      row('Item', [p.category, p.title].filter(Boolean).join(' · '));
+      row('Code', p.code);
+      row('Metal', [t(p.metal || 'Gold'), kt(p.purity), p.metal_color ? t(p.metal_color) : ''].filter(Boolean).join(' · '));
+      if (p.gross_wt != null) row('Gross weight', g(p.gross_wt));
+      if (p.net_wt != null) row('Net weight', g(p.net_wt));
+      if (p.diamond_ct || p.diamond_type) row('Diamonds', [p.diamond_type ? t(p.diamond_type) : '', p.diamond_ct ? Number(p.diamond_ct) + ' ct' : '', p.diamond_pcs ? p.diamond_pcs + ' ' + t('pcs') : '', p.diamond_quality || ''].filter(Boolean).join(' · '));
+      if (p.cs_ct) row('Colour stones', [Number(p.cs_ct) + ' ct', p.cs_pcs ? p.cs_pcs + ' ' + t('pcs') : ''].filter(Boolean).join(' · '));
+      row('Stones', p.stones);
+      row('Hallmark (HUID)', p.huid, 'huid');
+      if (d.checked) row('Quality checked', '✓ ' + day(d.checked));
+      row('Made', month(p.made));
+      h += '<h2>' + esc(t('The piece')) + '</h2><div class="card rows">' + rows.join('') + '</div>';
+      if (p.huid) h += '<p class="small" style="margin:-4px 6px 0">' + esc(t('Check it on the BIS CARE app.')) + '</p>';
+      h += whoHTML('Sold by', s) + whoHTML('Made by', m);
+      h += '<h2>' + esc(t('Care')) + '</h2><div class="card"><ul class="tips">' + ['Keep it in a soft pouch of its own, away from other jewellery.', 'Put on perfume and lotion first, the jewellery last.',
+        'Take it off for a bath, a swim or the gym.', 'Wipe it with a soft dry cloth after you wear it.', 'Once a year, have the stones and clasps checked at the shop.'].map(function (x) {
+        return '<li>' + esc(t(x)) + '</li>'; }).join('') + '</ul></div>';
+      if (teamPhone()) h += '<div class="team"><a href="index.html#p=' + esc(code) + '">' + esc(t('Open in the app')) + ' →</a></div>';
+      main.innerHTML = h;
+      main.querySelectorAll('.langs button').forEach(function (bt) {
+        bt.onclick = function () { lang = bt.dataset.l; try { localStorage.setItem('statusLang', lang); } catch (e) { /* ignore */ } draw(); };
+      });
+    }
+
+    db.rpc('piece_passport', { p_code: code }).then(function (r) {
+      if (r.error) { message('⚠️', [/function|schema cache/i.test(String(r.error.message || '')) ? 'This passport was not found.' : 'Could not load — check the internet and open the link again.']); return; }
+      if (!r.data) { message('🔍', ['This passport was not found.', 'Please check the QR or ask the shop.']); return; }
+      data = r.data;
+      draw();
+      if (!teamPhone()) { try { db.rpc('link_seen', { p_kind: 'piece', p_token: code }).then(function () {}, function () {}); } catch (e) { /* not counted */ } }
+      var paths = ((data.piece || {}).photos || []).filter(Boolean);
+      if (paths.length) {
+        db.storage.from('catalogue').createSignedUrls(paths, 3600).then(function (s) {
+          (s.data || []).forEach(function (x) { if (x && x.signedUrl) urls[x.path] = x.signedUrl; });
+          draw();
+        }, function () { /* the photos stay blank */ });
+      }
+    }, function () { message('⚠️', ['Could not load — check the internet and open the link again.']); });
+  })();
+  </script>
+</body>
+</html>

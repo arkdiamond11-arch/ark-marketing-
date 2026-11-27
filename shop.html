@@ -53,6 +53,24 @@
     .zoom img { max-width: 100%; max-height: 100%; }
     .design { display: block; margin: 6px 0 12px; padding: 12px 14px; border-radius: 14px; background: #fff; border: 1.5px dashed var(--gold); color: var(--maroon); text-decoration: none; font-weight: 750; }
     .design span { display: block; font-weight: 500; font-size: 13px; color: var(--muted); }
+    .extra { display: flex; gap: 12px; align-items: center; }
+    .extra .ic { font-size: 26px; flex: none; }
+    .extra b { display: block; }
+    .extra span { color: var(--muted); font-size: 13px; }
+    .extra .go { margin-left: auto; flex: none; padding: 9px 14px; border: 0; border-radius: 11px; background: var(--maroon); color: #fff; font: inherit; font-weight: 750; cursor: pointer; }
+    .tr-btn { margin-top: 8px; border: 1.5px solid var(--line); background: #fff; color: var(--maroon); border-radius: 10px; padding: 6px 11px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .sheet { position: fixed; inset: 0; background: rgba(20, 15, 20, .5); display: flex; align-items: flex-end; justify-content: center; z-index: 8; }
+    .sheet .in { background: #fff; width: 100%; max-width: 560px; max-height: 92vh; overflow: auto; border-radius: 18px 18px 0 0; padding: 18px 16px calc(16px + env(safe-area-inset-bottom)); }
+    .sheet h3 { margin: 0 0 6px; }
+    .sheet label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+    .sheet input { width: 100%; font: inherit; padding: 10px 11px; border: 1.5px solid var(--line); border-radius: 11px; }
+    .sheet .row { display: flex; gap: 8px; margin-top: 14px; }
+    .sheet .row button { flex: 1; padding: 12px 14px; border-radius: 12px; font: inherit; font-weight: 750; cursor: pointer; border: 1.5px solid var(--line); background: #fff; }
+    .sheet .row .pri { background: var(--maroon); color: #fff; border-color: var(--maroon); }
+    .sheet .lnk { background: #f6f3ef; border-radius: 10px; padding: 9px 11px; font-size: 13px; overflow-wrap: anywhere; margin-top: 8px; }
+    .sheet canvas { width: 100%; border-radius: 12px; display: block; margin-top: 10px; }
+    .sheet .rates { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+    .sheet .err { color: var(--red); font-weight: 650; font-size: 13.5px; margin: 8px 0 0; }
   </style>
 </head>
 <body>
@@ -60,6 +78,7 @@
   <main id="main"><div class="msg">Loading…</div></main>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js"></script>
   <script src="config.js"></script>
+  <script src="poster.js"></script>
   <script>
   /* A shop's own page (no login): its orders in work with the step and
      delivery date, a CAD waiting for its OK, pieces on approval, repairs
@@ -79,7 +98,14 @@
         'Questions? Call or WhatsApp': 'कोई सवाल? कॉल या WhatsApp करें', 'This link is not active any more.': 'यह लिंक अब चालू नहीं है।',
         'Please ask us for a new link.': 'कृपया हमसे नया लिंक मांगें।', 'Could not load — check the internet and open the link again.': 'लोड नहीं हुआ — इंटरनेट देखें और लिंक फिर से खोलें।',
         'Loading…': 'लोड हो रहा है…', 'Send us a design you want made': 'जो डिज़ाइन बनवाना है, हमें भेजें',
-        'Photos from a catalogue, Instagram or your own drawing': 'कैटलॉग, Instagram या आपकी अपनी ड्रॉइंग की फोटो'
+        'Photos from a catalogue, Instagram or your own drawing': 'कैटलॉग, Instagram या आपकी अपनी ड्रॉइंग की फोटो',
+        "Today's rate card for your shop": 'आपकी दुकान के लिए आज का रेट कार्ड', "With your shop's name — for your WhatsApp status": 'आपकी दुकान के नाम के साथ — आपके WhatsApp स्टेटस के लिए',
+        'Make it': 'बनाएँ', 'Your showroom for your customers': 'आपके ग्राहकों के लिए आपका शोरूम', "Our designs under your shop's name — share it with your customers": 'हमारी डिज़ाइनें आपकी दुकान के नाम से — अपने ग्राहकों को भेजें',
+        'Share': 'भेजें', 'Link for your customer': 'आपके ग्राहक के लिए लिंक', "Your customer's link": 'आपके ग्राहक का लिंक', "Customer's name (optional)": 'ग्राहक का नाम (वैकल्पिक)',
+        "It shows your shop's name and how far the order has come — no prices.": 'इसमें आपकी दुकान का नाम और ऑर्डर कहाँ तक पहुँचा दिखता है — कोई भाव नहीं।',
+        'Make the link': 'लिंक बनाएँ', 'Close': 'बंद करें', 'Copy': 'कॉपी करें', 'Copied': 'कॉपी हो गया', 'Your order': 'आपका ऑर्डर', 'See our new designs': 'हमारी नई डिज़ाइनें देखें',
+        'Rate card': 'रेट कार्ड', 'Rates for 10 g (silver: 1 kg)': '10 ग्राम के भाव (चांदी: 1 किलो)', 'Share / Save': 'भेजें / सेव करें', 'Silver': 'चांदी',
+        'Your phone on it': 'उस पर आपका फ़ोन', 'This order is not there any more': 'यह ऑर्डर अब नहीं है'
       },
       gu: {
         'Your orders with us': 'અમારી સાથે તમારા ઓર્ડર', 'Orders in work': 'કામ ચાલુ ઓર્ડર', 'Delivered in the last 60 days': 'છેલ્લા 60 દિવસમાં ડિલિવર થયેલા',
@@ -93,7 +119,14 @@
         'Questions? Call or WhatsApp': 'કોઈ પ્રશ્ન? કૉલ અથવા WhatsApp કરો', 'This link is not active any more.': 'આ લિંક હવે ચાલુ નથી.',
         'Please ask us for a new link.': 'કૃપા કરીને અમારી પાસે નવી લિંક માંગો.', 'Could not load — check the internet and open the link again.': 'લોડ ન થયું — ઇન્ટરનેટ તપાસો અને લિંક ફરી ખોલો.',
         'Loading…': 'લોડ થાય છે…', 'Send us a design you want made': 'જે ડિઝાઇન બનાવડાવવી છે, અમને મોકલો',
-        'Photos from a catalogue, Instagram or your own drawing': 'કેટલોગ, Instagram કે તમારા પોતાના ડ્રોઇંગના ફોટા'
+        'Photos from a catalogue, Instagram or your own drawing': 'કેટલોગ, Instagram કે તમારા પોતાના ડ્રોઇંગના ફોટા',
+        "Today's rate card for your shop": 'તમારી દુકાન માટે આજનું રેટ કાર્ડ', "With your shop's name — for your WhatsApp status": 'તમારી દુકાનના નામ સાથે — તમારા WhatsApp સ્ટેટસ માટે',
+        'Make it': 'બનાવો', 'Your showroom for your customers': 'તમારા ગ્રાહકો માટે તમારો શોરૂમ', "Our designs under your shop's name — share it with your customers": 'અમારી ડિઝાઇનો તમારી દુકાનના નામે — તમારા ગ્રાહકોને મોકલો',
+        'Share': 'મોકલો', 'Link for your customer': 'તમારા ગ્રાહક માટે લિંક', "Your customer's link": 'તમારા ગ્રાહકની લિંક', "Customer's name (optional)": 'ગ્રાહકનું નામ (વૈકલ્પિક)',
+        "It shows your shop's name and how far the order has come — no prices.": 'તેમાં તમારી દુકાનનું નામ અને ઓર્ડર ક્યાં સુધી પહોંચ્યો તે દેખાય છે — કોઈ ભાવ નહીં.',
+        'Make the link': 'લિંક બનાવો', 'Close': 'બંધ કરો', 'Copy': 'કૉપિ કરો', 'Copied': 'કૉપિ થઈ ગયું', 'Your order': 'તમારો ઓર્ડર', 'See our new designs': 'અમારી નવી ડિઝાઇનો જુઓ',
+        'Rate card': 'રેટ કાર્ડ', 'Rates for 10 g (silver: 1 kg)': '10 ગ્રામના ભાવ (ચાંદી: 1 કિલો)', 'Share / Save': 'મોકલો / સેવ કરો', 'Silver': 'ચાંદી',
+        'Your phone on it': 'તેના પર તમારો ફોન', 'This order is not there any more': 'આ ઓર્ડર હવે નથી'
       }
     };
     var lang = 'en';
@@ -170,6 +203,7 @@
         h += '<div class="bar">' + list.map(function (k, i) { return '<i class="' + (i < cur ? 'done' : i === cur ? 'cur' : '') + '"></i>'; }).join('') + '</div>';
       }
       if (o.cad) h += '<a class="cad" href="cad.html#' + esc(o.cad) + '">✎ ' + esc(t('CAD design waiting for your OK')) + '<span>' + esc(t('See the CAD and approve')) + ' ›</span></a>';
+      if ('track' in o && st !== 'quote') h += '<button class="tr-btn" data-tr="' + esc(o.order_no) + '">🔗 ' + esc(t(o.track ? "Your customer's link" : 'Link for your customer')) + '</button>';   // update 23
       return h + '</div></div>';
     }
 
@@ -184,6 +218,8 @@
       var done = (d.orders || []).filter(function (o) { return o.status === 'delivered'; });
       var h = langBar();
       if (d.payment && d.payment.due_by) h += '<div class="card pay">💳 ' + esc(t('Payment due by') + ' ' + day(d.payment.due_by)) + '</div>';
+      if (d.rate && window.ArkPoster) h += '<div class="card extra"><span class="ic">📈</span><div><b>' + esc(t("Today's rate card for your shop")) + '</b><span>' + esc(t("With your shop's name — for your WhatsApp status")) + '</span></div><button class="go" data-po="1">' + esc(t('Make it')) + '</button></div>';
+      if (d.showroom) h += '<div class="card extra"><span class="ic">🛍</span><div><b>' + esc(t('Your showroom for your customers')) + '</b><span>' + esc(t("Our designs under your shop's name — share it with your customers")) + '</span></div><button class="go" data-sr="' + esc(d.showroom) + '">' + esc(t('Share')) + '</button></div>';
       if (open.length) h += '<h2>' + esc(t('Orders in work')) + '</h2>' + open.map(function (o) { return orderCard(o, steps); }).join('');
       if ((d.memos || []).length) {
         var today = new Date(); today.setHours(0, 0, 0, 0);
@@ -217,6 +253,9 @@
       main.querySelectorAll('.langs button').forEach(function (bt) {
         bt.onclick = function () { lang = bt.dataset.l; try { localStorage.setItem('statusLang', lang); } catch (e) { /* ignore */ } draw(); };
       });
+      main.querySelectorAll('[data-tr]').forEach(function (bt) { bt.onclick = function () { trackFor(bt.dataset.tr); }; });
+      main.querySelectorAll('[data-sr]').forEach(function (bt) { bt.onclick = function () { shareOut(t('See our new designs') + ' — ' + (data.shop || ''), new URL('showroom.html#' + bt.dataset.sr, location.href).href); }; });
+      main.querySelectorAll('[data-po]').forEach(function (bt) { bt.onclick = posterSheet; });
       main.querySelectorAll('img.pic').forEach(function (im) {
         im.onclick = function () {
           if (!im.src) return;
@@ -226,6 +265,63 @@
           document.body.appendChild(z);
         };
       });
+    }
+
+    /* update 23: a link for the shop's own customer, its showroom, its rate card */
+    function shareOut(text, url) {
+      var all = text + '\n' + url;
+      if (navigator.share) { navigator.share({ text: all }).then(function () {}, function () {}); return; }
+      window.open('https://wa.me/?text=' + encodeURIComponent(all), '_blank');
+    }
+    function sheet(html) {
+      var old = document.querySelector('.sheet'); if (old) old.remove();
+      var s = document.createElement('div'); s.className = 'sheet';
+      s.innerHTML = '<div class="in">' + html + '</div>';
+      s.onclick = function (e) { if (e.target === s) s.remove(); };
+      document.body.appendChild(s);
+      return s;
+    }
+    function trackFor(ono) {
+      var o = (data.orders || []).filter(function (x) { return String(x.order_no) === String(ono); })[0];
+      if (!o) return;
+      var url = o.track ? new URL('track.html#' + o.track, location.href).href : '';
+      var s = sheet('<h3>🔗 ' + esc(t('Link for your customer')) + '</h3><div style="color:var(--muted);font-size:13.5px">' + esc(no('ORD', o.order_no)) + ' · ' + esc(t("It shows your shop's name and how far the order has come — no prices.")) + '</div>' +
+        '<label for="tr-n">' + esc(t("Customer's name (optional)")) + '</label><input id="tr-n" maxlength="80" value="' + esc(o.track_name || '') + '">' +
+        (url ? '<div class="lnk">' + esc(url) + '</div>' : '') + '<p class="err" id="tr-err"></p>' +
+        '<div class="row"><button id="tr-x">' + esc(t('Close')) + '</button><button class="pri" id="tr-go">' + esc(t(url ? 'Share' : 'Make the link')) + '</button></div>');
+      s.querySelector('#tr-x').onclick = function () { s.remove(); };
+      s.querySelector('#tr-go').onclick = function () {
+        var nm = s.querySelector('#tr-n').value.trim(), go = s.querySelector('#tr-go');
+        go.disabled = true;
+        db.rpc('shop_track_link', { p_token: token, p_order_no: o.order_no, p_name: nm || null }).then(function (r) {
+          go.disabled = false;
+          if (r.error || !r.data) { s.querySelector('#tr-err').textContent = r.error ? t(String(r.error.message || '').replace(/\.$/, '')) : ''; return; }
+          o.track = r.data; o.track_name = nm || o.track_name;
+          var u = new URL('track.html#' + r.data, location.href).href;
+          s.remove(); draw();
+          shareOut((nm ? nm + ' — ' : '') + t('Your order') + ' · ' + (data.shop || ''), u);
+        }, function () { go.disabled = false; s.querySelector('#tr-err').textContent = t('Could not load — check the internet and open the link again.'); });
+      };
+    }
+    function posterSheet() {
+      if (!window.ArkPoster || !data.rate) return;
+      var rows = ArkPoster.rateRows(data.rate, lang);
+      var P = { shop: data.shop || '', city: data.city || '', phone: data.phone || '', lang: lang, theme: 'maroon', date: data.rate.on, rows: rows };
+      var s = sheet('<h3>📈 ' + esc(t('Rate card')) + '</h3><div style="color:var(--muted);font-size:13.5px">' + esc(t('Rates for 10 g (silver: 1 kg)')) + '</div>' +
+        '<div class="rates">' + rows.map(function (r, i) { return '<div><label for="po-' + i + '">' + esc(r.k) + '</label><input id="po-' + i + '" inputmode="numeric" value="' + r.v + '"></div>'; }).join('') + '</div>' +
+        '<label for="po-ph">' + esc(t('Your phone on it')) + '</label><input id="po-ph" inputmode="tel" value="' + esc(P.phone) + '">' +
+        '<div id="po-c"></div><div class="row"><button id="po-x">' + esc(t('Close')) + '</button><button class="pri" id="po-go">' + esc(t('Share / Save')) + '</button></div>');
+      function redraw() {
+        P.rows = rows.map(function (r, i) { var v = Math.round(Number(String(s.querySelector('#po-' + i).value).replace(/[^\d.]/g, '')) || 0); return { k: r.k, per: r.per, v: v }; });
+        P.phone = s.querySelector('#po-ph').value.trim();
+        var cv = ArkPoster.rateCard(P), box = s.querySelector('#po-c');
+        box.innerHTML = ''; box.appendChild(cv);
+        return cv;
+      }
+      s.querySelectorAll('input').forEach(function (i) { i.oninput = redraw; });
+      redraw();
+      s.querySelector('#po-x').onclick = function () { s.remove(); };
+      s.querySelector('#po-go').onclick = function () { ArkPoster.share(redraw(), 'rate-card', ''); };
     }
 
     db.rpc('shop_page', { p_token: token }).then(function (r) {

@@ -345,6 +345,11 @@ async function findStockByCode(raw) {
     const { data } = await db.from('catalogue_items').select('*').eq('id', app[1]).limit(1);
     return data || [];
   }
+  const pp = /piece\.html#([0-9a-f-]{36})/i.exec(s);   // the QR of a piece's passport (update 23)
+  if (pp) {
+    const { data } = await db.from('catalogue_items').select('*').eq('passport', pp[1].toLowerCase()).limit(1);
+    return data || [];
+  }
   const p = parseTagText(s);
   const codes = [p.tag_no, p.design_no, p.code, tagCode(s)].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i);
   for (const c of codes) {
