@@ -10,6 +10,8 @@ const DP_SVG = (p) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 const DEPT_ICON = DP_SVG('<path d="M3 21h18"/><path d="M5 21V8l7-4.5L19 8v13"/><path d="M9.5 21v-4.5h5V21"/>' +
   '<path d="M9 10.5h.01M12 10.5h.01M15 10.5h.01M9 13.5h.01M12 13.5h.01M15 13.5h.01"/>');
 const DEPTS = [
+  { k: 'work', t: 'Work', s: 'Your to-do, and work you gave', c: '#be185d', bg: '#fce7f1',
+    ic: DP_SVG('<rect x="4" y="3.5" width="16" height="17" rx="2.5"/><path d="M8 8.5l1.5 1.5L12.5 7"/><path d="M14.5 8.5H17"/><path d="M8 14l1.5 1.5 3-3"/><path d="M14.5 14H17"/>') },
   { k: 'sales', t: 'Sales', s: 'Selling to shops', c: '#7b1e3c', bg: '#f8e9ee',
     ic: DP_SVG('<path d="M5.5 8h13l-1.2 12.5H6.7L5.5 8z"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/>') },
   { k: 'accounts', t: 'Accounts', s: 'Money and gold: due and received', c: '#1f7a4d', bg: '#e5f4ec',
@@ -38,7 +40,7 @@ function dpTools(k) {
   const pay = fn('renderPayDues') && appOn('payments');
   const targets = own && fn('renderTargetsSection') && appOn('targets');
   const out = [];
-  const T = (cond, a, i, t, s, tab) => { if (cond) out.push({ a, i, t, s, tab }); };
+  const T = (cond, a, i, t, s, tab, d) => { if (cond) out.push({ a, i, t, s, tab, d }); };
   const toCollect = () => T(bills, 'dues-bills', '🪙', 'To collect', 'Money and raw gold each shop still owes for its bills');
   const billList = () => T(bills, 'bl-list', '🧾', 'Ready-stock bills', 'Sale bills and quotations for pieces from your stock');
   const closing = () => T(gold && own, 'cl-open', '🌙', 'Today\'s closing', 'Sales, money and gold received, pieces given and back — any day');
@@ -59,7 +61,14 @@ function dpTools(k) {
   const backup = () => T(own, 'export-data', '⬇️', 'Export all data', 'Excel-ready files of everything');
   const tgt = () => T(targets, 'dp-targets', '🎯', 'Targets', 'Meetings, new clients, orders and sales for each person, each month');
 
-  if (k === 'sales') {
+  if (k === 'work') {   // update 20
+    const w = on('workOn');
+    T(w, 'wo-give', '➕', 'Give work', 'To one person, a few, or everyone — with files and a voice note');
+    T(w, 'wo-list', '📝', 'My work', 'Work given to me — start it, finish it', null, { who: 'me' });
+    T(w, 'wo-list', '📤', 'Work I gave', 'Who started, who finished — accept or send back', null, { who: 'by' });
+    T(w && own, 'wo-list', '👥', 'Everyone\'s work', 'All the work in the team', null, { who: 'all' });
+    T(w && own, 'wo-report', '📊', 'Work report', 'For each person: done, on time, late, time taken');
+  } else if (k === 'sales') {
     T(bills, 'bl-new', '➕', 'Bill from stock', 'A sale bill or a quotation for a shop');
     billList(); toCollect(); appr(); links(); rate(); closing(); tgt();
   } else if (k === 'accounts') {
@@ -125,7 +134,31 @@ function renderDepts() {
   $('#content').innerHTML = '<div class="dp-grid">' + list.map((d) =>
     '<button class="dp-card" data-action="dp-open" data-k="' + d.k + '" style="--dc:' + d.c + ';--dt:' + d.bg + '">' +
     '<span class="dp-ic">' + d.ic + '</span><b>' + esc(d.t) + '</b><span class="dp-s">' + esc(d.s) + '</span></button>').join('') + '</div>';
+  dpFit();
 }
+/* on a computer every square fits on the screen: the number across and the size that makes the squares biggest
+   (as wide as the page when there are few; a phone: two across, and the page scrolls) */
+function dpFit() {
+  const g = $('.dp-grid');
+  if (!g) return;
+  if (!window.matchMedia || !window.matchMedia('(min-width: 1024px)').matches) { g.style.gridTemplateColumns = ''; g.style.removeProperty('--dp-size'); return; }
+  const n = g.children.length, gap = 20;
+  const W = g.clientWidth, Hh = window.innerHeight - (g.getBoundingClientRect().top + window.scrollY) - 28;
+  if (!n || W <= 0) return;
+  const opts = [];
+  for (let cols = Math.min(3, n); cols <= Math.max(3, n); cols++) {
+    const rows = Math.ceil(n / cols), sw = (W - gap * (cols - 1)) / cols, sh = (Hh - gap * (rows - 1)) / rows;
+    const size = Math.min(sw, sh);
+    opts.push({ cols, size, wide: sw <= sh, fill: Math.min(1, (cols * size + gap * (cols - 1)) / W) });
+  }
+  const top = Math.max.apply(null, opts.map((o) => o.size));
+  // nearly as big (within 8 %) but filling the width better: that one looks tidier
+  const best = opts.filter((o) => o.size >= top * 0.92).sort((a, b2) => b2.fill - a.fill || b2.size - a.size)[0];
+  const size = Math.max(140, Math.floor(best.size));
+  g.style.gridTemplateColumns = best.wide ? 'repeat(' + best.cols + ', minmax(0, 1fr))' : 'repeat(' + best.cols + ', ' + size + 'px)';
+  g.style.setProperty('--dp-size', size + 'px');
+}
+window.addEventListener('resize', () => { clearTimeout(S.dpFitT); S.dpFitT = setTimeout(dpFit, 120); });
 
 /* one department: its numbers, then its screens */
 function renderDept(k) {
@@ -135,7 +168,8 @@ function renderDept(k) {
   $('#content').innerHTML = '<div class="dp-page" data-k="' + k + '" style="--dc:' + d.c + ';--dt:' + d.bg + '">' +
     '<div class="dp-hero"><span class="dp-ic">' + d.ic + '</span><div><h2>' + esc(d.t) + '</h2><p>' + esc(d.s) + '</p></div></div>' +
     '<div id="dp-nums"></div>' +
-    '<div class="dp-tools">' + tools.map((x) => '<button class="dp-tool" data-action="' + x.a + '"' + (x.tab ? ' data-tab="' + x.tab + '"' : '') + '>' +
+    '<div class="dp-tools">' + tools.map((x) => '<button class="dp-tool" data-action="' + x.a + '"' + (x.tab ? ' data-tab="' + x.tab + '"' : '') +
+      Object.keys(x.d || {}).map((n) => ' data-' + n + '="' + esc(x.d[n]) + '"').join('') + '>' +
       '<span class="dp-ti">' + x.i + '</span><b>' + esc(x.t) + '</b><span class="dp-ts">' + esc(x.s) + '</span></button>').join('') + '</div>' +
     (tools.length ? '' : '<div class="empty">Nothing here yet.</div>') + '</div>';
   const tok = (S.dpTok = (S.dpTok || 0) + 1);
@@ -157,7 +191,18 @@ async function dpNumbers(k) {
   const out = [];
   const put = (v, label, warn) => { if (v !== null && v !== undefined) out.push([String(v), label, !!(warn && v)]); };
   const none = Promise.resolve(null);
-  if (k === 'sales' && on('billsOn')) {
+  if (k === 'work' && on('workOn')) {
+    const [mine, check] = await Promise.all([
+      rows(db.from('tasks').select('status, due_at').eq('given_to', S.me.id).in('status', ['todo', 'started']).limit(2000)),
+      count(db.from('tasks').select('id', { count: 'exact', head: true }).eq('given_by', S.me.id).eq('status', 'done')),
+    ]);
+    if (mine) {
+      put(mine.filter((t) => t.status === 'todo').length, 'To do');
+      put(mine.filter((t) => t.status === 'started').length, 'Started');
+      put(mine.filter((t) => t.due_at && new Date(t.due_at).getTime() < Date.now()).length, 'Late', true);
+    }
+    put(check, 'To check');
+  } else if (k === 'sales' && on('billsOn')) {
     const [month, quotes] = await Promise.all([
       rows(db.from('bills').select('bill_date, total_amt').eq('kind', 'sale').eq('status', 'open').gte('bill_date', monthStart()).limit(20000)),
       count(db.from('bills').select('id', { count: 'exact', head: true }).eq('kind', 'quote').eq('status', 'open')),

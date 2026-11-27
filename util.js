@@ -209,7 +209,7 @@ async function loadBiz() {
   const [has8, has9, ver] = await Promise.all([v8, v9, v11]);
   if (has8 !== null) S.dbv8 = has8;
   if (has9 !== null) S.dbv9 = has9;
-  if (ver !== null) { S.dbv11 = ver >= 11; S.dbv12 = ver >= 12; S.dbv13 = ver >= 13; S.dbv14 = ver >= 14; S.dbv15 = ver >= 15; S.dbv16 = ver >= 16; S.dbv17 = ver >= 17; S.dbv18 = ver >= 18; S.dbv19 = ver >= 19; }
+  if (ver !== null) { S.dbv11 = ver >= 11; S.dbv12 = ver >= 12; S.dbv13 = ver >= 13; S.dbv14 = ver >= 14; S.dbv15 = ver >= 15; S.dbv16 = ver >= 16; S.dbv17 = ver >= 17; S.dbv18 = ver >= 18; S.dbv19 = ver >= 19; S.dbv20 = ver >= 20; }
   if (r.error || !r.data) { if (!S.biz) S.biz = {}; return null; }
   S.biz = r.data;
   S.bizAt = Date.now();
@@ -269,6 +269,8 @@ const APP_SECTIONS = [
   ['watermark', 'Name on shared photos', 'Your business name on the photos you share or send to shops'],
   // database update 18
   ['bills', 'Ready-stock bills', 'Sale bills, quotations and payments for pieces from your stock', 18],
+  // database update 20
+  ['work', 'Work (to-do)', 'Give work to anyone in the team — started, finished, files, comments', 20],
 ];
 function appSectionsShown() { return APP_SECTIONS.filter((s) => !s[3] || !!S['dbv' + s[3]]); }
 const STEP_CHOICES = ['cad', 'wax', 'in_production', 'setting', 'finished', 'igi'];   // between Approved and Delivered

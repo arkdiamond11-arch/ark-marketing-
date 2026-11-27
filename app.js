@@ -464,10 +464,11 @@ async function renderToday() {
   if (!overdue.length && !today.length && !upcoming.length && !later.length) {
     html += '<div class="empty"><div class="big">🌤️</div>No pending reminders.<br>Log an interaction and add follow-ups — they will appear here.</div>';
   }
-  c.innerHTML = (typeof eventBannerHTML === 'function' ? eventBannerHTML() : '') + '<div id="today-day"></div><div id="today-team"></div>' +
+  c.innerHTML = (typeof eventBannerHTML === 'function' ? eventBannerHTML() : '') + '<div id="today-work"></div><div id="today-day"></div><div id="today-team"></div>' +
     '<div id="today-late"></div><div id="today-stuck"></div><div id="today-summary"></div><div id="today-rate"></div><div id="today-cash"></div><div id="today-targets"></div><div id="today-fest"></div><div id="today-wishes"></div>' +
     '<div id="today-pay"></div><div id="today-orders"></div><div id="today-repairs"></div><div id="today-approvals"></div>' + html +
     '<div id="today-reorder"></div><div id="today-visits"></div><div id="today-sleep"></div>';
+  if (typeof loadTodayWork === 'function') loadTodayWork();   // work given to me (update 20)
   if (typeof renderTodaySummary === 'function') renderTodaySummary($('#today-summary'));
   if (typeof renderMyTargets === 'function' && appOn('targets')) renderMyTargets($('#today-targets'));
   if (typeof renderTodayRate === 'function') renderTodayRate($('#today-rate'));
@@ -1267,6 +1268,7 @@ function renderClientPage(cl) {
   if (typeof approvalsOn === 'function' && approvalsOn()) more.push('<button class="btn btn-small btn-secondary" data-action="ap-new-for" data-id="' + cl.id + '">💎 Give on approval</button>');
   if (typeof shopLinkOn === 'function' && shopLinkOn()) more.push('<button class="btn btn-small btn-secondary" data-action="cl-shoplink" data-id="' + cl.id + '">🔗 Shop\'s own page</button>');
   if (typeof stockOn === 'function' && stockOn()) more.push('<button class="btn btn-small btn-secondary" data-action="sl-new-for" data-id="' + cl.id + '">📦 Ready-stock link</button>');
+  if (typeof workOn === 'function' && workOn()) more.push('<button class="btn btn-small btn-secondary" data-action="wo-give-for" data-c="' + cl.id + '">📝 Give work</button>');   // work.js
 
   $('#content').innerHTML =
     '<div class="client-head"><h2>' + esc(cl.trade_name) + '</h2>' +
@@ -1856,6 +1858,7 @@ async function exportAllData() {
       ['vendors', 2, typeof exportVendorData === 'function' && S.dbv6 ? () => exportVendorData(pName, today) : null],
       ['client notes', 1, typeof exportNotesData === 'function' && S.dbv6 ? () => exportNotesData(pName, cName, today) : null],
       ['payment dates', 1, typeof exportPayData === 'function' ? () => exportPayData(pName, cName, today) : null],
+      ['work', 1, typeof exportWorkData === 'function' && S.dbv20 ? () => exportWorkData(pName, cName, today) : null],
     ];
     for (const x of extra) {
       if (!x[2]) continue;

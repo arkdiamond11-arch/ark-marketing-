@@ -83,7 +83,8 @@ async function renderAlerts() {
             : 'When your shops pick designs, send a design they want made, or choose from your ready-stock list')
           : sw('picks', 'Shops picking designs', owner ? 'When a shop sends the designs it likes' : 'When a shop you sent a message to picks designs')) : '') +
         (S.dbv17 && owner ? sw('weekly', 'Monday summary, 9 am', 'Last week: meetings, new clients, orders, deliveries') : '') +
-        (S.dbv19 && owner ? sw('closing', 'Day\'s closing, 7:45 pm', 'Today\'s sales, money and gold received, pieces given and back') : '') + '</div>' +
+        (S.dbv19 && owner ? sw('closing', 'Day\'s closing, 7:45 pm', 'Today\'s sales, money and gold received, pieces given and back') : '') +
+        (S.dbv20 ? sw('work', 'Work', 'Work given to you; work you gave started, finished; comments') : '') + '</div>' +
         '<div class="action-row"><button class="btn btn-secondary" data-action="al-test" id="al-test">Send a test alert</button>' +
         '<button class="btn btn-ghost" data-action="al-off">Turn off on this phone</button></div>';
     } else {
@@ -234,7 +235,7 @@ function alertOpenUrl(u) {
     if (typeof renderClosing === 'function') { S.clDay = todayStr(); showSub('Today\'s closing', renderClosing); }
     return true;
   }
-  const m = /#(dr|sl|[okc])=([0-9a-f-]{36})/i.exec(String(u || ''));
+  const m = /#(dr|sl|[okcw])=([0-9a-f-]{36})/i.exec(String(u || ''));
   if (!m || !S.me) return false;
   try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { /* ignore */ }
   const k = m[1].toLowerCase();
@@ -242,13 +243,14 @@ function alertOpenUrl(u) {
   else if (k === 'sl') { if (typeof renderStockLink === 'function') showSub('Ready stock', () => renderStockLink(m[2])); }   // a shop chose from ready stock
   else if (k === 'o') openOrder(m[2]);
   else if (k === 'c') { if (typeof openCatItem === 'function') openCatItem(m[2]); }   // a catalogue sticker's QR
+  else if (k === 'w') { if (typeof openTask === 'function') openTask(m[2]); }   // work given, started, finished… (update 20)
   else if (typeof renderCampaign === 'function') showSub('Messages to shops', () => renderCampaign(m[2]));
   return true;
 }
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open') alertOpenUrl(e.data.url); });
 }
-window.addEventListener('hashchange', () => { if (/#(dr|sl|wk|cl|[okc])=/.test(location.hash)) alertOpenUrl(location.hash); });
+window.addEventListener('hashchange', () => { if (/#(dr|sl|wk|cl|[okcw])=/.test(location.hash)) alertOpenUrl(location.hash); });
 
 onAct('al-open', () => showSub('Phone alerts', renderAlerts));
 onAct('al-setup', (el) => alertSetup(el.dataset.again === '1'));
