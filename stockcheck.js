@@ -297,7 +297,7 @@ async function loadClientSuggest(cl) {
   el.innerHTML = '<div class="section-label sl-row"><span>Suggested from stock</span><span class="hint">' + esc('like what this shop bought') + '</span></div>' +
     '<div class="sg-row">' + fit.map((p) => '<button type="button" class="sg-pc" data-action="sg-tap" data-id="' + p.id + '">' +
       ((p.photo_paths || [])[0] ? '<img data-catimg="' + esc(p.photo_paths[0]) + '" alt="">' : '<span class="cat-noimg">💍</span>') +
-      '<b>' + esc(p.tag_no || p.design_no || p.category) + '</b><span>' + esc([p.category, num(p.net_wt) ? grams(p.net_wt) : ''].filter(Boolean).join(' · ')) + '</span></button>').join('') + '</div>' +
+      (p.tag_no || p.design_no ? '<b class="noi18n">' + esc(p.tag_no || p.design_no) : '<b>' + esc(p.category)) + '</b><span>' + esc([p.category, num(p.net_wt) ? grams(p.net_wt) : ''].filter(Boolean).join(' · ')) + '</span></button>').join('') + '</div>' +
     '<div class="action-row" id="sg-acts" style="display:none"><button class="btn btn-secondary" data-action="sg-go" data-k="approval">Give on approval</button>' +
     '<button class="btn btn-primary" data-action="sg-go" data-k="sale">Bill</button></div>';
   fillCatImages(el);

@@ -103,6 +103,8 @@ function dpTools(k) {
     T(on('x22'), 'mo-list', '🎉', 'Offers on making', 'Festival offers — % off making, on the bill in one tap');
     T(on('showroomsOn'), 'se-list', '❤️', 'From the showrooms', 'What shops\' customers liked on their showroom links');
     T(fn('renderBrief'), 'vb-pick', '📋', 'Before a visit', 'One page on a shop: what to talk about, dues, orders, what it buys');
+    T(on('x24'), 'ra-list', '🔔', 'Rate alerts', 'Shops that asked to know when gold reaches a rate');
+    T(on('x24'), 'ex-list', '🔄', 'Exchange requests', 'Pieces shops could not sell and want to change');
     closing(); tgt();
   } else if (k === 'accounts') {
     toCollect(); billList(); cash(); closing(); rate();
@@ -135,6 +137,8 @@ function dpTools(k) {
     T(on('festOn'), 'fest-open-list', '🪔', 'Festival calendar', 'Selling days and days to send wishes');
     T(on('postersOn'), 'po-open', '🖼', 'Posters', 'Rate cards and festival posters with a shop\'s name');
     T(on('showroomsOn'), 'sr-list', '🛍', 'Showroom links', 'A link for each shop\'s own customers — its name on top');
+    T(on('x24'), 'rf-list', '🤝', 'Shops told of by shops', 'Referrals from shops — and the reward for them');
+    T(on('x24'), 'lv-list', '🏅', 'Levels for shops', 'Silver, Gold, Diamond — by the gold bought this year'); 
     T(on('eventsOn'), 'ev-list', '🎪', 'Exhibitions', 'Visitors and meetings at a trade show, kept together');
     bag(); links(); week();
   } else if (k === 'care') {   // update 21 (repairs: before it too)

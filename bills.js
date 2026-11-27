@@ -173,7 +173,7 @@ function renderBillForm() {
       '<input type="date" data-bfd="return_by" value="' + esc(F.return_by) + '"></div>' +
       '<div class="field" style="margin-bottom:2px"><label>Note (optional)</label><input type="text" data-bfd="notes" value="' + esc(F.notes) + '" autocomplete="off"></div>' +
       '<a href="#" class="bf-manual" data-action="ap-manual" data-id="' + F.client.id + '">Pieces that are not in the stock? Type them instead ›</a></div>'
-      : '<div class="section-label">Rates</div><div class="card" id="bf-rates"><div id="bf-offers"></div>' +
+      : '<div class="section-label">Rates</div><div class="card" id="bf-rates"><div id="bf-offers"></div><div id="bf-level"></div>' +
       '<div class="field"><label>Gold paid in</label>' + segHTML('bf_mode', GOLD_MODES.map((x) => x[1]), S.formState.bf_mode) +
       '<div class="hint" id="bf-mode-hint">' + esc(R.gold_mode === 'metal' ? 'The shop gives raw gold for the gold in the pieces; diamonds, stones and labour are paid in money.' : 'Everything is paid in money.') + '</div></div>' +
       '<div class="o-2col"><div class="field"><label>Gold rate (24K, ₹ per g)</label><input type="text" inputmode="decimal" data-bfr="gold_rate" value="' + v('gold_rate') + '" placeholder="e.g. 13000"></div>' +
@@ -204,6 +204,7 @@ function renderBillForm() {
   c.addEventListener('input', onBillInput);
   c.addEventListener('change', onBillInput);
   if (typeof billExtras === 'function') billExtras(F);   // a booked rate, an offer on making (extras.js)
+  if (typeof billLevelOffer === 'function') billLevelOffer(F);   // the shop's level: % off making (partners.js)
 }
 function onBillInput(e) {
   const F = S.bf;

@@ -1852,3 +1852,23 @@ input.sw:disabled { cursor: default; }
 .po-sw-green { background: linear-gradient(135deg, #0f2e27, #1d4a3e); }
 .po-sw-night { background: linear-gradient(135deg, #15131c, #2b2738); }
 .po-sw-cream { background: linear-gradient(135deg, #fbf5ea, #f1e4cc); }
+
+/* ============================================================
+   v36 — rate alerts, levels, what sold, exchange, referrals,
+   the year with us
+   ============================================================ */
+.lv-chip { background: #fff4d6; color: #8a5a00; font-weight: 700; }
+.ra-hit { margin: 6px 0 10px; }
+.ra-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line, #eae6e2); }
+.ra-row:first-child { border-top: 0; }
+.lv-offer { background: #fff4d6; }
+.sd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 10px; margin: 6px 0 12px; }
+.sd-grid .se-pc { width: auto; position: relative; }
+.sd-grid .se-pc > span { display: block; font-size: 11.5px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sd-grid .se-pc img, .sd-grid .se-pc .cat-noimg { width: 100%; height: auto; aspect-ratio: 1; }
+.sd-tick { position: absolute; right: 4px; top: 4px; width: 22px; height: 22px; border-radius: 50%; background: #1a7f4e; color: #fff; font-style: normal; font-weight: 900; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+.sd-more .sd-tick { background: #fff; color: transparent; border: 2px solid #7b1e3c; }
+.sd-more .se-pc.on .sd-tick { background: #7b1e3c; color: #fff; }
+.se-pc.sold img { opacity: .6; }
+.yc-box canvas { width: 100%; border-radius: 12px; display: block; }
+.rf-rw { background: #fff4d6; font-weight: 650; }

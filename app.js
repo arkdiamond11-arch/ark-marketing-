@@ -1243,6 +1243,7 @@ async function openClient(id, replace) {
     if (typeof loadClientPicks === 'function') loadClientPicks(cl);
     if (typeof loadClientInbox === 'function') loadClientInbox(cl);
     if (typeof loadClientVisit === 'function') loadClientVisit(cl);
+    if (typeof loadClientLevel === 'function') loadClientLevel(cl);   // its level (partners.js)
     if (typeof loadClientReorder === 'function') loadClientReorder(cl);
   }, replace);
 }
@@ -1273,6 +1274,11 @@ function renderClientPage(cl) {
   if (typeof renderBrief === 'function') more.unshift('<button class="btn btn-small btn-secondary" data-action="vb-for" data-id="' + cl.id + '">📋 Before the visit</button>');   // customers.js
   if (typeof showroomsOn === 'function' && showroomsOn()) more.push('<button class="btn btn-small btn-secondary" data-action="sr-for" data-id="' + cl.id + '">🛍 Showroom for its customers</button>');
   if (typeof postersOn === 'function' && postersOn()) more.push('<button class="btn btn-small btn-secondary" data-action="po-for" data-id="' + cl.id + '">🖼 Poster with its name</button>');   // posters.js
+  if (typeof x24 === 'function' && x24()) {   // partners.js
+    more.push('<button class="btn btn-small btn-secondary" data-action="sd-for" data-id="' + cl.id + '">🔁 What sold</button>');
+    more.push('<button class="btn btn-small btn-secondary" data-action="yc-for" data-id="' + cl.id + '">🎁 Their year with us</button>');
+    more.push('<button class="btn btn-small btn-secondary" data-action="ra-for" data-id="' + cl.id + '">🔔 Rate alert</button>');
+  }
 
   $('#content').innerHTML =
     '<div class="client-head"><h2>' + esc(cl.trade_name) + '</h2>' +
@@ -1280,7 +1286,7 @@ function renderClientPage(cl) {
     '<div class="chips">' + chipCat(cl.category) + chipInterest(cl.interest) +
     (cl.order_type ? '<span class="chip">' + esc(cl.order_type) + '</span>' : '') +
     (cl.credit_hold && typeof creditOn === 'function' && creditOn() ? '<span class="chip cr-hold">⛔ On hold</span>' : '') +
-    '<span id="cl-visit"></span><span id="cl-reorder"></span></div></div>' +
+    '<span id="cl-visit"></span><span id="cl-reorder"></span><span id="cl-level"></span></div></div>' +
 
     '<div class="action-row">' +
     '<button class="btn btn-primary" data-action="new-interaction" data-id="' + cl.id + '">＋ Meeting</button>' +

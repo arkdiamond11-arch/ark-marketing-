@@ -16,6 +16,14 @@
     night:  { bg1: '#15131c', bg2: '#2b2738', ink: '#f7f3ea', gold: '#d8b35f', soft: 'rgba(247,243,234,.7)', line: 'rgba(216,179,95,.5)' },
     cream:  { bg1: '#fbf5ea', bg2: '#f1e4cc', ink: '#2a1c12', gold: '#a8781f', soft: 'rgba(42,28,18,.66)', line: 'rgba(168,120,31,.5)' }
   };
+  var YW = {
+    en: { title: 'Your year with us', gold: 'fine gold bought', bills: 'bills', bill: 'bill', pieces: 'pieces', piece: 'piece', orders: 'orders made', order: 'order made', ontime: 'delivered on time',
+          top: 'Bought most', level: 'member', thanks: 'Thank you for a wonderful year', kg: 'kg', g: 'g' },
+    hi: { title: 'हमारे साथ आपका साल', gold: 'फ़ाइन सोना ख़रीदा', bills: 'बिल', pieces: 'पीस', orders: 'ऑर्डर बने', ontime: 'समय पर डिलीवर',
+          top: 'सबसे ज़्यादा ख़रीदा', level: 'सदस्य', thanks: 'शानदार साल के लिए धन्यवाद', kg: 'किलो', g: 'ग्राम' },
+    gu: { title: 'અમારી સાથે તમારું વર્ષ', gold: 'ફાઇન સોનું ખરીદ્યું', bills: 'બિલ', pieces: 'પીસ', orders: 'ઓર્ડર બન્યા', ontime: 'સમયસર ડિલિવર',
+          top: 'સૌથી વધુ ખરીદ્યું', level: 'સભ્ય', thanks: 'શાનદાર વર્ષ માટે આભાર', kg: 'કિલો', g: 'ગ્રામ' }
+  };
   var WORDS = {
     en: { rate: "Today's gold rate", per10: 'for 10 g', perKg: 'for 1 kg', silver: 'Silver', note: 'Rates may change during the day · GST extra',
           newd: 'New arrival', visit: 'Visit us', call: 'Call' },
@@ -222,6 +230,44 @@
       .filter(function (a) { return Number(a[1]) > 0; })
       .map(function (a) { return { k: a[0], v: Math.round(Number(a[1]) * (a[2] === 'kg' ? 1000 : 10)), per: a[2] }; });
   }
-  window.ArkPoster = { rateCard: rateCard, festival: festival, arrival: arrival, share: share, toBlob: toBlob, loadImage: loadImage, rateRows: rateRows,
+  /* "your year with us": Y = { shop, city, from, to, g, bills, pieces, top, orders, delivered, on_time, level: { name }, business } */
+  function yearCard(Y, o) {
+    o = o || {};
+    var c = canvas(1350), x = c.getContext('2d'), w = c.width, h = c.height, th = theme(o.theme || 'night'), L = YW[o.lang] || YW.en;
+    backdrop(x, th, w, h);
+    [[160, 150, 22], [930, 180, 16], [860, 90, 12], [220, 260, 12]].forEach(function (p) { sparkle(x, th, p[0], p[1], p[2]); });
+    centre(x, L.title, w / 2, 170, 60, '800', SERIF, th.gold, 900);
+    var M = MONTHS[o.lang] || MONTHS.en;
+    var per = function (iso) { var d = new Date(iso + 'T00:00:00'); return M[d.getMonth()] + ' ' + d.getFullYear(); };
+    centre(x, (Y.shop || '') + (Y.from ? '  ·  ' + per(Y.from) + ' – ' + per(Y.to) : ''), w / 2, 230, 32, '600', SANS, th.soft, 940);
+    ornament(x, th, w / 2, 278, 230);
+    var g = Number(Y.g) || 0;
+    var big = g >= 1000 ? (Math.round(g / 10) / 100).toLocaleString('en-IN') + ' ' + L.kg : (Math.round(g * 10) / 10).toLocaleString('en-IN') + ' ' + L.g;
+    centre(x, big, w / 2, 420, 130, '800', SANS, th.ink, 940);
+    centre(x, L.gold, w / 2, 478, 34, '600', SANS, th.gold, 900);
+    var one = function (n, k) { return (+n === 1 && L[k.slice(0, -1)]) || L[k]; };   // "1 bill", "3 bills" (hi / gu: the same word)
+    var boxes = [[Y.bills, one(Y.bills, 'bills')], [Y.pieces, one(Y.pieces, 'pieces')], [Y.orders, one(Y.orders, 'orders')],
+      [Y.delivered ? Math.round((Y.on_time || 0) * 100 / Y.delivered) + '%' : '—', L.ontime]];
+    boxes.forEach(function (b, i) {
+      var bx = 110 + (i % 2) * 440, by = 540 + Math.floor(i / 2) * 190;
+      x.fillStyle = th === THEMES.cream ? 'rgba(168,120,31,.08)' : 'rgba(255,255,255,.07)';
+      roundRect(x, bx, by, 420, 165, 24); x.fill();
+      x.strokeStyle = th.line; x.lineWidth = 1.5; roundRect(x, bx, by, 420, 165, 24); x.stroke();
+      centre(x, String(b[0] == null ? 0 : b[0]), bx + 210, by + 92, 70, '800', SANS, th.ink, 380);
+      centre(x, b[1], bx + 210, by + 138, 28, '600', SANS, th.soft, 380);
+    });
+    var y = 970;
+    if (Y.top) { centre(x, L.top + ': ' + Y.top, w / 2, y, 38, '700', SANS, th.ink, 940); y += 66; }
+    if (Y.level && Y.level.name) {
+      var t = '🏅 ' + Y.level.name + ' ' + L.level;
+      x.font = '800 38px ' + SANS; var tw = Math.min(800, x.measureText(t).width + 80);
+      x.fillStyle = th.gold; roundRect(x, w / 2 - tw / 2, y - 46, tw, 66, 33); x.fill();
+      centre(x, t, w / 2, y, 38, '800', SANS, th.bg1, tw - 40); y += 70;
+    }
+    centre(x, L.thanks + ' 🙏', w / 2, h - 150, 40, '700', SERIF, th.gold, 940);
+    if (Y.business) centre(x, Y.business, w / 2, h - 96, 30, '600', SANS, th.soft, 900);
+    return c;
+  }
+  window.ArkPoster = { rateCard: rateCard, festival: festival, arrival: arrival, yearCard: yearCard, share: share, toBlob: toBlob, loadImage: loadImage, rateRows: rateRows,
     themes: Object.keys(THEMES), words: WORDS };
 })();

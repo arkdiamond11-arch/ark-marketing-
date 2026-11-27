@@ -235,7 +235,7 @@ function alertOpenUrl(u) {
     if (typeof renderClosing === 'function') { S.clDay = todayStr(); showSub('Today\'s closing', renderClosing); }
     return true;
   }
-  const m = /#(dr|sl|se|[okcwp])=([0-9a-f-]{36})/i.exec(String(u || ''));
+  const m = /#(dr|sl|se|ex|rf|[okcwp])=([0-9a-f-]{36})/i.exec(String(u || ''));
   if (!m || !S.me) return false;
   try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { /* ignore */ }
   const k = m[1].toLowerCase();
@@ -246,13 +246,15 @@ function alertOpenUrl(u) {
   else if (k === 'w') { if (typeof openTask === 'function') openTask(m[2]); }   // work given, started, finished… (update 20)
   else if (k === 'se') { if (typeof renderEnquiries === 'function') { S.enqFocus = m[2]; showSub('From the showrooms', renderEnquiries); } }   // a shop's customer liked pieces (update 23)
   else if (k === 'p') { if (typeof openPassportPiece === 'function') openPassportPiece(m[2]); }   // "Open in the app" on a piece's passport (update 23)
+  else if (k === 'ex') { if (typeof renderExchanges === 'function') { S.exFocus = m[2]; showSub('Exchange requests', renderExchanges); } }   // update 24
+  else if (k === 'rf') { if (typeof renderReferrals === 'function') { S.rfFocus = m[2]; showSub('Shops told of by shops', renderReferrals); } }
   else if (typeof renderCampaign === 'function') showSub('Messages to shops', () => renderCampaign(m[2]));
   return true;
 }
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open') alertOpenUrl(e.data.url); });
 }
-window.addEventListener('hashchange', () => { if (/#(dr|sl|se|wk|cl|[okcwp])=/.test(location.hash)) alertOpenUrl(location.hash); });
+window.addEventListener('hashchange', () => { if (/#(dr|sl|se|ex|rf|wk|cl|[okcwp])=/.test(location.hash)) alertOpenUrl(location.hash); });
 
 onAct('al-open', () => showSub('Phone alerts', renderAlerts));
 onAct('al-setup', (el) => alertSetup(el.dataset.again === '1'));

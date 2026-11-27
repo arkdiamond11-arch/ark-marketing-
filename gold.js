@@ -75,6 +75,7 @@ function rateModal() {
     if (error) { e.target.disabled = false; toast('Could not save — only the owner sets the rate.', 'err'); return; }
     closeModal();
     toast('Gold rate saved ✓', 'ok');
+    if (typeof rateAlertsAfterSave === 'function') rateAlertsAfterSave(row.r24);   // shops that asked to know (partners.js)
     S.rateLoaded = false;
     renderTodayRate($('#today-rate'));
   };

@@ -209,7 +209,7 @@ async function loadBiz() {
   const [has8, has9, ver] = await Promise.all([v8, v9, v11]);
   if (has8 !== null) S.dbv8 = has8;
   if (has9 !== null) S.dbv9 = has9;
-  if (ver !== null) { S.dbv11 = ver >= 11; S.dbv12 = ver >= 12; S.dbv13 = ver >= 13; S.dbv14 = ver >= 14; S.dbv15 = ver >= 15; S.dbv16 = ver >= 16; S.dbv17 = ver >= 17; S.dbv18 = ver >= 18; S.dbv19 = ver >= 19; S.dbv20 = ver >= 20; S.dbv21 = ver >= 21; S.dbv22 = ver >= 22; S.dbv23 = ver >= 23; }
+  if (ver !== null) { S.dbv11 = ver >= 11; S.dbv12 = ver >= 12; S.dbv13 = ver >= 13; S.dbv14 = ver >= 14; S.dbv15 = ver >= 15; S.dbv16 = ver >= 16; S.dbv17 = ver >= 17; S.dbv18 = ver >= 18; S.dbv19 = ver >= 19; S.dbv20 = ver >= 20; S.dbv21 = ver >= 21; S.dbv22 = ver >= 22; S.dbv23 = ver >= 23; S.dbv24 = ver >= 24; }
   if (r.error || !r.data) { if (!S.biz) S.biz = {}; return null; }
   S.biz = r.data;
   S.bizAt = Date.now();

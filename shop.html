@@ -79,6 +79,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js"></script>
   <script src="config.js"></script>
   <script src="poster.js"></script>
+  <script src="shopmore.js"></script>
   <script>
   /* A shop's own page (no login): its orders in work with the step and
      delivery date, a CAD waiting for its OK, pieces on approval, repairs
@@ -244,6 +245,7 @@
       if (!open.length && !done.length && !(d.memos || []).length && !(d.repairs || []).length && !(d.payment && d.payment.due_by)) {
         h += '<div class="msg"><div class="big">🌤️</div><p>' + esc(t('Nothing running right now.')) + '</p></div>';
       }
+      if (window.ShopMore) h += ShopMore.html(d, lang);   // update 24: level, rate alerts, pieces bought, exchange, refer a shop
       if (b.phone) {
         var ph = String(b.phone).replace(/[^\d+]/g, '');
         var wa = ph.replace(/\D/g, ''); if (wa.length === 10) wa = '91' + wa;
@@ -254,6 +256,7 @@
         bt.onclick = function () { lang = bt.dataset.l; try { localStorage.setItem('statusLang', lang); } catch (e) { /* ignore */ } draw(); };
       });
       main.querySelectorAll('[data-tr]').forEach(function (bt) { bt.onclick = function () { trackFor(bt.dataset.tr); }; });
+      if (window.ShopMore) ShopMore.wire(main, { db: db, token: token, data: data, lang: lang, redraw: draw });
       main.querySelectorAll('[data-sr]').forEach(function (bt) { bt.onclick = function () { shareOut(t('See our new designs') + ' — ' + (data.shop || ''), new URL('showroom.html#' + bt.dataset.sr, location.href).href); }; });
       main.querySelectorAll('[data-po]').forEach(function (bt) { bt.onclick = posterSheet; });
       main.querySelectorAll('img.pic').forEach(function (im) {
