@@ -1269,6 +1269,7 @@ function renderClientPage(cl) {
   if (typeof shopLinkOn === 'function' && shopLinkOn()) more.push('<button class="btn btn-small btn-secondary" data-action="cl-shoplink" data-id="' + cl.id + '">🔗 Shop\'s own page</button>');
   if (typeof stockOn === 'function' && stockOn()) more.push('<button class="btn btn-small btn-secondary" data-action="sl-new-for" data-id="' + cl.id + '">📦 Ready-stock link</button>');
   if (typeof workOn === 'function' && workOn()) more.push('<button class="btn btn-small btn-secondary" data-action="wo-give-for" data-c="' + cl.id + '">📝 Give work</button>');   // work.js
+  if (typeof careOn === 'function' && careOn()) more.push('<button class="btn btn-small btn-secondary" data-action="cs-new-for" data-c="' + cl.id + '">🙋 Complaint</button>');   // care.js
 
   $('#content').innerHTML =
     '<div class="client-head"><h2>' + esc(cl.trade_name) + '</h2>' +
@@ -1965,6 +1966,7 @@ async function renderTeamList() {
       (!me && p.role !== 'owner' && Object.prototype.hasOwnProperty.call(p, 'can_delete_clients')
         ? '<label class="m-perm"><span class="sw-t"><b>Can delete clients</b><span>Only clients without orders or account entries</span></span>' +
           '<input type="checkbox" class="sw" data-del-perm="' + p.id + '"' + (p.can_delete_clients ? ' checked' : '') + '></label>' : '') +
+      (typeof deptAccessHTML === 'function' && !me ? deptAccessHTML(p) : '') +   // database update 21 (care.js)
       '</div>';
   }).join('') || '<div class="empty" style="padding:8px">Only you so far — add your executives.</div>';
   el.querySelectorAll('[data-del-perm]').forEach((x) => x.addEventListener('change', () => setDeletePerm(x)));

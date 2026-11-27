@@ -598,6 +598,7 @@ onAct('wf-save', async (el) => {
   S.voice = null;
   if (F.id) woAlert('edited', { task_id: F.id });
   else woAlert('given', { batch_id: batch });
+  if (!F.id && typeof F.onGiven === 'function') { try { F.onGiven(ids, batch); } catch (e) { /* the work is given all the same */ } }   // e.g. a complaint (care.js)
   const n = F.id ? 0 : F.to.filter((x) => x !== S.me.id).length;
   toast(fails ? 'Saved — but a file could not be sent.' : F.id ? 'Changed ✓' : n ? (n === 1 ? 'Work given to ' + woFirst(F.to.find((x) => x !== S.me.id)) + ' ✓' : 'Work given to ' + n + ' people ✓') : 'Added to my work ✓', fails ? 'err' : 'ok');
   S.wf = null;

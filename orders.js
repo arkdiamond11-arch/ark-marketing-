@@ -1129,6 +1129,7 @@ function renderOrderPage(o) {
     '<button class="btn btn-small btn-secondary" data-action="o-repeat" data-id="' + o.id + '">↻ Repeat order</button>' +
     (S.dbv8 && approved && typeof openStatusLink === 'function' ? '<button class="btn btn-small btn-secondary" data-action="o-link" data-id="' + o.id + '">🔗 Status link for the shop</button>' : '') +
     (typeof workOn === 'function' && workOn() ? '<button class="btn btn-small btn-secondary" data-action="wo-give-for" data-c="' + (o.client_id || '') + '" data-o="' + (o.order_no || '') + '">📝 Give work</button>' : '') +   // work.js
+    (typeof careOn === 'function' && careOn() ? '<button class="btn btn-small btn-secondary" data-action="cs-new-for" data-c="' + (o.client_id || '') + '" data-o="' + (o.order_no || '') + '">🙋 Complaint</button>' : '') +   // care.js
     '</div>' +
 
     '<div id="o-cad-view"></div>' +
