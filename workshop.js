@@ -103,19 +103,19 @@ function buildStickersPdf(pieces, startAt) {
   });
   return d;
 }
-async function catStickers(ids) {
+async function catStickers(ids, all) {   // all: every piece in stock (from Departments), not the pieces shown now
   let pieces = [];
   if (ids && ids.length) {
     const { data } = await db.from('catalogue_items').select('*').in('id', ids);
     pieces = data || [];
   } else {
-    const { data } = await catQuery(S.cat || { q: '', status: 'available', cat: 'all' }, false);
+    const { data } = await catQuery((!all && S.cat) || { q: '', status: 'available', cat: 'all' }, false);
     pieces = data || [];
   }
   if (!pieces.length) { toast('No pieces here to print.', 'err'); return; }
   pieces.sort((a, b) => String(a.tag_no || '').localeCompare(String(b.tag_no || ''), 'en', { numeric: true }));
   const one = pieces.length === 1;
-  const ov = openModal('<h3>QR stickers</h3><p>' + (one ? esc('One sticker for') + ' <b class="noi18n">' + esc(pieces[0].tag_no || '—') + '</b>' : '<b>' + pieces.length + '</b> ' + esc('stickers — the pieces shown now')) + '</p>' +
+  const ov = openModal('<h3>QR stickers</h3><p>' + (one ? esc('One sticker for') + ' <b class="noi18n">' + esc(pieces[0].tag_no || '—') + '</b>' : '<b>' + pieces.length + '</b> ' + esc(all ? 'stickers — every piece in stock' : 'stickers — the pieces shown now')) + '</p>' +
     '<p class="hint">' + esc('A4 sheet of 24 labels (63.5 × 33.9 mm), or plain paper to cut. Scanning a sticker opens the piece in the app.') + '</p>' +
     '<div class="field"><label>Start at label no.</label><input type="number" id="stk-start" min="1" max="24" value="1" inputmode="numeric">' +
     '<div class="hint">On a part-used sheet, start at the first free label.</div></div>' +

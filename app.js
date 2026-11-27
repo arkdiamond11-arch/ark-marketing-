@@ -239,6 +239,7 @@ function tabsHTML() {
   const me = S.me || {};
   return '<div class="side-brand"><div class="mini-badge noi18n">' + esc(BRAND_SHORT) + '</div><div><b class="noi18n">' + esc(BRAND) + '</b><span>Marketing</span></div></div>' +
     '<button data-action="tab" data-tab="today">' + IC.today + '<span>Today</span></button>' +
+    (typeof renderDepts === 'function' ? '<button data-action="tab" data-tab="dept">' + DEPT_ICON + '<span class="t-long">Departments</span><span class="t-short">Depts</span></button>' : '') +   // depts.js
     '<button data-action="tab" data-tab="find">' + IC.find + '<span>Clients</span></button>' +
     (typeof renderOrders === 'function' ? '<button data-action="tab" data-tab="orders">' + ORD_ICON + '<span>Orders</span></button>' : '') +
     (typeof renderCatalogue === 'function' && appOn('catalogue') ? '<button data-action="tab" data-tab="catalogue">' + CAT_ICON + '<span>Stock</span></button>'
@@ -287,6 +288,7 @@ function switchTab(tab) {
   else if (tab === 'catalogue') renderCatalogue();
   else if (tab === 'board') renderBoard();
   else if (tab === 'report') renderReport();
+  else if (tab === 'dept' && typeof renderDepts === 'function') renderDepts();
   else renderMore();
   window.scrollTo(0, 0);
 }
