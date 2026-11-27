@@ -173,7 +173,7 @@ function renderBillForm() {
       '<input type="date" data-bfd="return_by" value="' + esc(F.return_by) + '"></div>' +
       '<div class="field" style="margin-bottom:2px"><label>Note (optional)</label><input type="text" data-bfd="notes" value="' + esc(F.notes) + '" autocomplete="off"></div>' +
       '<a href="#" class="bf-manual" data-action="ap-manual" data-id="' + F.client.id + '">Pieces that are not in the stock? Type them instead ›</a></div>'
-      : '<div class="section-label">Rates</div><div class="card" id="bf-rates">' +
+      : '<div class="section-label">Rates</div><div class="card" id="bf-rates"><div id="bf-offers"></div>' +
       '<div class="field"><label>Gold paid in</label>' + segHTML('bf_mode', GOLD_MODES.map((x) => x[1]), S.formState.bf_mode) +
       '<div class="hint" id="bf-mode-hint">' + esc(R.gold_mode === 'metal' ? 'The shop gives raw gold for the gold in the pieces; diamonds, stones and labour are paid in money.' : 'Everything is paid in money.') + '</div></div>' +
       '<div class="o-2col"><div class="field"><label>Gold rate (24K, ₹ per g)</label><input type="text" inputmode="decimal" data-bfr="gold_rate" value="' + v('gold_rate') + '" placeholder="e.g. 13000"></div>' +
@@ -203,6 +203,7 @@ function renderBillForm() {
   const c = $('#bf-form');
   c.addEventListener('input', onBillInput);
   c.addEventListener('change', onBillInput);
+  if (typeof billExtras === 'function') billExtras(F);   // a booked rate, an offer on making (extras.js)
 }
 function onBillInput(e) {
   const F = S.bf;
@@ -390,6 +391,7 @@ async function saveBill() {
   const { data, error } = await db.rpc('bill_save', { p });
   if (error || !data) { fail(rpcMsg(error)); return; }
   if (data.total_amt != null && Math.round(num(data.total_amt) * 100) !== T.totalP) console.warn('bill total differs', data.total_amt, T.totalP);
+  if (F.booking && F.kind === 'sale' && typeof billBookingLink === 'function') await billBookingLink(data.id, F.booking);   // the booked rate used (extras.js)
   try { localStorage.setItem('billRates', JSON.stringify(Object.assign({}, R, { extra_amt: '', extra_note: '', discount_amt: '' }))); } catch (e) { /* ignore */ }
   toast(billNo(data) + ' saved ✓', 'ok');
   S.bf = null;
@@ -450,6 +452,10 @@ async function clientLedger(clientId) {
       if (x && x.dueM) { const take = Math.min(m, Math.max(0, x.dueM - x.paidM)); x.paidM += take; poolM += m - take; } else poolM += m;
     }
   });
+  const opening = typeof loadOpening === 'function' ? await loadOpening(clientId) : null;   // old dues before the app (update 22)
+  const opP = opening ? Math.round(num(opening.money_amt) * 100) : 0, opM = opening ? Math.round(num(opening.fine_g) * 1000) : 0;
+  if (opP < 0) poolP -= opP; else poolP -= Math.min(poolP, opP);
+  if (opM < 0) poolM -= opM; else poolM -= Math.min(poolM, opM);
   sales.forEach((b) => {
     const x = per.get(b.id);
     const tP = Math.min(poolP, Math.max(0, x.dueP - x.paidP)); x.paidP += tP; poolP -= tP;
@@ -459,7 +465,7 @@ async function clientLedger(clientId) {
   const inP = receipts.filter((r) => r.kind === 'money').reduce((s, r) => s + Math.round(num(r.amount) * 100), 0);
   const inM = receipts.filter((r) => r.kind !== 'money').reduce((s, r) => s + Math.round(num(r.fine_g) * 1000), 0);
   const rtP = returns.reduce((s, r) => s + Math.round(num(r.money_amt) * 100), 0), rtM = returns.reduce((s, r) => s + Math.round(num(r.fine_g) * 1000), 0);
-  return { bills, receipts, returns, per, moneyDueP: sumP - inP - rtP, goldDueM: sumM - inM - rtM };
+  return { bills, receipts, returns, per, opening, moneyDueP: sumP + opP - inP - rtP, goldDueM: sumM + opM - inM - rtM };
 }
 function billPayState(b, x) {
   if (b.kind !== 'sale') return null;
@@ -769,11 +775,14 @@ async function loadClientBills(cl) {
   const recent = L.bills.slice().reverse().slice(0, 8);
   const moneyDue = L.moneyDueP, goldDue = L.goldDueM;
   el.innerHTML = '<div class="section-label sl-row"><span>Bills & payments</span>' + (L.bills.length > 8 ? '<a href="#" data-action="bl-list-for" data-id="' + cl.id + '">All ›</a>' : '') + '</div>' +
-    (sales.length || L.receipts.length ? '<div class="st-tot">' +
+    (typeof openingBoxHTML === 'function' ? openingBoxHTML(cl, L.opening) : '') +
+    (sales.length || L.receipts.length || L.opening ? '<div class="st-tot">' +
       '<div><b class="' + (moneyDue > 0 ? 'o-red' : '') + '">' + inr(Math.abs(moneyDue)) + '</b><span>' + (moneyDue >= 0 ? 'Money to receive' : 'Paid in advance') + '</span></div>' +
       (goldDue || L.receipts.some((r) => r.kind !== 'money') ? '<div><b class="' + (goldDue > 0 ? 'o-red' : '') + '">' + gM(Math.abs(goldDue)) + '</b><span>' + (goldDue >= 0 ? 'Fine gold to receive' : 'Shop\'s gold with us') + '</span></div>' : '') + '</div>' : '') +
     '<div class="o-more-acts"><button class="btn btn-small btn-secondary" data-action="bl-new-for" data-id="' + cl.id + '">🧾 Bill from stock</button>' +
-    (S.dbv19 && (sales.length || L.receipts.length) ? '<button class="btn btn-small btn-secondary" data-action="stm-new" data-id="' + cl.id + '">📄 Statement</button>' : '') +
+    (S.dbv19 && (sales.length || L.receipts.length || L.opening) ? '<button class="btn btn-small btn-secondary" data-action="stm-new" data-id="' + cl.id + '">📄 Statement</button>' : '') +
+    (S.dbv22 && isOwner() && !L.opening ? '<button class="btn btn-small btn-secondary" data-action="op-edit" data-id="' + cl.id + '">＋ Old dues</button>' : '') +
+    (S.dbv22 ? '<button class="btn btn-small btn-secondary" data-action="og-for" data-id="' + cl.id + '">🪙 Old gold</button>' : '') +
     (sales.length ? '<button class="btn btn-small btn-secondary" data-action="rc-new" data-kind="money" data-client="' + cl.id + '">＋ Money received</button>' +
       '<button class="btn btn-small btn-secondary" data-action="rc-new" data-kind="metal" data-client="' + cl.id + '">＋ Gold received</button>' : '') + '</div>' +
     recent.map((b) => billItemHTML(b, false, billPayState(b, L.per.get(b.id)))).join('') +
@@ -905,6 +914,7 @@ async function buildBillPdf(id) {
     num(b.dia_rate) ? 'diamonds Rs. ' + m2(b.dia_rate) + '/ct' : '', num(b.labour_rate) ? 'labour Rs. ' + m2(b.labour_rate) + ' ' + (LABOUR_ON.find((x) => x[0] === b.labour_on) || LABOUR_ON[0])[1] : ''].filter(Boolean).join(', ') + '.', 7.8);
   pNote(d, 'NOTE', b.notes);
   if (S.biz && S.biz.bank_details && sale) pNote(d, 'BANK DETAILS', S.biz.bank_details);
+  if (sale && typeof billUpiQr === 'function') billUpiQr(d, b);   // pay by UPI (extras.js)
   if (S.biz && S.biz.terms) pNote(d, 'TERMS', S.biz.terms, 7.8);
   const urls = await signedUrls('catalogue', lines.map((l) => l.photo_path).filter(Boolean));
   await pPhotos(d, lines.map((l) => ({ category: l.category, design_code: l.tag_no })), lines.map((l) => (l.photo_path ? urls.get(l.photo_path) || null : null)));

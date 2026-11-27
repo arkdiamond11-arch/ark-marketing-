@@ -135,6 +135,8 @@ async function statementData(clientId, from, to) {
   (rs.data || []).forEach((r) => ev.push({ d: r.received_on, k: 1, t: r.kind === 'money' ? 'Received — ' + payModeLabel(r.mode) + (r.ref_no ? ' ' + r.ref_no : '') : r.kind === 'metal' ? 'Raw gold received (' + num(r.metal_g) + ' g at ' + num(r.metal_purity) + '%)' : 'Gold paid in money (' + inrNum(r.amount) + ')',
     p: r.kind === 'money' ? -Math.round(num(r.amount) * 100) : 0, m: r.kind === 'money' ? 0 : -Math.round(num(r.fine_g) * 1000) }));
   (ts.data || []).forEach((r) => ev.push({ d: r.return_date, k: 2, t: 'Return ' + cnNo(r), p: -Math.round(num(r.money_amt) * 100), m: -Math.round(num(r.fine_g) * 1000) }));
+  const op = typeof loadOpening === 'function' ? await loadOpening(clientId) : null;   // old dues before the app (update 22): the first line
+  if (op && op.as_on <= to) ev.push({ d: op.as_on, k: -1, t: 'Old dues (before the app)' + (op.note ? ' — ' + op.note : ''), p: Math.round(num(op.money_amt) * 100), m: Math.round(num(op.fine_g) * 1000) });
   ev.sort((a, b) => String(a.d).localeCompare(String(b.d)) || a.k - b.k);
   const before = ev.filter((e) => e.d < from), inside = ev.filter((e) => e.d >= from);
   const open = { p: before.reduce((s, e) => s + e.p, 0), m: before.reduce((s, e) => s + e.m, 0) };

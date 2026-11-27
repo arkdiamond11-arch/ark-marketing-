@@ -209,7 +209,7 @@ async function loadBiz() {
   const [has8, has9, ver] = await Promise.all([v8, v9, v11]);
   if (has8 !== null) S.dbv8 = has8;
   if (has9 !== null) S.dbv9 = has9;
-  if (ver !== null) { S.dbv11 = ver >= 11; S.dbv12 = ver >= 12; S.dbv13 = ver >= 13; S.dbv14 = ver >= 14; S.dbv15 = ver >= 15; S.dbv16 = ver >= 16; S.dbv17 = ver >= 17; S.dbv18 = ver >= 18; S.dbv19 = ver >= 19; S.dbv20 = ver >= 20; S.dbv21 = ver >= 21; }
+  if (ver !== null) { S.dbv11 = ver >= 11; S.dbv12 = ver >= 12; S.dbv13 = ver >= 13; S.dbv14 = ver >= 14; S.dbv15 = ver >= 15; S.dbv16 = ver >= 16; S.dbv17 = ver >= 17; S.dbv18 = ver >= 18; S.dbv19 = ver >= 19; S.dbv20 = ver >= 20; S.dbv21 = ver >= 21; S.dbv22 = ver >= 22; }
   if (r.error || !r.data) { if (!S.biz) S.biz = {}; return null; }
   S.biz = r.data;
   S.bizAt = Date.now();
@@ -344,6 +344,8 @@ function renderBizForm() {
     '<div class="field"><label>Phone</label><input type="tel" id="biz-phone" value="' + v('phone') + '"></div>' +
     '<div class="field"><label>Email</label><input type="email" id="biz-email" value="' + v('email') + '"></div>' +
     '</div>' +
+    (S.dbv22 ? '<div class="o-2col"><div class="field"><label>UPI ID (a QR on sale bills)</label><input type="text" id="biz-upi" autocomplete="off" autocapitalize="none" value="' + v('upi_id') + '" placeholder="e.g. arkjewels@okhdfcbank"></div>' +
+      '<div class="field"><label>Name for UPI</label><input type="text" id="biz-upin" autocomplete="off" value="' + v('upi_name') + '" placeholder="As in your bank"></div></div>' : '') +   // database update 22
     '<div class="field" style="margin-bottom:2px"><label>Terms (printed at the bottom)</label><textarea id="biz-terms" style="min-height:80px" placeholder="e.g. Goods once sold will not be taken back. Subject to Jaipur jurisdiction.">' + v('terms') + '</textarea></div>' +
     '</div>' +
     '<button class="btn btn-primary" data-action="biz-save" id="biz-save-btn">Save details</button><div style="height:10px"></div>';
@@ -364,6 +366,11 @@ async function saveBiz() {
     terms: $('#biz-terms').value.trim() || null,
     updated_by: S.me.id,
   };
+  if ($('#biz-upi')) {   // database update 22
+    const u = $('#biz-upi').value.trim();
+    if (u && !/^[A-Za-z0-9._-]{2,200}@[A-Za-z][A-Za-z0-9.-]{1,63}$/.test(u)) { toast('Check the UPI ID — like name@bank.', 'err'); return; }
+    row.upi_id = u || null; row.upi_name = $('#biz-upin').value.trim() || null;
+  }
   const go = async () => {
     const btn = $('#biz-save-btn'); if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
     const { error } = await db.from('business_settings').update(row).eq('id', 1);

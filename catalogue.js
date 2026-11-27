@@ -155,7 +155,7 @@ function renderCatItem(it) {
     (it.status === 'available' ? (typeof billsOn === 'function' && billsOn()
       ? '<button class="btn btn-primary" data-action="cat-sell" data-id="' + it.id + '" style="margin-bottom:10px">📦 Sell · quotation · approval</button>'
       : '<button class="btn btn-primary" data-action="cat-add-order" data-id="' + it.id + '" style="margin-bottom:10px">＋ Add to an order</button>') : '<div id="cat-inorder"></div>') +
-    '<div id="cat-hold"></div><div id="cat-bag"></div>' +
+    '<div id="cat-hold"></div><div id="cat-place"></div><div id="cat-bag"></div>' +
     '<div class="action-row">' +
     '<button class="btn btn-secondary" data-action="cat-share" data-id="' + it.id + '">Share</button>' +
     '<button class="btn btn-secondary" data-action="cat-edit" data-id="' + it.id + '">Edit</button>' +
@@ -175,6 +175,7 @@ function renderCatItem(it) {
   if (it.status !== 'available') loadCatOrderLink(it.id);
   if (typeof loadCatBag === 'function') loadCatBag(it);
   if (typeof loadCatHold === 'function') loadCatHold(it);
+  if (typeof loadCatPlace === 'function') loadCatPlace(it);   // its place (extras.js)
   if (typeof loadCatCost === 'function') loadCatCost(it);
 }
 

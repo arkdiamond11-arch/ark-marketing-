@@ -98,11 +98,17 @@ function dpTools(k) {
     T(w && own, 'wo-report', '📊', 'Work report', 'For each person: done, on time, late, time taken');
   } else if (k === 'sales') {
     T(bills, 'bl-new', '➕', 'Bill from stock', 'A sale bill or a quotation for a shop');
-    billList(); toCollect(); appr(); links(); rate(); closing(); tgt();
+    billList(); toCollect(); appr(); links(); rate();
+    T(on('x22'), 'bk-list', '🔒', 'Gold rate bookings', 'A shop books today\'s rate for gold it buys later');
+    T(on('x22'), 'mo-list', '🎉', 'Offers on making', 'Festival offers — % off making, on the bill in one tap');
+    closing(); tgt();
   } else if (k === 'accounts') {
     toCollect(); billList(); cash(); closing(); rate();
     register();
-    profit(); gst(); value(); dues(); expenses(); backup();
+    T(on('x22'), 'og-new', '🪙', 'Old gold from a shop', 'Tested purity and melting loss — on the shop\'s account');
+    T(on('x22'), 'op-list', '📒', 'Old dues of shops', 'What each shop owed before the app');
+    profit(); T(own && on('x22'), 'pnl-open', '📊', 'Profit & loss', 'Each month: the margin on the bills less what was spent');
+    gst(); value(); dues(); expenses(); backup();
   } else if (k === 'cash') {   // update 21
     const m = on('moneyOn');
     T(m, 'cb-open', '💵', 'Cash & Bank', 'Each account\'s balance · today\'s money in and out');
@@ -168,6 +174,8 @@ function dpTools(k) {
     T(cat && tags, 'st-find', '🔎', 'Find a piece', 'By its tag or design number');
     T(cat, 'cat-new', '🎨', 'Add a design', 'A design for the catalogue');
     T(st19, 'sc-list', '🔍', 'Stock check', 'Scan every tag in the safe — see what is missing');
+    T(on('x22'), 'pl-open', '📍', 'Places', 'Safe, showroom, with a salesman — what is where');
+    T(on('x22'), 'pl-move', '📦', 'Move pieces', 'Scan the tags — they go to another place');
     oldStock();
     T(cat && fn('catStickers'), 'dp-stickers', '🏷️', 'QR stickers', 'Print QR stickers for the pieces in stock');
     appr(); links(); value(); bag();
@@ -186,7 +194,9 @@ function dpTools(k) {
   } else if (k === 'reports') {
     T(own && fn('renderReport'), 'tab', '📊', 'Report', 'This month at a glance', 'report');
     T(own && fn('renderReports'), 'rep-open', '🗃️', 'Reports', 'Orders, items, diamonds, delivery — filter and download');
-    week(); profit(); closing(); oldStock(); gst(); workload(); activity();
+    T(own && on('x22') && fn('renderYY'), 'yy-open', '📈', 'This year and last year', 'Sales, orders, meetings, new clients — month by month, charts');
+    week(); profit(); T(own && on('x22'), 'pnl-open', '📊', 'Profit & loss', 'Each month: the margin on the bills less what was spent');
+    closing(); oldStock(); gst(); workload(); activity();
   } else if (k === 'settings') {
     T(own && fn('renderBizForm'), 'biz-open', '🏢', 'Business details', 'Address, GSTIN — printed on PDFs');
     T(own && fn('renderAppSettings'), 'opt-open', '⚙️', 'App settings', 'Order steps in use · show or hide sections');

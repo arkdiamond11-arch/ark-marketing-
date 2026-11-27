@@ -1776,3 +1776,31 @@ input.sw:disabled { cursor: default; }
 @media (min-width: 1024px) {
   .cb-accs-row { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 }
+
+/* ==========================================================================
+   v34 — old dues, rate bookings, offers on making, places, profit & loss,
+   this year and last year
+   ========================================================================== */
+.bf-offer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; margin-bottom: 10px; border-radius: 10px;
+  background: var(--gold-soft); color: #6d5115; font-size: 13.5px; font-weight: 600; }
+.bf-offer .btn { width: auto; flex: none; }
+.bf-offer.on { background: #e3f4ea; color: var(--green); }
+.op-box { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; font-size: 14px; border-left: 4px solid var(--gold, #b47814); }
+.op-box .btn { width: auto; flex: none; }
+.pl-n { flex: none; min-width: 34px; padding: 3px 9px; border-radius: 999px; background: var(--maroon-soft, #f8e9ee); color: var(--maroon); font-weight: 750; text-align: center; }
+.cat-place-row { margin-bottom: 10px; }
+.yy-card { padding: 12px 10px 8px; }
+.yy-chart { display: block; width: 100%; height: auto; }
+.yy-chart text { font-size: 9px; fill: var(--muted); font-family: inherit; }
+.yy-chart .yy-max { font-size: 9.5px; }
+.yy-chart .yy-cur { fill: var(--maroon); }
+.yy-chart .yy-last { fill: #d9c3cc; }
+.yy-chart .yy-axis { stroke: var(--line); stroke-width: 1; }
+.yy-key { display: flex; align-items: center; gap: 6px; justify-content: center; font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+.yy-k { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.yy-k.cur { background: var(--maroon); }
+.yy-k.last { background: #d9c3cc; margin-left: 10px; }
+.yy-bar { position: relative; display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; margin-bottom: 4px; font-size: 13.5px; border-radius: 8px; overflow: hidden; }
+.yy-bar > * { position: relative; z-index: 1; }
+.yy-bar span { min-width: 0; overflow-wrap: anywhere; }
+.yy-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--maroon-soft, #f8e9ee); z-index: 0; border-radius: 8px; }
